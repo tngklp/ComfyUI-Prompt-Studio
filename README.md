@@ -10,8 +10,6 @@ Prompt Studio is a multimodal prompt-writing workspace for ComfyUI. Pick a gener
 
 It is a ComfyUI UI extension, not a workflow node. It writes prompt text for your existing workflow and helps prepare reference media. The optional Media panel can add media loaders to your workflow. Prompt Studio does not run the generation models themselves and does not queue renders.
 
-ComfyUI extension: **1.0.0** · [Download ZIP](../../releases/download/v1.0.0/Prompt-Studio-ComfyUI-v1.0.0.zip) · [Installation](docs/INSTALLATION.md)
-
 Standalone for Windows: **1.1.0** · [Download ZIP](../../releases/download/standalone-v1.1.0/Prompt-Studio-Standalone-Windows-v1.1.0.zip) · [Setup guide](standalone/README.md)
 
 ## Supported generation targets
@@ -47,7 +45,7 @@ Targets are declared as data in [`targets.json`](targets.json) and resolved by [
 - Media Editor: crop images, trim and crop video, and extract frames.
 - Floating Media panel: drag Prompt Studio media into ComfyUI workflows.
 - Local and remote prompt models: Ollama, Direct GGUF, External llama.cpp, and APIs.
-- Standalone for Windows.
+- Standalone for Windows, plus a Linux launcher for repository checkouts.
 - Light theme, adjustable interface size, and Auto VRAM management.
 
 ## Releases
@@ -111,6 +109,26 @@ Not sure? Start with [Ollama](docs/OLLAMA.md). The [provider guide](docs/PROVIDE
 5. Select **Generate prompt**, review the editable result, then copy it into your workflow.
 
 For Git, ZIP, Windows Portable, update, and provider-specific steps, see [Installation](docs/INSTALLATION.md).
+
+## Platforms
+
+Prompt Studio runs inside ComfyUI on Windows, Linux, and macOS, and follows whatever platform your ComfyUI installation uses.
+
+**Standalone** runs without ComfyUI. The packaged download is named for Windows and ships `start.bat`, but the same Python backend and browser interface run on Linux too:
+
+| Platform | Launcher | Notes |
+| --- | --- | --- |
+| Windows | `start.bat` | Included in the released ZIP |
+| Linux | `start-linux.sh` | Repository checkouts only — not bundled in the ZIP |
+
+On Linux, run Standalone from a full clone rather than the `.zip` build artifact:
+
+```bash
+chmod +x start-linux.sh
+./start-linux.sh
+```
+
+The launcher creates `.venv`, installs the requirements, and runs the same entry point as `start.bat`. Python 3.10 or newer is required, and the Linux launcher has been tested on WSL2. Managed Local GGUF is Windows-only, so on Linux use External llama.cpp or Ollama. See the [Standalone guide](standalone/README.md#linux) for details.
 
 ## Privacy and limitations
 

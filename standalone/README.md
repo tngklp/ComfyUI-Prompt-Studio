@@ -45,12 +45,18 @@ window normally.
 
 Standalone also runs on Linux using the same Python backend and browser-based interface.
 
-When running Standalone from a repository checkout, use the included Linux launcher:
+**The Windows ZIP is a Windows package.** `start-linux.sh` is not inside it, so use a
+repository checkout to run Standalone on Linux:
 
 ```bash
 chmod +x start-linux.sh
 ./start-linux.sh
 ```
+
+The launcher creates `.venv`, installs `requirements.txt`, and runs the same
+`prompt_studio` entry point as `start.bat`. It reuses an existing `.venv` if present, so
+repeat launches are fast. "Repository checkout" means a full clone, not the `.zip` build
+artifact under `dist/`, which also omits this launcher.
 
 For Local GGUF, point it to your Linux `llama-server` executable:
 
@@ -67,7 +73,8 @@ PS_PROJECTOR="/path/to/mmproj.gguf" \
 ./start-linux.sh
 ```
 
-Python 3.10 or newer is required. The Linux launcher has been tested on WSL2.
+Python 3.10 or newer is required. The Linux launcher has been tested on WSL2. Managed
+Local GGUF is Windows-only, so on Linux use External llama.cpp or Ollama instead.
 
 ## What's new in v1.1.0
 
@@ -178,3 +185,7 @@ powershell -ExecutionPolicy Bypass -File scripts\build_standalone.ps1
 The result is `dist\Prompt-Studio-Standalone-Windows-v1.1.0.zip`. It records the
 repository commit in `upstream\UPSTREAM_SNAPSHOT.txt` and excludes local settings,
 logs, models, `llama-server`, CUDA libraries, and test artifacts.
+
+The package is Windows-named and Windows-first, but the Python backend is not
+Windows-specific. The build copies tracked source files only, so a Linux user can run
+Standalone from a checkout with `start-linux.sh`.
