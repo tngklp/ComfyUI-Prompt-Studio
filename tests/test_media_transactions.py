@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from backend import media
-from backend import h3_pipeline
+from backend import pipeline
 
 
 class MediaTransactionTests(unittest.TestCase):
@@ -239,7 +239,7 @@ class MediaTransactionTests(unittest.TestCase):
 
             self.assertEqual(
                 result["prepared_url"],
-                "/h3studio/media/image/content?session_id=session&kind=prepared&revision=0",
+                "/promptstudio/media/image/content?session_id=session&kind=prepared&revision=0",
             )
 
     def test_model_visual_rejects_registered_paths_outside_writer_cache(self):
@@ -277,14 +277,14 @@ class MediaTransactionTests(unittest.TestCase):
         }
 
         with (
-            patch.object(h3_pipeline.STORE, "get", side_effect=lambda _session, asset_id: assets[asset_id]),
+            patch.object(pipeline.STORE, "get", side_effect=lambda _session, asset_id: assets[asset_id]),
             patch.object(
-                h3_pipeline.STORE,
+                pipeline.STORE,
                 "read_model_visual",
                 side_effect=[("image/jpeg", b"image-bytes"), ("image/jpeg", b"sheet-bytes")],
             ) as read_visual,
         ):
-            messages, metrics = h3_pipeline._messages(
+            messages, metrics = pipeline._messages(
                 assembled,
                 {},
                 "session",
@@ -304,6 +304,50 @@ class MediaTransactionTests(unittest.TestCase):
         self.assertEqual(metrics["visual_input_count"], 2)
         self.assertEqual(metrics["video_frame_count"], 1)
         self.assertEqual(metrics["video_sheet_count"], 1)
+
+    def test_image_edit_numbers_images_with_qwen_angle_bracket_syntax(self):
+        assets = [
+            dict(id="first", mode="ImageEdit", type="image", status="ready", reference=""),
+            dict(id="second", mode="ImageEdit", type="image", status="ready", reference=""),
+            dict(id="other", mode="TextToImage", type="image", status="ready", reference=""),
+            dict(id="third", mode="ImageEdit", type="image", status="ready", reference=""),
+        ]
+
+        media.MediaStore._renumber(assets, "ImageEdit")
+
+        # Lowercase, no separator - matches the edit guide's own "<image1>".
+        self.assertEqual(
+            [asset["reference"] for asset in assets],
+            ["<image1>", "<image2>", "", "<image3>"],
+        )
+
+    def test_image_edit_renumber_skips_assets_awaiting_an_edit(self):
+        assets = [
+            dict(id="ready", mode="ImageEdit", type="image", status="ready", reference=""),
+            dict(id="staged", mode="ImageEdit", type="image", status="needs_edit", reference="<image9>"),
+            dict(id="later", mode="ImageEdit", type="image", status="ready", reference=""),
+        ]
+
+        media.MediaStore._renumber(assets, "ImageEdit")
+
+        self.assertEqual(assets[0]["reference"], "<image1>")
+        self.assertIsNone(assets[1]["reference"])
+        # The staged asset must not consume a number.
+        self.assertEqual(assets[2]["reference"], "<image2>")
+
+    def test_image_edit_renumber_leaves_other_modes_untouched(self):
+        assets = [
+            dict(id="reference", mode="Reference", type="image", status="ready", reference="<Picture 1>"),
+            dict(id="edit", mode="ImageEdit", type="image", status="ready", reference=""),
+            dict(id="start", mode="I2VA", type="image", status="ready", reference="Start image"),
+        ]
+
+        media.MediaStore._renumber(assets, "ImageEdit")
+
+        self.assertEqual(
+            [asset["reference"] for asset in assets],
+            ["<Picture 1>", "<image1>", "Start image"],
+        )
 
 
 if __name__ == "__main__":

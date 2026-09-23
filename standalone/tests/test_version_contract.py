@@ -28,7 +28,7 @@ class VersionContractTest(unittest.TestCase):
     def test_current_release_docs_match_standalone_version(self) -> None:
         version = (STANDALONE_ROOT / "VERSION").read_text(encoding="utf-8").strip()
         for path in (REPOSITORY_ROOT / "README.md", STANDALONE_ROOT / "README.md", STANDALONE_ROOT / "RELEASE_NOTES.md"):
-            self.assertIn(f"H3-Prompt-Writer-Standalone-Windows-v{version}.zip", path.read_text(encoding="utf-8"), str(path))
+            self.assertIn(f"Prompt-Studio-Standalone-Windows-v{version}.zip", path.read_text(encoding="utf-8"), str(path))
         changelog = (STANDALONE_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
         self.assertEqual(re.search(r"^## ([\d.]+) -", changelog, re.MULTILINE).group(1), version)
 

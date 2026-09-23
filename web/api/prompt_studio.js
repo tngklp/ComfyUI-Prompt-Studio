@@ -1,7 +1,7 @@
 import { api } from "/scripts/api.js";
 import { readApiResponse } from "./response.js";
 
-const PREFIX = "/h3studio";
+const PREFIX = "/promptstudio";
 
 async function request(path, options) {
   const response = await api.fetchApi(`${PREFIX}${path}`, options);
@@ -20,6 +20,7 @@ const ollamaQuery = (name, host) => host ? `?${name}=${encodeURIComponent(host)}
 
 export const getStatus = (ollamaHost = null) => request(`/status${ollamaQuery("ollama_host", ollamaHost)}`);
 export const getModels = () => request("/models");
+export const getTargets = () => request("/targets");
 export const diagnoseGGUFRuntime = (refresh = false) => post("/runtime/gguf/diagnostics", { refresh });
 export const probeExternalServer = (payload) => post("/external-server/probe", payload);
 export const getOllamaStatus = (host = null) => request(`/ollama/status${ollamaQuery("host", host)}`);

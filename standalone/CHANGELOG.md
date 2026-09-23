@@ -1,5 +1,13 @@
 # Standalone changelog
 
+## 1.1.0 - 2026-09-21
+
+- Rebranded to **Prompt Studio**. The package, launch scripts, environment variables, and interface now use the Prompt Studio name.
+- Added generation-target support: video, music, and image prompts from one workspace, driven by `targets.json`.
+- Environment variables renamed from `H3_*` to `PS_*`. Existing launchers and scripts must be updated.
+- The upstream checkout is now expected in a folder named `prompt-studio`.
+- Requires Prompt Studio core `1.0.0`.
+
 ## 0.1.7 - 2026-09-11
 
 - Fixed video trimming and cropping failing because NumPy was missing.
@@ -15,11 +23,11 @@
 - Added **Sequence mode**: write a series of timed clips from one brief, keep action and references consistent, and edit each prompt separately.
 - Added **Compact mode** for Sequence.
 - Improved draft saving, model switching, generation reliability and video playback. Added text-only Music 3 and a Linux launcher for source installs.
-- Updated the shared Writer core to `0.4.6`.
+- Updated the shared Prompt Studio core to `0.4.6`.
 
 ## 0.1.4 - 2026-09-06
 
-- Updated to the shared H3 Prompt Writer `0.4.5` interface and core.
+- Updated to the shared Prompt Studio `0.4.5` interface and core.
 - Added Media Composer for collages and Media Editor for crop and trim.
 - Added Light theme and adjustable Interface Size.
 - Added model selection and unload controls for compatible external llama.cpp routers.
@@ -27,7 +35,7 @@
 
 ## 0.1.3 - 2026-09-02
 
-- Updated the shared Writer interface and core to H3 Prompt Writer extension `0.4.4`.
+- Updated the shared Prompt Studio interface and core to Prompt Studio extension `0.4.4`.
 - Added a compact Clear menu for clearing prompts while keeping media, or clearing the entire workspace.
 - Added custom 2–16 frame contact sheets with more readable frame labels.
 - Improved safe remote Ollama host editing and private-network hostname handling.
@@ -39,7 +47,7 @@
 
 ## 0.1.1 - 2026-08-29
 
-- Updated the shared Writer interface and core to H3 Prompt Writer extension `0.4.3`.
+- Updated the shared Prompt Studio interface and core to Prompt Studio extension `0.4.3`.
 - Added Local GGUF Custom Context, KV cache, Generation budget, and supported reasoning effort controls.
 - Improved metadata-based model and projector detection for renamed GGUF files.
 - Increased the video Creative Brief limit to 8,000 characters.
@@ -49,8 +57,8 @@
 ## 0.1.0 - 2026-08-27
 
 - First Windows Standalone release candidate.
-- Reuses the shared H3 Prompt Writer core without requiring ComfyUI.
+- Reuses the shared Prompt Studio core without requiring ComfyUI.
 - Supports Ollama, API providers, External llama.cpp, and existing local GGUF models.
 - Manages a user-selected `llama-server.exe` outside the Python process.
 - Supports GGUF vision projectors, combined model locations, and metadata-based pairing.
-- Based on H3 Prompt Writer extension `0.4.2`.
+- Based on Prompt Studio extension `0.4.2`.

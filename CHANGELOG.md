@@ -1,10 +1,31 @@
 # Changelog
 
+## 1.0.0 - 2026-09-21
+
+### Features
+
+- **Model Selection on launch.** Prompt Studio now opens a Model Selection screen every time it starts, so the prompt model is a deliberate choice. Models are grouped by source (Direct GGUF, Ollama, External llama.cpp, API), runnable models are distinguished from ones that need setup, and **Change Model** reopens the screen from the workspace.
+- **Per-workspace input panels.** Video, Music, and Image each have their own panel and mode tabs, driven by the target category. The Image workspace adds an image brief, source images, an aspect ratio, and an edit instruction for image-edit mode.
+- **Rebranded to Prompt Studio.** The product, package, extension id, command ids, interface, and documentation no longer carry the original model-specific name.
+- **Multiple generation targets.** Prompts can now be written for MiniMax H3 (video), MiniMax Music 3 (audio), and Qwen Image 2.1 (image, including instruction-driven editing), with per-target modes, media limits, aspect ratios, brief lengths, and output contracts.
+- **Generation-target registry.** Targets are declared as data in `targets.json` and resolved by `backend/targets/`, with per-target strategy modules supplying output validation, audit rules, and repair vocabulary. Adding a target is a descriptor plus a strategy module rather than a change to core logic.
+- **New `GET /promptstudio/targets` endpoint** describing every target, its modes, limits, and guide metadata.
+- **Registry-driven interface.** Workspaces, mode tabs, brief limits, media limits, and system-prompt profiles are rendered from the registry, so a new target appears without interface changes.
+- **Qwen Image 2.1 support** with text-to-image and image-edit modes, plus an image prompt writing guide.
+
+### Breaking changes
+
+- Internal identifiers renamed throughout: the `/promptstudio` route prefix, `ps-` CSS prefix, `ps-*` localStorage keys, and `ps-lite-*` standalone classes.
+- Python module `backend/h3_pipeline.py` renamed to `backend/pipeline.py`, with `run_h3_pipeline` renamed to `run_pipeline`.
+- Standalone package `h3_standalone` renamed to `prompt_studio`; environment variables renamed from `H3_*` to `PS_*`; the upstream checkout is now expected in a folder named `prompt-studio`.
+- The `X-H3PS-Content-Hash` response header is now `X-PS-Content-Hash`.
+- ComfyUI installs are a clean break: the package name changed, so existing installs do not update in place and preferences are not migrated.
+
 ## 0.4.6 - 2026-09-09
 
 - Added **Sequence mode**: turn one brief into a series of timed clips with consistent action and references. Each clip gets its own complete prompt and can be edited separately.
 - Added **Compact mode** for Sequence.
-- Fixed Direct GGUF model loading with newer compatible runtimes. Thanks to @Bloodborne9876 ([#25](https://github.com/duckyshell/ComfyUI-MiniMaxH3-Prompt-Writer/pull/25)).
+- Fixed Direct GGUF model loading with newer compatible runtimes. Thanks to @Bloodborne9876 ([#25](https://github.com/tngklp/ComfyUI-Prompt-Studio/pull/25)).
 - Also improved draft saving, model switching and generation reliability, fixed video playback controls, enabled text-only Music 3, and added a Linux launcher for Standalone.
 
 ## 0.4.5 - 2026-09-06
@@ -22,7 +43,7 @@
 
 ### Features
 
-- Added optional **Auto VRAM** coordination between ComfyUI workflows and Writer-managed Direct GGUF or local Ollama models.
+- Added optional **Auto VRAM** coordination between ComfyUI workflows and Prompt Studio-managed Direct GGUF or local Ollama models.
 - Added a compact Clear menu for clearing prompts while keeping media, or clearing the entire workspace.
 - Added custom 2–16 frame contact sheets with more readable frame labels.
 
@@ -108,7 +129,7 @@
 
 ### Interface
 
-- Added fullscreen Writer mode with a persistent toggle and improved large-screen layout.
+- Added fullscreen Prompt Studio mode with a persistent toggle and improved large-screen layout.
 - Improved Refine controls with a vertically resizable instruction editor and clearer Refine and Cancel actions.
 
 ### Fixes
@@ -118,8 +139,8 @@
 - Fixed the Free ComfyUI VRAM action returning to its normal state after a request.
 - Added compatibility with newer `llama-cpp-python` GGML type exports.
 - Improved Custom OpenAI-compatible connection errors, including non-JSON HTTP failures and missing model-list handling.
-- Fixed long Creative Brief sizing when reopening the Writer and when using fullscreen.
-- Scoped prompt-model visual reads to media owned by the current Writer session.
+- Fixed long Creative Brief sizing when reopening the Prompt Studio and when using fullscreen.
+- Scoped prompt-model visual reads to media owned by the current Prompt Studio session.
 - Made Direct GGUF and Ollama startup detection less invasive while preserving the tested Windows Portable CUDA 13 install guidance.
 
 ## 0.3.2 - 2026-08-14
@@ -151,7 +172,7 @@
 
 ### New interface
 
-- Redesigned the Writer and Settings interface.
+- Redesigned the Prompt Studio and Settings interface.
 - Added clear setup pages for Ollama, Direct GGUF, External llama.cpp, and API
   providers.
 - Separated provider settings from shared prompt behavior.
@@ -170,7 +191,7 @@
 - Gave the existing External llama.cpp integration its own dedicated provider
   setup.
 - Validated Qwen 3.6 through Ollama in all five H3 modes without model-specific
-  changes to Writer.
+  changes to Prompt Studio.
 
 ### Drafts and prompt behavior
 
@@ -209,7 +230,7 @@
 - Added separate controls for cancelling a request, unloading a Direct model,
   unloading an Ollama model, and freeing ComfyUI workflow VRAM.
 - Added **Stop & unload** for active Direct and Ollama requests.
-- Improved Ollama ownership tracking so Writer does not offer to unload models
+- Improved Ollama ownership tracking so Prompt Studio does not offer to unload models
   started by another application.
 - Kept External llama.cpp and API model lifecycle under server or provider control.
 

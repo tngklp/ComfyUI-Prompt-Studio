@@ -1,10 +1,10 @@
-# H3 Prompt Writer Standalone v0.1.7
+# Prompt Studio Standalone v1.1.0
 
 Standalone Windows version. ComfyUI is not required.
 
 ## Download
 
-Download **H3-Prompt-Writer-Standalone-Windows-v0.1.7.zip** from the release assets below.
+Download **Prompt-Studio-Standalone-Windows-v1.1.0.zip** from the release assets below.
 
 Do not download **Source code (zip)** or **Source code (tar.gz)** for normal use.
 Do not install this package into ComfyUI `custom_nodes`.
@@ -28,7 +28,7 @@ shown in Standalone.
 - Local GGUF Context, KV cache, Generation budget, and supported reasoning effort controls
 - Video Creative Briefs up to 8,000 characters
 
-External llama.cpp keeps its own reasoning and chat-template settings. Writer separates returned reasoning from the final H3 prompt without overriding the server.
+External llama.cpp keeps its own reasoning and chat-template settings. Prompt Studio separates returned reasoning from the final H3 prompt without overriding the server.
 
 No ComfyUI installation is required. Models, API keys, llama.cpp binaries, and CUDA
 libraries are not bundled.
@@ -39,4 +39,4 @@ libraries are not bundled.
 - Python 3.10 or newer, or `uv`
 - At least one configured provider
 
-Based on H3 Prompt Writer extension `0.4.6`.
+Based on Prompt Studio extension `0.4.6`.

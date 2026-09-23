@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import patch
 
 from backend.models.contract import ModelError
-from backend.h3_pipeline import _audit
+from backend.pipeline import _audit
 from backend.models.gguf_backend import GGUFBackend, _cancel_to_eos
 
 
@@ -131,6 +131,22 @@ def model_info():
         "template_controls": {"enable_thinking": True, "reasoning_effort": False},
         "thinking": True,
         "capabilities": {"images": True, "video_frames": True, "audio": False},
+    }
+
+
+def text_to_image_assembled(*, mode="TextToImage", creative_brief="A fisherman at dawn."):
+    """A Qwen Image 2.1 assembly, which is single-call and never audits or repairs."""
+    return {
+        "messages": [
+            {"role": "system", "content": "qwen image guide"},
+            {"role": "user", "content": creative_brief},
+        ],
+        "media_inputs": [],
+        "input": {
+            "mode": mode,
+            "duration_seconds": None,
+            "creative_brief": creative_brief,
+        },
     }
 
 
@@ -590,6 +606,70 @@ class GenerationCharacterizationTests(unittest.TestCase):
         self.assertEqual(call["presence_penalty"], 1.5)
         self.assertEqual(call["repeat_penalty"], 1.0)
 
+    def test_qwen_image_text_to_image_unwraps_a_legacy_json_envelope(self):
+        """The retired JSON contract must not reach the editor or the image.
+
+        Qwen Image 2.1's guides are single-call (no audit/repair), so the unwrap has
+        to happen on the way out of run_pipeline.
+        """
+        backend = _CharacterizedBackend([
+            response(
+                '{"rewritten_prompt": "A weathered fisherman mends a net on a foggy '
+                'dock at dawn.", "wh_ratio": "16:9"}',
+                prompt_tokens=10,
+                completion_tokens=30,
+            ),
+        ])
+        assembled = text_to_image_assembled()
+
+        result = backend.generate(
+            model_info(), assembled, "qwen-image-session",
+            thinking=False, seed=41, unload_after=False, runtime_plan=runtime_plan(),
+        )
+
+        self.assertEqual(
+            result["prompt"],
+            "A weathered fisherman mends a net on a foggy dock at dawn.",
+        )
+        self.assertNotIn("wh_ratio", result["prompt"])
+        self.assertNotIn("rewritten_prompt", result["prompt"])
+
+    def test_qwen_image_edit_unwraps_a_legacy_json_envelope(self):
+        backend = _CharacterizedBackend([
+            response(
+                '{"rewritten_prompt": "Replace the current background with a vibrant, '
+                'detailed sunset beach scene.", "wh_ratio": "16:9", "ratio_follow": ""}',
+                prompt_tokens=10,
+                completion_tokens=30,
+            ),
+        ])
+        assembled = text_to_image_assembled(mode="ImageEdit", creative_brief="Change the background.")
+
+        result = backend.generate(
+            model_info(), assembled, "qwen-image-edit-session",
+            thinking=False, seed=42, unload_after=False, runtime_plan=runtime_plan(),
+        )
+
+        self.assertEqual(
+            result["prompt"],
+            "Replace the current background with a vibrant, detailed sunset beach scene.",
+        )
+        self.assertNotIn("ratio_follow", result["prompt"])
+
+    def test_qwen_image_plain_prompt_passes_through_unchanged(self):
+        original = "A cinematic close-up portrait of a woman with red hair in a sunlit studio."
+        backend = _CharacterizedBackend([
+            response(original, prompt_tokens=10, completion_tokens=20),
+        ])
+        assembled = text_to_image_assembled()
+
+        result = backend.generate(
+            model_info(), assembled, "qwen-image-plain-session",
+            thinking=False, seed=43, unload_after=False, runtime_plan=runtime_plan(),
+        )
+
+        self.assertEqual(result["prompt"], original)
+
     def test_reference_repair_is_one_text_only_completion_and_preserves_metrics(self):
         initial = reference_prompt(340, include_soundscape=False)
         repaired = reference_prompt(340)
@@ -738,7 +818,7 @@ class GenerationCharacterizationTests(unittest.TestCase):
             "reserved_output_tokens": 2048, "debug_input_sequence": [],
         }
 
-        with patch("backend.h3_pipeline._messages", return_value=(original_multimodal_messages, media_metrics)):
+        with patch("backend.pipeline._messages", return_value=(original_multimodal_messages, media_metrics)):
             result = backend.generate(
                 model_info(), assembled, "characterization-session",
                 thinking=False, seed=8, unload_after=False, runtime_plan=runtime_plan(),
@@ -786,7 +866,7 @@ class GenerationCharacterizationTests(unittest.TestCase):
             "reserved_output_tokens": 2048, "debug_input_sequence": [],
         }
 
-        with patch("backend.h3_pipeline._messages", return_value=(fake_messages, metrics)):
+        with patch("backend.pipeline._messages", return_value=(fake_messages, metrics)):
             result = backend.generate(
                 model_info(), assembled, "characterization-session",
                 thinking=False, seed=9, unload_after=False, runtime_plan=runtime_plan(),
@@ -850,7 +930,7 @@ class GenerationCharacterizationTests(unittest.TestCase):
             "reserved_output_tokens": 2048, "debug_input_sequence": [],
         }
 
-        with patch("backend.h3_pipeline._messages", return_value=(fake_messages, metrics)):
+        with patch("backend.pipeline._messages", return_value=(fake_messages, metrics)):
             with self.assertRaises(ModelError) as raised:
                 backend.generate(
                     model_info(), assembled, "characterization-session",

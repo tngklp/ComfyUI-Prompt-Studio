@@ -1,6 +1,6 @@
 # Backend
 
-The extension exposes direct ComfyUI routes under `/h3studio` and registers
+The extension exposes direct ComfyUI routes under `/promptstudio` and registers
 `ComfyUI/models/LLM/` through ComfyUI's folder-path mechanism.
 
 Responsibilities:

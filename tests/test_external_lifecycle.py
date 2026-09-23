@@ -103,7 +103,7 @@ class ExternalLifecycleTests(unittest.TestCase):
     def test_generation_keep_loaded_and_automatic_unload(self):
         model = self.backend.probe_model(self.config)
         assembled = {"messages": [{"role": "user", "content": "test"}], "media_inputs": []}
-        with patch("backend.models.external_lifecycle.time.sleep"), patch("backend.models.external_server_backend.run_h3_pipeline", return_value={"prompt": "ok"}):
+        with patch("backend.models.external_lifecycle.time.sleep"), patch("backend.models.external_server_backend.run_pipeline", return_value={"prompt": "ok"}):
             for keep in [True, False]:
                 self.backend.prepare_request()
                 self.backend.generate(model, assembled, "test", thinking=False, seed=None, unload_after=not keep)
@@ -139,7 +139,7 @@ class ExternalLifecycleTests(unittest.TestCase):
         def cancelled(*args, **kwargs):
             self.backend.request_unload()
             raise ModelError("GENERATION_CANCELLED", "Cancelled")
-        with patch("backend.models.external_lifecycle.time.sleep"), patch("backend.models.external_server_backend.run_h3_pipeline", side_effect=cancelled):
+        with patch("backend.models.external_lifecycle.time.sleep"), patch("backend.models.external_server_backend.run_pipeline", side_effect=cancelled):
             with self.assertRaises(ModelError):
                 self.backend.generate(model, {"messages": [], "media_inputs": []}, "test", thinking=False, seed=None, unload_after=False)
         self.assertEqual(self.server.states["writer"], "unloaded")
@@ -167,11 +167,11 @@ class ExternalLifecycleTests(unittest.TestCase):
             if not loaded:
                 raise ModelError("UNLOAD_FAILED", "Offline")
         with patch.object(self.backend.router, "transition", side_effect=transition):
-            with patch("backend.models.external_server_backend.run_h3_pipeline", return_value={"prompt": "keep this"}):
+            with patch("backend.models.external_server_backend.run_pipeline", return_value={"prompt": "keep this"}):
                 result = self.backend.generate(model, assembled, "test", thinking=False, seed=None, unload_after=True)
                 self.assertEqual(result["prompt"], "keep this")
                 self.assertIn("lifecycle_warning", result)
-            with patch("backend.models.external_server_backend.run_h3_pipeline", side_effect=ModelError("PRIMARY", "original error")):
+            with patch("backend.models.external_server_backend.run_pipeline", side_effect=ModelError("PRIMARY", "original error")):
                 with self.assertRaises(ModelError) as error:
                     self.backend.generate(model, assembled, "test", thinking=False, seed=None, unload_after=True)
                 self.assertEqual(error.exception.code, "PRIMARY")

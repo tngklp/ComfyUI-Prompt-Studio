@@ -333,7 +333,7 @@ class OllamaBackendTests(unittest.TestCase):
         remote_model = self.backend.probe_model("gemma4:test", self.second_url)
         plan = self.backend.preflight(remote_model, self._assembled(), context_profile="auto", kv_cache="auto", thinking=False)
         self.backend.prepare_request()
-        with patch("backend.models.ollama_backend.run_h3_pipeline", return_value={"prompt": "OK"}):
+        with patch("backend.models.ollama_backend.run_pipeline", return_value={"prompt": "OK"}):
             self.backend.generate(
                 remote_model, self._assembled(), "session", thinking=False, seed=1,
                 unload_after=False, runtime_plan=plan,
@@ -434,7 +434,7 @@ class OllamaBackendTests(unittest.TestCase):
         plan = self.backend.preflight(model, self._assembled(), context_profile="auto", kv_cache="auto", thinking=False)
         fake_result = {"prompt": "OK"}
         self.backend.prepare_request()
-        with patch("backend.models.ollama_backend.run_h3_pipeline", return_value=fake_result):
+        with patch("backend.models.ollama_backend.run_pipeline", return_value=fake_result):
             result = self.backend.generate(
                 model, self._assembled(), "session", thinking=False, seed=1,
                 unload_after=True, runtime_plan=plan,
@@ -444,7 +444,7 @@ class OllamaBackendTests(unittest.TestCase):
 
         _FakeOllamaHandler.requests = []
         self.backend.prepare_request()
-        with patch("backend.models.ollama_backend.run_h3_pipeline", side_effect=ModelError("OLLAMA_STREAM_ERROR", "runner stopped")):
+        with patch("backend.models.ollama_backend.run_pipeline", side_effect=ModelError("OLLAMA_STREAM_ERROR", "runner stopped")):
             with self.assertRaises(ModelError) as error:
                 self.backend.generate(
                     model, self._assembled(), "session", thinking=False, seed=1,
@@ -461,7 +461,7 @@ class OllamaBackendTests(unittest.TestCase):
                     self.backend.prepare_request()
                     primary = ModelError("GENERATION_FAILED", "primary error")
                     cleanup = ModelError("OLLAMA_REQUEST_FAILED", "unload failed")
-                    with patch("backend.models.ollama_backend.run_h3_pipeline", return_value={"prompt": "OK"}, side_effect=primary if generation_fails else None), patch.object(
+                    with patch("backend.models.ollama_backend.run_pipeline", return_value={"prompt": "OK"}, side_effect=primary if generation_fails else None), patch.object(
                         self.backend, "unload", side_effect=cleanup if cleanup_fails else None,
                     ):
                         if generation_fails:
@@ -486,7 +486,7 @@ class OllamaBackendTests(unittest.TestCase):
         model = self._model()
         plan = self.backend.preflight(model, self._assembled(), context_profile="auto", kv_cache="auto", thinking=False)
         self.backend.prepare_request()
-        with patch("backend.models.ollama_backend.run_h3_pipeline", return_value={"prompt": "OK"}):
+        with patch("backend.models.ollama_backend.run_pipeline", return_value={"prompt": "OK"}):
             self.backend.generate(
                 model, self._assembled(), "session", thinking=False, seed=1,
                 unload_after=False, runtime_plan=plan,
@@ -539,7 +539,7 @@ class OllamaBackendTests(unittest.TestCase):
         plan = self.backend.preflight(model, self._assembled(), context_profile="auto", kv_cache="auto", thinking=False)
         self.backend.prepare_request()
         self.backend.request_unload()
-        with patch("backend.models.ollama_backend.run_h3_pipeline", side_effect=ModelError("GENERATION_CANCELLED", "Generation was cancelled.")):
+        with patch("backend.models.ollama_backend.run_pipeline", side_effect=ModelError("GENERATION_CANCELLED", "Generation was cancelled.")):
             with self.assertRaises(ModelError) as error:
                 self.backend.generate(
                     model, self._assembled(), "session", thinking=False, seed=1,

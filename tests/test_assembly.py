@@ -4,14 +4,21 @@ from unittest.mock import patch
 from backend.assembly import AssemblyError, _final_contract, assemble_lyrics_request, assemble_refinement, assemble_request
 from backend.system_prompts import (
     MAX_SYSTEM_PROMPT_CHARS,
-    MUSIC3_LYRICS_SYSTEM_WRAPPER,
-    MUSIC3_SYSTEM_WRAPPER,
-    REFERENCE_SYSTEM_WRAPPER,
-    SYSTEM_WRAPPER,
     SystemPromptError,
+    load_system_prompt,
     resolve_system_prompt,
     system_prompt_for_mode,
+    system_prompt_profile,
 )
+
+# Built-in prompts are data files under backend/system_prompts/, resolved through
+# the generation-target registry rather than module-level constants. A profile is
+# addressed as "<target-id>/<profile>", the same way a guide is, because names
+# like "base" repeat across targets.
+SYSTEM_WRAPPER = load_system_prompt("minimax_h3/base")
+REFERENCE_SYSTEM_WRAPPER = load_system_prompt("minimax_h3/ref")
+MUSIC3_SYSTEM_WRAPPER = load_system_prompt("minimax_music3/base")
+MUSIC3_LYRICS_SYSTEM_WRAPPER = load_system_prompt("minimax_music3/lyrics")
 
 
 class SystemPromptTests(unittest.TestCase):

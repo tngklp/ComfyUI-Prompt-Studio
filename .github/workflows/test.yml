@@ -30,15 +30,27 @@ jobs:
       - name: Install DOM test dependency
         run: npm ci --ignore-scripts
 
-      # unittest includes the local Node frontend wrapper; do not run it twice.
+      # unittest shells out to tests/frontend_regressions.mjs via
+      # test_frontend_regressions.py, so that one file must not also be listed here.
       - name: Run Python and frontend tests
         env:
           PYTHONPATH: tests/ci_stubs
         run: python -m unittest discover -s tests -p "test_*.py"
 
+      # The remaining .mjs suites. main_smoke.mjs loads the real web/main.js in a
+      # vm module, which is the only check that catches a free variable like
+      # "targetForMode is not defined"; it needs --experimental-vm-modules.
+      # It guards itself with vm.SourceTextModule and skips without the flag, so
+      # it is run on its own here rather than silently skipping.
+      - name: Run frontend tests
+        run: node --test tests/*.mjs
+
+      - name: Run frontend module smoke test
+        run: node --experimental-vm-modules --test tests/main_smoke.mjs
+
       - name: Run Standalone tests
         env:
-          PYTHONPATH: standalone:standalone/h3_standalone/compat:.
+          PYTHONPATH: standalone:standalone/prompt_studio/compat:.
         run: python -m unittest discover -s standalone/tests -p "test_*.py"
 
       - name: Run Standalone frontend tests

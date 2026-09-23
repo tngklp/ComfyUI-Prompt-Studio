@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Download pinned H3 Prompt Writer models with Hugging Face Xet.")
+    parser = argparse.ArgumentParser(description="Download pinned Prompt Studio models with Hugging Face Xet.")
     parser.add_argument("model", nargs="*", help="Configured model id; omit to download all")
     parser.add_argument("--target", type=Path, required=True)
     args = parser.parse_args()

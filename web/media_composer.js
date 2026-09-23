@@ -18,60 +18,60 @@ const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (ch) => ({"&":"&a
 function markup(icon) {
   const i = (name, size) => icon?.(name, size) ?? "";
   return `
-<section class="h3ps-composer" aria-hidden="true">
-  <div class="h3ps-preview-backdrop" data-close></div>
-  <div class="h3ps-cmp-dialog" role="dialog" aria-modal="true" aria-labelledby="h3ps-cmp-title" tabindex="-1">
+<section class="ps-composer" aria-hidden="true">
+  <div class="ps-preview-backdrop" data-close></div>
+  <div class="ps-cmp-dialog" role="dialog" aria-modal="true" aria-labelledby="ps-cmp-title" tabindex="-1">
     <header>
-      <span><small>Media Composer</small><strong id="h3ps-cmp-title">Compose a new Picture</strong></span>
-      <div class="h3ps-cmp-shell-controls" data-shell-controls><button class="h3ps-icon-button" type="button" data-close aria-label="Close composer" title="Close (Esc)">${i("close", 18)}</button></div>
+      <span><small>Media Composer</small><strong id="ps-cmp-title">Compose a new Picture</strong></span>
+      <div class="ps-cmp-shell-controls" data-shell-controls><button class="ps-icon-button" type="button" data-close aria-label="Close composer" title="Close (Esc)">${i("close", 18)}</button></div>
     </header>
-    <div class="h3ps-cmp-body">
-      <aside class="h3ps-cmp-side">
-        <section class="h3ps-cmp-block">
-          <div class="h3ps-cmp-block-head"><small>Sources</small><em data-source-count></em></div>
-          <p class="h3ps-cmp-hint">Click or drag onto canvas. Pictures keep their full frame; Videos use the prepared analysis sheet.</p>
-          <div class="h3ps-cmp-sources" data-sources role="group" aria-label="Available media"></div>
+    <div class="ps-cmp-body">
+      <aside class="ps-cmp-side">
+        <section class="ps-cmp-block">
+          <div class="ps-cmp-block-head"><small>Sources</small><em data-source-count></em></div>
+          <p class="ps-cmp-hint">Click or drag onto canvas. Pictures keep their full frame; Videos use the prepared analysis sheet.</p>
+          <div class="ps-cmp-sources" data-sources role="group" aria-label="Available media"></div>
         </section>
-        <section class="h3ps-cmp-block">
-          <div class="h3ps-cmp-block-head"><small>On canvas</small><button class="h3ps-cmp-text-action" type="button" data-clear>Clear</button></div>
-          <div class="h3ps-cmp-strip" data-strip></div>
+        <section class="ps-cmp-block">
+          <div class="ps-cmp-block-head"><small>On canvas</small><button class="ps-cmp-text-action" type="button" data-clear>Clear</button></div>
+          <div class="ps-cmp-strip" data-strip></div>
         </section>
-        <section class="h3ps-cmp-block">
-          <div class="h3ps-cmp-block-head"><small>Arrange &amp; Canvas</small><button class="h3ps-cmp-text-action" type="button" data-reset title="Restore arrangement and media sizes; keep sources and captions">Reset layout</button></div>
-          <div class="h3ps-cmp-control"><span>Arrange</span><div class="h3ps-cmp-segment" data-layout role="group" aria-label="Auto arrange"><button type="button" data-value="auto">Auto</button><button type="button" data-value="2">2 cols</button><button type="button" data-value="3">3 cols</button><button type="button" data-value="grid">Grid</button></div></div>
-          <div class="h3ps-cmp-control h3ps-cmp-aspect-control"><label for="h3ps-cmp-aspect">Canvas</label><select class="h3ps-cmp-select" id="h3ps-cmp-aspect" data-aspect>${ASPECTS.map(([v,l]) => `<option value="${v}">${v === "auto" ? l : v}</option>`).join("")}</select></div>
-          <div class="h3ps-cmp-control h3ps-cmp-output-control"><span>Output</span><div class="h3ps-cmp-output">
-            <div class="h3ps-cmp-segment" data-output-mode><button type="button" data-value="auto">Auto</button><button type="button" data-value="custom">Custom</button></div>
-            <span class="h3ps-cmp-output-readout" data-output-readout></span>
-            <div class="h3ps-cmp-output-custom" data-output-custom hidden>
-              <div class="h3ps-cmp-segment" data-output-input><button type="button" data-value="mp">MP</button><button type="button" data-value="dimensions">Dimensions</button></div>
-              <div class="h3ps-cmp-output-editor" data-mp-editor><input class="h3ps-cmp-number h3ps-cmp-mp" type="number" min="0.01" step="0.01" inputmode="decimal" data-mp aria-label="Output megapixels"><span>MP</span><small data-mp-calc></small></div>
-              <div class="h3ps-cmp-output-editor" data-dims-editor hidden><div class="h3ps-cmp-dimensions"><input class="h3ps-cmp-number" type="number" min="1" step="1" inputmode="numeric" data-width aria-label="Output width"><i>×</i><input class="h3ps-cmp-number" type="number" min="1" step="1" inputmode="numeric" data-height aria-label="Output height"></div><small data-dims-calc></small></div>
+        <section class="ps-cmp-block">
+          <div class="ps-cmp-block-head"><small>Arrange &amp; Canvas</small><button class="ps-cmp-text-action" type="button" data-reset title="Restore arrangement and media sizes; keep sources and captions">Reset layout</button></div>
+          <div class="ps-cmp-control"><span>Arrange</span><div class="ps-cmp-segment" data-layout role="group" aria-label="Auto arrange"><button type="button" data-value="auto">Auto</button><button type="button" data-value="2">2 cols</button><button type="button" data-value="3">3 cols</button><button type="button" data-value="grid">Grid</button></div></div>
+          <div class="ps-cmp-control ps-cmp-aspect-control"><label for="ps-cmp-aspect">Canvas</label><select class="ps-cmp-select" id="ps-cmp-aspect" data-aspect>${ASPECTS.map(([v,l]) => `<option value="${v}">${v === "auto" ? l : v}</option>`).join("")}</select></div>
+          <div class="ps-cmp-control ps-cmp-output-control"><span>Output</span><div class="ps-cmp-output">
+            <div class="ps-cmp-segment" data-output-mode><button type="button" data-value="auto">Auto</button><button type="button" data-value="custom">Custom</button></div>
+            <span class="ps-cmp-output-readout" data-output-readout></span>
+            <div class="ps-cmp-output-custom" data-output-custom hidden>
+              <div class="ps-cmp-segment" data-output-input><button type="button" data-value="mp">MP</button><button type="button" data-value="dimensions">Dimensions</button></div>
+              <div class="ps-cmp-output-editor" data-mp-editor><input class="ps-cmp-number ps-cmp-mp" type="number" min="0.01" step="0.01" inputmode="decimal" data-mp aria-label="Output megapixels"><span>MP</span><small data-mp-calc></small></div>
+              <div class="ps-cmp-output-editor" data-dims-editor hidden><div class="ps-cmp-dimensions"><input class="ps-cmp-number" type="number" min="1" step="1" inputmode="numeric" data-width aria-label="Output width"><i>×</i><input class="ps-cmp-number" type="number" min="1" step="1" inputmode="numeric" data-height aria-label="Output height"></div><small data-dims-calc></small></div>
             </div>
           </div></div>
-          <div class="h3ps-cmp-control"><label for="h3ps-cmp-gap">Gap</label><div class="h3ps-cmp-range"><input id="h3ps-cmp-gap" type="range" min="0" max="64" step="2" data-gap><output data-gap-out></output></div></div>
-          <div class="h3ps-cmp-control"><span>Placement</span><label class="h3ps-cmp-check"><input type="checkbox" data-snap checked>Snap to edges &amp; center</label></div>
+          <div class="ps-cmp-control"><label for="ps-cmp-gap">Gap</label><div class="ps-cmp-range"><input id="ps-cmp-gap" type="range" min="0" max="64" step="2" data-gap><output data-gap-out></output></div></div>
+          <div class="ps-cmp-control"><span>Placement</span><label class="ps-cmp-check"><input type="checkbox" data-snap checked>Snap to edges &amp; center</label></div>
         </section>
       </aside>
-      <div class="h3ps-cmp-stage">
-        <div class="h3ps-cmp-stage-canvas" data-stage>
+      <div class="ps-cmp-stage">
+        <div class="ps-cmp-stage-canvas" data-stage>
           <canvas data-canvas width="1600" height="900" aria-label="Collage preview" hidden></canvas>
-          <div class="h3ps-cmp-empty" data-empty><span>${i("grid", 18)}</span><strong>Canvas is empty</strong>Click or drag Pictures or Video sheets from the left.</div>
-          <button class="h3ps-cmp-caption-add" type="button" data-caption-add hidden>${i("plus", 11)}Add caption</button>
-          <div class="h3ps-cmp-caption-inline" data-caption-inline hidden>
+          <div class="ps-cmp-empty" data-empty><span>${i("grid", 18)}</span><strong>Canvas is empty</strong>Click or drag Pictures or Video sheets from the left.</div>
+          <button class="ps-cmp-caption-add" type="button" data-caption-add hidden>${i("plus", 11)}Add caption</button>
+          <div class="ps-cmp-caption-inline" data-caption-inline hidden>
             <textarea data-caption-input rows="1" placeholder="Add a caption…" aria-label="Caption" spellcheck="true"></textarea>
-            <i class="h3ps-cmp-caption-handle" data-caption-handle="left"></i><i class="h3ps-cmp-caption-handle" data-caption-handle="right"></i><i class="h3ps-cmp-caption-handle" data-caption-handle="scale"></i>
-            <button class="h3ps-cmp-caption-remove" type="button" data-caption-remove title="Remove caption" aria-label="Remove caption">${i("close", 11)}</button>
+            <i class="ps-cmp-caption-handle" data-caption-handle="left"></i><i class="ps-cmp-caption-handle" data-caption-handle="right"></i><i class="ps-cmp-caption-handle" data-caption-handle="scale"></i>
+            <button class="ps-cmp-caption-remove" type="button" data-caption-remove title="Remove caption" aria-label="Remove caption">${i("close", 11)}</button>
           </div>
         </div>
-        <div class="h3ps-cmp-meta"><span data-meta-left></span><button class="h3ps-cmp-text-action" type="button" data-view-fit title="Reset zoom to fit; wheel to zoom, middle-drag to pan">Fit</button><span data-meta-right></span></div>
+        <div class="ps-cmp-meta"><span data-meta-left></span><button class="ps-cmp-text-action" type="button" data-view-fit title="Reset zoom to fit; wheel to zoom, middle-drag to pan">Fit</button><span data-meta-right></span></div>
       </div>
     </div>
     <footer>
       <span data-footer-note></span>
-      <button class="h3ps-icon-button h3ps-cmp-copy-button" type="button" data-copy title="Copy PNG" aria-label="Copy PNG">${i("copy", 14)}</button>
-      <button class="h3ps-secondary-button" type="button" data-download>${i("download", 13)}Download</button>
-      <button class="h3ps-primary-button" type="button" data-add>${i("plus", 13)}Add as Picture</button>
+      <button class="ps-icon-button ps-cmp-copy-button" type="button" data-copy title="Copy PNG" aria-label="Copy PNG">${i("copy", 14)}</button>
+      <button class="ps-secondary-button" type="button" data-download>${i("download", 13)}Download</button>
+      <button class="ps-primary-button" type="button" data-add>${i("plus", 13)}Add as Picture</button>
     </footer>
   </div>
 </section>`;
@@ -116,7 +116,7 @@ export function createMediaComposer({
   const $$ = (s, r = el) => [...r.querySelectorAll(s)];
   const dom = {
     gap: $("[data-gap]"), gapOut: $("[data-gap-out]"), snap: $("[data-snap]"), stage: $("[data-stage]"), canvas: $("[data-canvas]"), empty: $("[data-empty]"),
-    dialog: $(".h3ps-cmp-dialog"), side: $(".h3ps-cmp-side"), sources: $("[data-sources]"), sourceCount: $("[data-source-count]"),
+    dialog: $(".ps-cmp-dialog"), side: $(".ps-cmp-side"), sources: $("[data-sources]"), sourceCount: $("[data-source-count]"),
     strip: $("[data-strip]"), clear: $("[data-clear]"), reset: $("[data-reset]"), layout: $("[data-layout]"), aspect: $("[data-aspect]"),
     outputMode: $("[data-output-mode]"), outputInput: $("[data-output-input]"), outputReadout: $("[data-output-readout]"), outputCustom: $("[data-output-custom]"),
     mpEditor: $("[data-mp-editor]"), dimsEditor: $("[data-dims-editor]"), mp: $("[data-mp]"), mpCalc: $("[data-mp-calc]"), width: $("[data-width]"), height: $("[data-height]"), dimsCalc: $("[data-dims-calc]"),
@@ -406,19 +406,19 @@ export function createMediaComposer({
   function renderSources() {
     const list=state.assets.filter((a)=>a.type==="image"||a.type==="video"), audio=state.assets.filter((a)=>a.type==="audio").length;
     dom.sourceCount.textContent=`${state.items.length} on canvas${audio?` · ${audio} audio skipped`:""}`;
-    dom.sources.innerHTML=list.map((a)=>{const selected=state.items.some((it)=>it.assetId===a.id),m=sourceMeta(a);return `<button class="h3ps-asset h3ps-cmp-source ${selected?"is-selected":""}" type="button" draggable="true" data-source-id="${esc(a.id)}" aria-pressed="${selected}"><span class="h3ps-asset-preview"><span class="h3ps-thumb-backdrop" style="background-image:url(&quot;${esc(sourceThumb(a)||"")}&quot;)"></span><img class="h3ps-real-thumb" draggable="false" src="${esc(sourceThumb(a)||"")}" alt=""></span><span class="h3ps-cmp-source-kind ${a.type==="video"?"is-sheet":""}">${esc(m.kind)}</span><span class="h3ps-asset-copy"><strong>${esc(a.reference||a.filename||"Media")}</strong><small>${esc(m.detail)}</small></span></button>`}).join("");
+    dom.sources.innerHTML=list.map((a)=>{const selected=state.items.some((it)=>it.assetId===a.id),m=sourceMeta(a);return `<button class="ps-asset ps-cmp-source ${selected?"is-selected":""}" type="button" draggable="true" data-source-id="${esc(a.id)}" aria-pressed="${selected}"><span class="ps-asset-preview"><span class="ps-thumb-backdrop" style="background-image:url(&quot;${esc(sourceThumb(a)||"")}&quot;)"></span><img class="ps-real-thumb" draggable="false" src="${esc(sourceThumb(a)||"")}" alt=""></span><span class="ps-cmp-source-kind ${a.type==="video"?"is-sheet":""}">${esc(m.kind)}</span><span class="ps-asset-copy"><strong>${esc(a.reference||a.filename||"Media")}</strong><small>${esc(m.detail)}</small></span></button>`}).join("");
   }
 
   function renderStrip() {
     dom.clear.disabled=!state.items.length;
-    if(!state.items.length){dom.strip.innerHTML=`<span class="h3ps-cmp-strip-empty">No items on canvas.</span>`;return}
-    dom.strip.innerHTML=state.items.map((it)=>{const a=itemAsset(it),custom=Math.abs(itemWeight(it)-1)>.03;return `<div class="h3ps-cmp-pill ${it.uid===state.selectedUid?"is-active":""}" data-item-id="${it.uid}"><span>${esc(a?.reference||"Missing")}</span>${custom?`<button type="button" data-action="reset-size" title="Reset media size preference" aria-label="Reset media size preference">↺</button>`:""}<button type="button" data-action="remove" title="Remove" aria-label="Remove">×</button></div>`}).join("");
+    if(!state.items.length){dom.strip.innerHTML=`<span class="ps-cmp-strip-empty">No items on canvas.</span>`;return}
+    dom.strip.innerHTML=state.items.map((it)=>{const a=itemAsset(it),custom=Math.abs(itemWeight(it)-1)>.03;return `<div class="ps-cmp-pill ${it.uid===state.selectedUid?"is-active":""}" data-item-id="${it.uid}"><span>${esc(a?.reference||"Missing")}</span>${custom?`<button type="button" data-action="reset-size" title="Reset media size preference" aria-label="Reset media size preference">↺</button>`:""}<button type="button" data-action="remove" title="Remove" aria-label="Remove">×</button></div>`}).join("");
   }
 
   function setActive(host,value) { $$(`button[data-value]`,host).forEach((b)=>{const on=b.dataset.value===value;b.classList.toggle("is-active",on);b.setAttribute("aria-pressed",String(on))}); }
   function renderControls() {
     normalizeLayoutMode();const n=state.items.length;setActive(dom.layout,n?state.layout:null);$$(`button`,dom.layout).forEach((b)=>b.disabled=!layoutAvailable(b.dataset.value));dom.reset.disabled=!n;
-    dom.aspect.value=state.aspect;dom.gap.value=state.gap;dom.gap.style.setProperty("--h3ps-range",`${state.gap/64*100}%`);dom.gapOut.textContent=`${state.gap} px`;dom.snap.checked=state.snap;
+    dom.aspect.value=state.aspect;dom.gap.value=state.gap;dom.gap.style.setProperty("--ps-range",`${state.gap/64*100}%`);dom.gapOut.textContent=`${state.gap} px`;dom.snap.checked=state.snap;
     const r=outputResolution(),mp=r.W*r.H/1e6;setActive(dom.outputMode,state.outputMode);dom.outputReadout.innerHTML=n?`<b>${r.W} × ${r.H}</b> · ${mp.toFixed(2)} MP`:"Add media to set output";dom.outputCustom.hidden=state.outputMode!=="custom";
     setActive(dom.outputInput,state.outputInput);dom.mpEditor.hidden=state.outputInput!=="mp";dom.dimsEditor.hidden=state.outputInput!=="dimensions";dom.mp.value=(state.customPixels/1e6).toFixed(2);dom.width.value=r.W;dom.height.value=r.H;dom.mpCalc.textContent=`${r.W} × ${r.H}`;dom.dimsCalc.textContent=n?`${mp.toFixed(2)} MP`:"";dom.mpCalc.textContent=n?`${r.W} × ${r.H}`:"";dom.width.disabled=dom.height.disabled=!n;if(!n){dom.width.value="";dom.height.value=""}
   }
@@ -429,8 +429,8 @@ export function createMediaComposer({
 
   function drawOutput(ctx,W,H,interactive) {
     ctx.clearRect(0,0,W,H);ctx.fillStyle=CANVAS_BG;ctx.fillRect(0,0,W,H);const T=outputTransform(W,H);ctx.save();ctx.translate(T.ox,T.oy);ctx.scale(T.scale,T.scale);const line=Math.max(.7,1/T.scale);
-    for(const it of state.items){const a=itemAsset(it),bitmap=state.visuals.get(it.assetId);if(!a||!bitmap)continue;ctx.drawImage(bitmap,it.x,it.y,it.w,it.h);ctx.strokeStyle="rgba(255,255,255,.08)";ctx.lineWidth=line;ctx.strokeRect(it.x+.5*line,it.y+.5*line,it.w-line,it.h-line);if(!(interactive&&state.captionEdit===it.uid))drawCaption(ctx,captionLayout(it,it.x,it.y,it.w,it.h,ctx));if(interactive&&state.selectedUid===it.uid&&!state.captionEdit){const ref=a.reference||"Reference",fs=Math.max(11,Math.min(16,T.logicalW/95));ctx.font=`600 ${fs}px Inter,system-ui`;ctx.textAlign="left";ctx.textBaseline="middle";const tw=ctx.measureText(ref).width,ph=fs*1.65,pw=tw+fs*.95,px=it.x+fs*.45,py=it.y+it.h-ph-fs*.45;ctx.fillStyle="rgba(8,9,11,.84)";ctx.beginPath();ctx.roundRect(px,py,pw,ph,Math.max(4,fs*.3));ctx.fill();ctx.strokeStyle="rgba(232,97,60,.55)";ctx.lineWidth=Math.max(.8,1/T.scale);ctx.stroke();ctx.fillStyle="#f2b09d";ctx.fillText(ref,px+fs*.45,py+ph/2)}}
-    const it=selected();if(interactive&&it&&!state.captionEdit){ctx.strokeStyle="#f0734d";ctx.lineWidth=Math.max(2/T.scale,T.logicalW/600);ctx.setLineDash([8/T.scale,5/T.scale]);ctx.strokeRect(it.x-2/T.scale,it.y-2/T.scale,it.w+4/T.scale,it.h+4/T.scale);ctx.setLineDash([]);const hs=Math.max(12/T.scale,T.logicalW/110);ctx.fillStyle="#fff";ctx.strokeStyle="#e8613c";ctx.lineWidth=2/T.scale;for(const [x,y] of [[it.x,it.y],[it.x+it.w,it.y],[it.x,it.y+it.h],[it.x+it.w,it.y+it.h]]){ctx.beginPath();ctx.rect(x-hs/2,y-hs/2,hs,hs);ctx.fill();ctx.stroke()}}
+    for(const it of state.items){const a=itemAsset(it),bitmap=state.visuals.get(it.assetId);if(!a||!bitmap)continue;ctx.drawImage(bitmap,it.x,it.y,it.w,it.h);ctx.strokeStyle="rgba(255,255,255,.08)";ctx.lineWidth=line;ctx.strokeRect(it.x+.5*line,it.y+.5*line,it.w-line,it.h-line);if(!(interactive&&state.captionEdit===it.uid))drawCaption(ctx,captionLayout(it,it.x,it.y,it.w,it.h,ctx));if(interactive&&state.selectedUid===it.uid&&!state.captionEdit){const ref=a.reference||"Reference",fs=Math.max(11,Math.min(16,T.logicalW/95));ctx.font=`600 ${fs}px Inter,system-ui`;ctx.textAlign="left";ctx.textBaseline="middle";const tw=ctx.measureText(ref).width,ph=fs*1.65,pw=tw+fs*.95,px=it.x+fs*.45,py=it.y+it.h-ph-fs*.45;ctx.fillStyle="rgba(8,9,11,.84)";ctx.beginPath();ctx.roundRect(px,py,pw,ph,Math.max(4,fs*.3));ctx.fill();ctx.strokeStyle="rgba(167,139,250,.55)";ctx.lineWidth=Math.max(.8,1/T.scale);ctx.stroke();ctx.fillStyle="#cbbcfd";ctx.fillText(ref,px+fs*.45,py+ph/2)}}
+    const it=selected();if(interactive&&it&&!state.captionEdit){ctx.strokeStyle="#b79dfb";ctx.lineWidth=Math.max(2/T.scale,T.logicalW/600);ctx.setLineDash([8/T.scale,5/T.scale]);ctx.strokeRect(it.x-2/T.scale,it.y-2/T.scale,it.w+4/T.scale,it.h+4/T.scale);ctx.setLineDash([]);const hs=Math.max(12/T.scale,T.logicalW/110);ctx.fillStyle="#fff";ctx.strokeStyle="#a78bfa";ctx.lineWidth=2/T.scale;for(const [x,y] of [[it.x,it.y],[it.x+it.w,it.y],[it.x,it.y+it.h],[it.x+it.w,it.y+it.h]]){ctx.beginPath();ctx.rect(x-hs/2,y-hs/2,hs,hs);ctx.fill();ctx.stroke()}}
     ctx.restore();
   }
 
@@ -496,9 +496,9 @@ export function createMediaComposer({
   dom.sources.addEventListener("dragstart",(e)=>{
     const source=e.target.closest("[data-source-id]");if(!source)return;
     e.dataTransfer.setData("text/plain",source.dataset.sourceId);e.dataTransfer.effectAllowed="copy";
-    const img=source.querySelector("img.h3ps-real-thumb");
+    const img=source.querySelector("img.ps-real-thumb");
     if(img?.complete&&img.naturalWidth){
-      clearDragGhost();dragGhost=img.cloneNode();dragGhost.className="h3ps-cmp-drag-preview";
+      clearDragGhost();dragGhost=img.cloneNode();dragGhost.className="ps-cmp-drag-preview";
       const k=Math.min(140/img.naturalWidth,140/img.naturalHeight);
       dragGhost.style.width=img.naturalWidth*k+"px";dragGhost.style.height=img.naturalHeight*k+"px";
       el.append(dragGhost);e.dataTransfer.setDragImage(dragGhost,img.naturalWidth*k/2,img.naturalHeight*k/2);

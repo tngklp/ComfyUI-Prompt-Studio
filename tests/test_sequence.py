@@ -9,7 +9,7 @@ from unittest.mock import patch, Mock
 from backend.sequence import validate_sequence, snapshot_media, assemble_chunk, conditioning, plain_chunk_prompt, normalize_local_timestamps
 from backend.sequence_routes import run_sequence, ACTIVE_OPERATIONS, register_sequence_routes
 from backend.assembly import AssemblyError
-from backend.h3_pipeline import run_h3_pipeline, validate_media_capabilities
+from backend.pipeline import run_pipeline, validate_media_capabilities
 from backend.models.contract import ModelError
 from backend.sequence_plan import assemble_plan, parse_plan, interval_context
 
@@ -170,12 +170,12 @@ class SequenceAssemblyTests(unittest.TestCase):
         model={"family":"gguf","capabilities":{"images":False}}
         for finish in ["stop","length",None]:
             complete=Mock(return_value={"choices":[{"finish_reason":finish,"message":{"content":"Unusual but completed plain text"}}]})
-            with patch("backend.h3_pipeline._audit",side_effect=AssertionError("no semantic validation")):
+            with patch("backend.pipeline._audit",side_effect=AssertionError("no semantic validation")):
                 if finish=="stop":
-                    result=run_h3_pipeline(model,assembled,"sequence-test",plan,complete=complete,count_text_tokens=lambda s:len(s)//4,is_cancelled=lambda:False,thinking=False,seed=None)
+                    result=run_pipeline(model,assembled,"sequence-test",plan,complete=complete,count_text_tokens=lambda s:len(s)//4,is_cancelled=lambda:False,thinking=False,seed=None)
                     self.assertEqual(result["prompt"],"Unusual but completed plain text")
                 else:
-                    with self.assertRaises(ModelError):run_h3_pipeline(model,assembled,"sequence-test",plan,complete=complete,count_text_tokens=lambda s:len(s)//4,is_cancelled=lambda:False,thinking=True,seed=None)
+                    with self.assertRaises(ModelError):run_pipeline(model,assembled,"sequence-test",plan,complete=complete,count_text_tokens=lambda s:len(s)//4,is_cancelled=lambda:False,thinking=True,seed=None)
             self.assertEqual(complete.call_count,1)
 
 

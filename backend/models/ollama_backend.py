@@ -12,7 +12,7 @@ from typing import Any, Callable
 from urllib.parse import urlsplit
 
 from ..context import CONTEXT_PROFILES, ContextPlanError, estimate_text_tokens, plan_context
-from ..h3_pipeline import run_h3_pipeline, validate_media_capabilities
+from ..pipeline import run_pipeline, validate_media_capabilities
 from .contract import ModelError
 
 
@@ -461,7 +461,7 @@ class OllamaBackend:
                 )
             fitting = [name for name, tokens in CONTEXT_PROFILES.items() if tokens <= limit]
             if not fitting:
-                raise ModelError("OLLAMA_MODEL_CONTEXT_LIMIT", "This Ollama model has too little declared context for H3 Prompt Writer.", {"model_context_limit": limit})
+                raise ModelError("OLLAMA_MODEL_CONTEXT_LIMIT", "This Ollama model has too little declared context for Prompt Studio.", {"model_context_limit": limit})
             try:
                 runtime_plan = plan_context(
                     assembled,
@@ -693,7 +693,7 @@ class OllamaBackend:
                     kwargs.pop("purpose", None)
                     return self._chat_completion(self.model_name, runtime_plan, endpoint=endpoint, **kwargs)
 
-                result = run_h3_pipeline(
+                result = run_pipeline(
                     model_info, assembled, session_id, runtime_plan,
                     complete=complete,
                     count_text_tokens=estimate_text_tokens,

@@ -18,7 +18,7 @@ loading without allocating model weights or GPU layers. Prepared media
 dimensions are carried through assembly so Qwen context planning can budget the
 projector tokens for each image and video contact sheet.
 
-All backends supply a narrow `complete(...)` callable to `backend/h3_pipeline.py`.
+All backends supply a narrow `complete(...)` callable to `backend/pipeline.py`.
 The pipeline owns shared media messages, Thinking fallback, prompt audit, narrow
 repair, and normalized generation metrics. It does not own provider preflight,
 transport, or lifecycle.

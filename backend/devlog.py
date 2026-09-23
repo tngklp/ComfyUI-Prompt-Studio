@@ -45,7 +45,7 @@ class PeakVRAMMonitor:
             while not self._stop.wait(0.5):
                 self._sample()
 
-        self._thread = threading.Thread(target=monitor, name="h3promptwriter-vram", daemon=True)
+        self._thread = threading.Thread(target=monitor, name="promptstudio-vram", daemon=True)
         self._thread.start()
 
     def stop(self) -> int:

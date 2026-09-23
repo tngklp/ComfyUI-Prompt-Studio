@@ -129,7 +129,7 @@ function actionButton(label, action, className = "") {
 }
 
 function closeMenus(except = null) {
-  document.querySelectorAll(".h3-lite-add-menu").forEach((menu) => {
+  document.querySelectorAll(".ps-lite-add-menu").forEach((menu) => {
     if (menu !== except) menu.hidden = true;
   });
   document.querySelectorAll('[aria-haspopup="menu"]').forEach((button) => {
@@ -157,20 +157,20 @@ function renderLocationsMenu(state, button, menu) {
   button.title = `${roots.length} model location${roots.length === 1 ? "" : "s"}`;
   menu.replaceChildren();
 
-  const heading = element("span", "h3-lite-menu-heading");
+  const heading = element("span", "ps-lite-menu-heading");
   heading.append(
     element("strong", null, "Model locations"),
     element("small", null, "All folders are combined into one model list."),
   );
   menu.append(heading);
 
-  const locations = element("span", "h3-lite-location-list");
+  const locations = element("span", "ps-lite-location-list");
   if (!roots.length) {
-    locations.append(element("span", "h3-lite-empty-location", "No model folders are remembered."));
+    locations.append(element("span", "ps-lite-empty-location", "No model folders are remembered."));
   }
   for (const root of roots) {
-    const row = element("span", "h3-lite-location-row");
-    const copy = element("span", "h3-lite-location-copy");
+    const row = element("span", "ps-lite-location-row");
+    const copy = element("span", "ps-lite-location-copy");
     copy.title = root.path;
     copy.append(
       element("strong", null, fileName(root.path) || root.path),
@@ -201,27 +201,27 @@ function renderLocationsMenu(state, button, menu) {
         await refreshModelCatalog({ rescan: true });
       } catch (error) { showError(error); }
       finally { setBusy(forgetAll, false); }
-    }, "is-danger h3-lite-menu-footer");
+    }, "is-danger ps-lite-menu-footer");
     menu.append(forgetAll);
   }
 }
 
 function syncModelControls(state) {
   const panel = document.querySelector(PANEL);
-  const heading = panel?.querySelector(".h3ps-settings-section-heading");
+  const heading = panel?.querySelector(".ps-settings-section-heading");
   if (!heading) return;
   heading.querySelector("small")?.replaceChildren("Model");
   heading.querySelector("strong")?.replaceChildren("Local GGUF models");
 
   let actions = heading.querySelector("[data-lite-model-actions]");
   if (!actions) {
-    actions = element("span", "h3-lite-heading-actions");
+    actions = element("span", "ps-lite-heading-actions");
     actions.dataset.liteModelActions = "true";
-    const addControl = element("span", "h3-lite-add-control");
+    const addControl = element("span", "ps-lite-add-control");
     const add = actionButton("Add models…", () => toggleMenu(add, menu));
     add.setAttribute("aria-haspopup", "menu");
     add.setAttribute("aria-expanded", "false");
-    const menu = element("span", "h3-lite-add-menu");
+    const menu = element("span", "ps-lite-add-menu");
     menu.hidden = true;
     menu.setAttribute("role", "menu");
     const addFile = actionButton("Choose one model GGUF…", async () => {
@@ -256,12 +256,12 @@ function syncModelControls(state) {
     menu.append(addFile, addFolder);
     addControl.append(add, menu);
 
-    const locationsControl = element("span", "h3-lite-add-control h3-lite-locations-control");
+    const locationsControl = element("span", "ps-lite-add-control ps-lite-locations-control");
     const locations = actionButton("Locations · 0", () => toggleMenu(locations, locationsMenu));
     locations.dataset.liteLocationsButton = "true";
     locations.setAttribute("aria-haspopup", "menu");
     locations.setAttribute("aria-expanded", "false");
-    const locationsMenu = element("span", "h3-lite-add-menu h3-lite-locations-menu");
+    const locationsMenu = element("span", "ps-lite-add-menu ps-lite-locations-menu");
     locationsMenu.dataset.liteLocationsMenu = "true";
     locationsMenu.hidden = true;
     locationsMenu.setAttribute("role", "menu");
@@ -278,10 +278,10 @@ function syncModelControls(state) {
 
   decorateModelOptions(state);
   const pair = selectedPair(state);
-  const modelControl = panel.querySelector(".h3ps-installed-model-control");
+  const modelControl = panel.querySelector(".ps-installed-model-control");
   let source = panel.querySelector("[data-lite-model-summary]");
   if (!source && modelControl) {
-    source = element("p", "h3ps-installed-model-source h3-lite-model-summary");
+    source = element("p", "ps-installed-model-source ps-lite-model-summary");
     source.dataset.liteModelSummary = "true";
     modelControl.after(source);
   }
@@ -302,8 +302,8 @@ function syncModelControls(state) {
 }
 
 function renderRuntime(container, state) {
-  const section = element("section", "h3-lite-section");
-  const heading = element("header", "h3ps-settings-section-heading");
+  const section = element("section", "ps-lite-section");
+  const heading = element("header", "ps-settings-section-heading");
   const title = element("span");
   title.append(element("small", null, "Local engine"), element("strong", null, "llama-server"));
   const status = state.runtime?.running
@@ -312,14 +312,14 @@ function renderRuntime(container, state) {
   heading.append(title, element("em", state.runtime?.running ? "is-running" : "", status));
   section.append(heading);
 
-  const control = element("div", "h3-lite-file-control");
-  const copy = element("span", "h3-lite-file-copy");
+  const control = element("div", "ps-lite-file-control");
+  const copy = element("span", "ps-lite-file-copy");
   const serverPath = state.config?.server_path || "";
   copy.append(
     element("strong", null, serverPath ? fileName(serverPath) : "No llama-server selected"),
     element("small", null, serverPath || "Choose llama-server.exe from an extracted official release"),
   );
-  const actions = element("span", "h3-lite-file-actions");
+  const actions = element("span", "ps-lite-file-actions");
   const chooseRuntime = async (button) => {
     setBusy(button, true, "Choosing…");
     try {
@@ -329,11 +329,11 @@ function renderRuntime(container, state) {
     finally { setBusy(button, false); }
   };
   if (serverPath) {
-    const manageControl = element("span", "h3-lite-add-control");
+    const manageControl = element("span", "ps-lite-add-control");
     const manage = actionButton("Manage", () => toggleMenu(manage, menu));
     manage.setAttribute("aria-haspopup", "menu");
     manage.setAttribute("aria-expanded", "false");
-    const menu = element("span", "h3-lite-add-menu h3-lite-runtime-menu");
+    const menu = element("span", "ps-lite-add-menu ps-lite-runtime-menu");
     menu.hidden = true;
     menu.setAttribute("role", "menu");
     menu.append(
@@ -369,7 +369,7 @@ function renderRuntime(container, state) {
   control.append(copy, actions);
   section.append(control);
 
-  const note = element("p", "h3ps-installed-model-source");
+  const note = element("p", "ps-installed-model-source");
   note.append("Starts automatically when you generate. Standalone does not bundle the runtime. ");
   const link = element("a", null, "Get llama.cpp ↗");
   link.href = RELEASES_URL;
@@ -381,12 +381,12 @@ function renderRuntime(container, state) {
 }
 
 function renderProjector(container, state) {
-  const section = element("section", "h3-lite-section");
+  const section = element("section", "ps-lite-section");
   const pair = selectedPair(state);
   const matched = metadataMatches(pair.model, pair.projector);
   const candidates = matchingProjectors(state, pair.model);
   const sharedModels = matchingModels(state, pair.projector);
-  const heading = element("header", "h3ps-settings-section-heading");
+  const heading = element("header", "ps-settings-section-heading");
   const title = element("span");
   title.append(element("small", null, "Vision · optional"), element("strong", null, "Vision projector"));
   const status = !pair.projectorPath
@@ -395,8 +395,8 @@ function renderProjector(container, state) {
   heading.append(title, element("em", pair.projectorPath ? "is-ready" : "", status));
   section.append(heading);
 
-  const control = element("div", "h3-lite-file-control");
-  const copy = element("span", "h3-lite-file-copy");
+  const control = element("div", "ps-lite-file-control");
+  const copy = element("span", "ps-lite-file-copy");
   const description = pair.projectorPath
     ? matched
       ? `GGUF metadata match${sharedModels.length > 1 ? ` · shared by ${sharedModels.length} model variants` : ""}`
@@ -410,7 +410,7 @@ function renderProjector(container, state) {
   );
   if (pair.projectorPath) copy.title = pair.projectorPath;
 
-  const actions = element("span", "h3-lite-file-actions");
+  const actions = element("span", "ps-lite-file-actions");
   const choose = actionButton(pair.projectorPath ? "Change" : "Choose…", async () => {
     setBusy(choose, true, "Choosing…");
     try {
@@ -436,9 +436,9 @@ function render(state) {
   if (!panel) return;
   syncModelControls(state);
   const old = panel.querySelector("[data-lite-managed-gguf]");
-  const container = element("div", "h3-lite-managed");
+  const container = element("div", "ps-lite-managed");
   container.dataset.liteManagedGguf = "true";
-  const error = element("div", "h3-lite-error");
+  const error = element("div", "ps-lite-error");
   error.dataset.liteError = "true";
   error.hidden = true;
   container.append(error);
@@ -473,7 +473,7 @@ function attach() {
   if (document.documentElement.dataset.liteMenuDismissAttached !== "true") {
     document.documentElement.dataset.liteMenuDismissAttached = "true";
     document.addEventListener("click", (event) => {
-      if (!event.target.closest(".h3-lite-add-control")) closeMenus();
+      if (!event.target.closest(".ps-lite-add-control")) closeMenus();
     });
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape") closeMenus();

@@ -1,4 +1,4 @@
-const KEY = "h3-writer-desktop-notifications";
+const KEY = "prompt-studio-desktop-notifications";
 
 export function createDesktopNotifications({ storage, document, window }) {
   const API = window.Notification;
@@ -25,7 +25,7 @@ export function createDesktopNotifications({ storage, document, window }) {
     notify(title) {
       if (!this.enabled || document.visibilityState !== "hidden") return;
       try {
-        const notification = new API("H3 Prompt Writer", { body: title, tag: "h3-writer-generation" });
+        const notification = new API("Prompt Studio", { body: title, tag: "prompt-studio-generation" });
         notification.onclick = () => { try { window.focus(); } finally { notification.close(); } };
       } catch {}
     },

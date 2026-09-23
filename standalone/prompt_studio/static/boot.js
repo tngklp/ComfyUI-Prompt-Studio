@@ -7,9 +7,9 @@ try {
   await boot();
   startHostLabels();
   startManagedGGUF();
-  document.documentElement.dataset.h3StandaloneShell = "ready";
-  document.title = "H3 Prompt Writer";
-  document.querySelector("[data-host-status]")?.replaceChildren("Writer is ready.");
+  document.documentElement.dataset.psStandaloneShell = "ready";
+  document.title = "Prompt Studio";
+  document.querySelector("[data-host-status]")?.replaceChildren("Prompt Studio is ready.");
 } catch (error) {
   document.querySelector("[data-host-status]")?.replaceChildren(
     `Startup failed: ${error?.message || error}`,

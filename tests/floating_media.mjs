@@ -21,7 +21,7 @@ function fixture(t) {
         this.writer = new Element("button"); this.close = new Element("button");
       }
     }
-    querySelector(selector) { return ({ header: this.header, ".h3ps-assets": this.cards, "[role=status]": this.status,
+    querySelector(selector) { return ({ header: this.header, ".ps-assets": this.cards, "[role=status]": this.status,
       "[data-float-writer]": this.writer, "[data-float-close]": this.close })[selector]; }
     setAttribute(k, v) { this.attrs[k] = v; }
     appendChild(el) { this.children.push(el); return el; }
@@ -61,13 +61,13 @@ function fixture(t) {
   return { panel, root, state, doc, win, canvas, stored, transfers, drag };
 }
 
-test("floating panel follows theme/size, retains position, and suspends with Writer", async t => {
+test("floating panel follows theme/size, retains position, and suspends with Prompt Studio", async t => {
   const f = fixture(t); f.panel.open();
   assert.equal(f.root.hidden, false); assert.equal(f.root.cards.children.length, 1);
   assert.equal(f.root.cards.children[0].children[1].children[0].textContent, "Trim required");
   await f.root.header.emit("keydown", { key: "ArrowRight" });
   const position = f.root.style.left;
-  assert.ok(f.stored.get("h3ps-floating-media-position"));
+  assert.ok(f.stored.get("ps-floating-media-position"));
   await f.root.writer.emit("click"); assert.equal(f.root.hidden, true);
   assert.equal(f.doc.listeners.get("drop").length, 0);
   f.state.theme = "light"; f.state.interfaceSize = "125";

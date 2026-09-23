@@ -4,7 +4,7 @@ export const ASPECT_RATIOS = [
 ];
 
 export function generationButtonMarkup(icon, busy, label) {
-  return busy ? `<span class="h3ps-spinner"></span><span data-generate-label>Cancel</span>`
+  return busy ? `<span class="ps-spinner"></span><span data-generate-label>Cancel</span>`
     : `${icon("spark", 16)}<span data-generate-label>${label}</span>`;
 }
 
@@ -13,7 +13,7 @@ export function sequenceNotificationOptions(error) {
 }
 
 export function aspectRatioMarkup(icon, key = "aspect") {
-  return `<label class="h3ps-field h3ps-choice"><span>Aspect ratio</span><button type="button" aria-expanded="false" data-choice-toggle="${key}"><b data-aspect-label>16:9</b><em data-aspect-description>Widescreen</em>${icon("chevron", 13)}</button><div class="h3ps-choice-menu h3ps-aspect-menu" role="group" aria-label="Aspect ratio" data-choice-menu="${key}" hidden>${ASPECT_RATIOS.map(([value, label]) => `<button type="button" aria-pressed="false" data-aspect="${value}"><b>${value}</b><em>${label}</em></button>`).join("")}</div></label>`;
+  return `<label class="ps-field ps-choice"><span>Aspect ratio</span><button type="button" aria-expanded="false" data-choice-toggle="${key}"><b data-aspect-label>16:9</b><em data-aspect-description>Widescreen</em>${icon("chevron", 13)}</button><div class="ps-choice-menu ps-aspect-menu" role="group" aria-label="Aspect ratio" data-choice-menu="${key}" hidden>${ASPECT_RATIOS.map(([value, label]) => `<button type="button" aria-pressed="false" data-aspect="${value}"><b>${value}</b><em>${label}</em></button>`).join("")}</div></label>`;
 }
 
 export function bindAspectRatio(field, value, onChange) {
@@ -28,8 +28,8 @@ export function bindAspectRatio(field, value, onChange) {
   toggle.addEventListener("click", event => {
     event.preventDefault();
     const open = menu.hidden;
-    field.closest(".h3ps-root")?.querySelectorAll("[data-choice-menu]").forEach(m => { m.hidden = true; });
-    field.closest(".h3ps-root")?.querySelectorAll("[data-choice-toggle]").forEach(b => b.setAttribute("aria-expanded", "false"));
+    field.closest(".ps-root")?.querySelectorAll("[data-choice-menu]").forEach(m => { m.hidden = true; });
+    field.closest(".ps-root")?.querySelectorAll("[data-choice-toggle]").forEach(b => b.setAttribute("aria-expanded", "false"));
     menu.hidden = !open; toggle.setAttribute("aria-expanded", String(open));
   });
   field.querySelectorAll("[data-aspect]").forEach(b => b.addEventListener("click", event => { event.preventDefault(); update(b.dataset.aspect); close(); onChange(b.dataset.aspect); }));
@@ -39,20 +39,20 @@ export function bindAspectRatio(field, value, onChange) {
 
 // Attribute strings and contents are trusted markup from the owning workspace.
 export function splitMenuMarkup(icon, {label, primary, toggle, menu, contents, ariaLabel}) {
-  return `<button class="h3ps-clear-primary" type="button" ${primary} aria-expanded="false">${label}</button>
-    <button class="h3ps-clear-toggle" type="button" aria-label="${ariaLabel}" aria-expanded="false" ${toggle}>${icon("chevron", 12)}</button>
-    <div class="h3ps-clear-menu" ${menu} hidden>${contents}</div>`;
+  return `<button class="ps-clear-primary" type="button" ${primary} aria-expanded="false">${label}</button>
+    <button class="ps-clear-toggle" type="button" aria-label="${ariaLabel}" aria-expanded="false" ${toggle}>${icon("chevron", 12)}</button>
+    <div class="ps-clear-menu" ${menu} hidden>${contents}</div>`;
 }
 export function setSplitMenuOpen(control, open) {
   if (!control) return;
-  control.querySelector(".h3ps-clear-menu").hidden = !open;
+  control.querySelector(".ps-clear-menu").hidden = !open;
   control.querySelectorAll(":scope > button").forEach(b => b.setAttribute("aria-expanded", String(open)));
 }
 export function copyButtonMarkup(icon, attributes, label = "", iconOnly = false) {
-  return `<button class="${iconOnly ? "h3ps-icon-button" : "h3ps-secondary-button"}" type="button" ${attributes}>${icon("copy", 15)}${label ? ` ${label}` : ""}</button>`;
+  return `<button class="${iconOnly ? "ps-icon-button" : "ps-secondary-button"}" type="button" ${attributes}>${icon("copy", 15)}${label ? ` ${label}` : ""}</button>`;
 }
 
-// Option labels and actions are trusted constants supplied by Writer views.
+// Option labels and actions are trusted constants supplied by Prompt Studio views.
 export function formatChoiceMarkup(label, options, selected) {
-  return `<div class="h3ps-sequence-copy-choice" role="group" aria-label="${label}">${options.map(([action,text])=>`<button type="button" data-seq-action="${action}" aria-pressed="${action===selected}">${text}</button>`).join("")}</div>`;
+  return `<div class="ps-sequence-copy-choice" role="group" aria-label="${label}">${options.map(([action,text])=>`<button type="button" data-seq-action="${action}" aria-pressed="${action===selected}">${text}</button>`).join("")}</div>`;
 }

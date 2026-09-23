@@ -1,21 +1,63 @@
-export const SYSTEM_PROMPT_STORAGE_KEY = "h3ps-system-prompts-v1";
-export const EXTERNAL_SERVER_STORAGE_KEY = "h3ps-external-llama-server-v1";
-export const OLLAMA_MODEL_STORAGE_KEY = "h3ps-ollama-model-v1";
-export const OLLAMA_HOST_STORAGE_KEY = "h3ps-ollama-host-v1";
-export const OLLAMA_ENDPOINT_MODELS_STORAGE_KEY = "h3ps-ollama-endpoint-models-v1";
+import {
+  acceptsMedia,
+  allModeIds,
+  describesAudio,
+  modeBriefLimit,
+  modeHasLyrics,
+  modeLyricsLimit,
+  outputOnlyModeFor,
+  persistedModeIds,
+  systemPromptProfileFor,
+  targetForMode,
+  targetList,
+} from "./target_registry.js";
+
+export const SYSTEM_PROMPT_STORAGE_KEY = "ps-system-prompts-v1";
+export const EXTERNAL_SERVER_STORAGE_KEY = "ps-external-llama-server-v1";
+export const OLLAMA_MODEL_STORAGE_KEY = "ps-ollama-model-v1";
+export const OLLAMA_HOST_STORAGE_KEY = "ps-ollama-host-v1";
+export const OLLAMA_ENDPOINT_MODELS_STORAGE_KEY = "ps-ollama-endpoint-models-v1";
 export const DEFAULT_OLLAMA_HOST = "http://127.0.0.1:11434";
-export const API_PROVIDER_STORAGE_KEY = "h3ps-api-provider-v1";
-export const USER_PREFERENCES_STORAGE_KEY = "h3ps-preferences-v1";
-export const MODE_DRAFTS_STORAGE_KEY = "h3ps-mode-drafts-v1";
+export const API_PROVIDER_STORAGE_KEY = "ps-api-provider-v1";
+export const USER_PREFERENCES_STORAGE_KEY = "ps-preferences-v1";
+export const MODE_DRAFTS_STORAGE_KEY = "ps-mode-drafts-v1";
 export const INTERFACE_SIZES = ["100", "110", "120", "125"];
 
-const MODES = ["T2VA", "I2VA", "FL2VA", "L2VA", "Reference", "Music3"];
-const ASPECT_RATIOS = ["1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"];
 const PROVIDERS = ["direct", "external", "ollama", "api"];
 const CONTEXT_PROFILES = ["auto", "low", "standard", "extended", "large", "maximum", "custom"];
 const KV_CACHES = ["auto", "f16", "q8"];
 const GENERATION_BUDGETS = ["auto", "2048", "4096", "8192", "custom"];
-const DRAFT_MODES = ["T2VA", "I2VA", "FL2VA", "L2VA", "Reference", "Music3"];
+
+// Mode ids, brief limits and prompt profiles come from the generation-target
+// registry (web/target_registry.js), which the server catalog refreshes.
+const KNOWN_MODES = allModeIds();
+const DRAFT_MODES = persistedModeIds();
+
+/** Fallback for a mode/ratio that is no longer in the registry. */
+export function defaultMode() {
+  return targetList().find((target) => target.workspace === "video")?.default_mode
+    || targetList()[0]?.default_mode
+    || "Reference";
+}
+
+function defaultAspectRatio() {
+  return targetForMode(defaultMode())?.default_aspect_ratio || "16:9";
+}
+
+const DEFAULT_MODE = defaultMode();
+const DEFAULT_ASPECT_RATIO = defaultAspectRatio();
+
+/** The first selectable mode that is not an audio target. */
+function nonAudioMode(mode) {
+  if (mode && KNOWN_MODES.includes(mode) && !describesAudio(mode)) return mode;
+  return targetList().find((target) => target.category !== "audio")?.default_mode || DEFAULT_MODE;
+}
+
+/** System prompt profile of the output-only companion of a mode's target. */
+function lyricsProfile(mode) {
+  const companion = outputOnlyModeFor(targetForMode(mode));
+  return companion ? systemPromptProfileFor(companion.id) : "music3_lyrics";
+}
 
 export function isPersistedDraftMode(mode) {
   return DRAFT_MODES.includes(mode);
@@ -30,8 +72,11 @@ export function isTextOnlyDirectModel(model) {
   return model?.family === "gguf" && model?.capabilities?.images === false;
 }
 
+// Modes that need no vision projector. Derived from the registry: a mode is
+// text-only-safe when it does not require media.
 export function isGenerationModeAvailable(model, mode) {
-  return !isTextOnlyDirectModel(model) || mode === "T2VA" || mode === "Music3";
+  if (!isTextOnlyDirectModel(model)) return true;
+  return !acceptsMedia(mode);
 }
 
 export function isModeDraftDirty(mode, draft, defaults) {
@@ -39,7 +84,7 @@ export function isModeDraftDirty(mode, draft, defaults) {
     && Boolean(draft)
     && (draft.brief !== defaults.brief
       || draft.prompt !== defaults.prompt
-      || (mode === "Music3" && draft.lyrics !== defaults.lyrics));
+      || (modeHasLyrics(mode) && draft.lyrics !== defaults.lyrics));
 }
 
 export function resetModeDraft(drafts, mode) {
@@ -58,12 +103,34 @@ export function normalizeCustomFrameCount(value) {
   return Number.isInteger(count) && count >= 2 && count <= 24 ? String(count) : null;
 }
 
+/** A stored mode is kept only when the registry still declares it. */
+function resolvedMode(mode) {
+  return KNOWN_MODES.includes(mode) ? mode : DEFAULT_MODE;
+}
+
+/** Aspect ratio must belong to the selected mode's target, else the target default. */
+function resolveAspectRatio(value, mode) {
+  const target = targetForMode(mode);
+  if (typeof value === "string" && target?.aspect_ratios?.includes(value)) return value;
+  return target?.default_aspect_ratio ?? DEFAULT_ASPECT_RATIO;
+}
+
+/** Duration is clamped to the selected mode's target range; modes without a
+ *  duration (audio, image) keep falls back to the stored integer or 10. */
+function resolveDurationSeconds(value, mode) {
+  const durations = targetForMode(mode)?.durations;
+  const fallback = durations?.default ?? 10;
+  if (!Number.isInteger(value)) return fallback;
+  if (!durations) return value >= 1 ? value : fallback;
+  return value >= durations.min && value <= durations.max ? value : fallback;
+}
+
 function normalizeModeDraft(mode, draft) {
   if (!draft || typeof draft.brief !== "string" || typeof draft.prompt !== "string") return null;
-  const briefLimit = mode === "Music3" ? 2000 : 8000;
+  const briefLimit = modeBriefLimit(mode);
   const normalized = { brief: draft.brief.slice(0, briefLimit), prompt: draft.prompt };
-  if (mode === "Music3") {
-    normalized.lyrics = typeof draft.lyrics === "string" ? draft.lyrics.slice(0, 4000) : "";
+  if (modeHasLyrics(mode)) {
+    normalized.lyrics = typeof draft.lyrics === "string" ? draft.lyrics.slice(0, modeLyricsLimit(mode)) : "";
   }
   return normalized;
 }
@@ -95,9 +162,9 @@ export function loadUserPreferences(storage = globalThis.localStorage) {
     if (!value || value.version !== 1) return null;
     return {
       version: 1,
-      mode: MODES.includes(value.mode) ? value.mode : "Reference",
-      duration_seconds: Number.isInteger(value.duration_seconds) && value.duration_seconds >= 1 && value.duration_seconds <= 20 ? value.duration_seconds : 10,
-      aspect_ratio: ASPECT_RATIOS.includes(value.aspect_ratio) ? value.aspect_ratio : "16:9",
+      mode: resolvedMode(value.mode),
+      duration_seconds: resolveDurationSeconds(value.duration_seconds, resolvedMode(value.mode)),
+      aspect_ratio: resolveAspectRatio(value.aspect_ratio, resolvedMode(value.mode)),
       active_provider: PROVIDERS.includes(value.active_provider) ? value.active_provider : "direct",
       direct_model_id: typeof value.direct_model_id === "string" && value.direct_model_id ? value.direct_model_id : null,
       direct_context_profile: CONTEXT_PROFILES.includes(value.direct_context_profile) ? value.direct_context_profile : "auto",
@@ -120,9 +187,9 @@ export function loadUserPreferences(storage = globalThis.localStorage) {
 export function saveUserPreferences(storage, state) {
   const safe = {
     version: 1,
-    mode: MODES.includes(state.mode) ? state.mode : "Reference",
-    duration_seconds: Number.isInteger(state.durationSeconds) && state.durationSeconds >= 1 && state.durationSeconds <= 20 ? state.durationSeconds : 10,
-    aspect_ratio: ASPECT_RATIOS.includes(state.aspectRatio) ? state.aspectRatio : "16:9",
+    mode: resolvedMode(state.mode),
+    duration_seconds: resolveDurationSeconds(state.durationSeconds, resolvedMode(state.mode)),
+    aspect_ratio: resolveAspectRatio(state.aspectRatio, resolvedMode(state.mode)),
     active_provider: PROVIDERS.includes(state.settingsProvider) ? state.settingsProvider : "direct",
     direct_model_id: typeof state.preferredDirectModelId === "string" && state.preferredDirectModelId ? state.preferredDirectModelId : null,
     direct_context_profile: CONTEXT_PROFILES.includes(state.directContextProfile) ? state.directContextProfile : "auto",
@@ -251,9 +318,7 @@ export function saveCustomSystemPrompts(storage, prompts) {
 }
 
 export function systemPromptProfile(mode) {
-  if (mode === "Music3Lyrics") return "music3_lyrics";
-  if (mode === "Music3") return "music3";
-  return mode === "Reference" || mode === "reference" ? "reference" : "standard";
+  return systemPromptProfileFor(mode);
 }
 
 export function currentSystemPromptOverride(state, mode = state.mode) {
@@ -358,7 +423,7 @@ export function buildGeneratePayload(state, { creativeBrief, lyrics = "", seed }
     creative_brief: creativeBrief,
     seed,
   };
-  if (state.mode === "Music3") payload.lyrics = lyrics;
+  if (modeHasLyrics(state.mode)) payload.lyrics = lyrics;
   return payload;
 }
 
@@ -372,7 +437,7 @@ export function buildRefinePayload(state, { currentPrompt, instruction, creative
     creative_brief: creativeBrief,
     seed,
   };
-  if (state.mode === "Music3") payload.lyrics = lyrics;
+  if (modeHasLyrics(state.mode)) payload.lyrics = lyrics;
   return payload;
 }
 
@@ -390,7 +455,7 @@ export function buildLyricsRefinePayload(state, {
     instruction,
     use_music_brief: useMusicBrief,
     creative_brief: useMusicBrief ? creativeBrief : "",
-    system_prompt_override: systemPromptOverride(state, "music3_lyrics"),
+    system_prompt_override: systemPromptOverride(state, lyricsProfile(state.mode)),
     seed,
   };
 }
@@ -400,7 +465,7 @@ export function createStudioState({ sessionId, storage = globalThis.localStorage
   const ollamaHost = loadOllamaHost(storage);
   return {
     mode: preferences?.mode || "Reference",
-    lastVideoMode: preferences?.mode && preferences.mode !== "Music3" ? preferences.mode : "Reference",
+    lastVideoMode: nonAudioMode(preferences?.mode),
     mediaFilter: "all",
     durationSeconds: preferences?.duration_seconds || 10,
     aspectRatio: preferences?.aspect_ratio || "16:9",
@@ -427,9 +492,6 @@ export function createStudioState({ sessionId, storage = globalThis.localStorage
     fullscreen: preferences?.fullscreen === true,
     theme: preferences?.theme === "light" ? "light" : "dark",
     interfaceSize: INTERFACE_SIZES.includes(preferences?.interface_size) ? preferences.interface_size : "100",
-    settingsPromptProfile: "standard",
-    musicSystemPromptProfile: "music3",
-    musicSystemPromptExpanded: false,
     ollamaAddModelOpen: false,
     promptResidency: { direct: null, ollama: [] },
     activeRequestFamily: null,
@@ -485,8 +547,9 @@ export function createStudioState({ sessionId, storage = globalThis.localStorage
     guides: [],
     draggedAssetId: null,
     dragGhost: null,
+    // Stored overrides are still honoured; they are simply no longer editable in
+    // the interface, so nothing else reads or writes them.
     customSystemPrompts: loadCustomSystemPrompts(storage),
-    systemPromptDefaults: {},
     modeDrafts: loadModeDrafts(storage),
   };
 }

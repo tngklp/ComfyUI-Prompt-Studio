@@ -1,6 +1,6 @@
 # Installation
 
-H3 Prompt Writer is a ComfyUI UI extension. It does not add a node to the workflow graph.
+Prompt Studio is a ComfyUI UI extension. It does not add a node to the workflow graph.
 
 This page installs the ComfyUI extension. For the separate Windows application, use the [Standalone setup guide](../standalone/README.md).
 
@@ -8,37 +8,37 @@ This page installs the ComfyUI extension. For the separate Windows application, 
 
 ### ComfyUI Manager
 
-Find **MiniMax H3 Prompt Writer** in ComfyUI Manager, install it, and restart ComfyUI.
+Find **MiniMax Prompt Studio** in ComfyUI Manager, install it, and restart ComfyUI.
 
 ### Git
 
 Open a terminal in `ComfyUI/custom_nodes` and run:
 
 ```powershell
-git clone https://github.com/duckyshell/ComfyUI-MiniMaxH3-Prompt-Writer.git
+git clone https://github.com/tngklp/ComfyUI-Prompt-Studio.git
 ```
 
 ### ZIP
 
-For manual ZIP installation, use the clearly named `H3-Prompt-Writer-ComfyUI-vX.Y.Z.zip` asset linked from the repository README. Do not use the Standalone Windows ZIP.
+For manual ZIP installation, use the clearly named `Prompt-Studio-ComfyUI-vX.Y.Z.zip` asset linked from the repository README. Do not use the Standalone Windows ZIP.
 
 Extract the archive under `ComfyUI/custom_nodes`. The final path should be:
 
 ```text
-ComfyUI/custom_nodes/ComfyUI-MiniMaxH3-Prompt-Writer/
+ComfyUI/custom_nodes/ComfyUI-Prompt-Studio/
 ```
 
 The base extension has no additional Python dependencies. Provider-specific software is installed separately.
 
-## Open Prompt Writer
+## Open Prompt Studio
 
-Restart ComfyUI after installation. Open the floating **H3 Prompt Writer** button or use **Extensions > H3 Prompt Writer** in the ComfyUI menu.
+Restart ComfyUI after installation. Open the floating **Prompt Studio** button or use **Extensions > Prompt Studio** in the ComfyUI menu.
 
-No node will appear in the graph. Prompt Writer creates text for your H3 workflow; it does not queue or modify the workflow itself.
+No node will appear in the graph. Prompt Studio creates text for your H3 workflow; it does not queue or modify the workflow itself.
 
 ## Choose a provider
 
-Open **Settings** and choose how Prompt Writer should run its multimodal prompt model:
+Open **Settings** and choose how Prompt Studio should run its multimodal prompt model:
 
 - [Ollama](OLLAMA.md): recommended local setup.
 - [Direct GGUF](DIRECT_GGUF.md): advanced local setup inside ComfyUI.

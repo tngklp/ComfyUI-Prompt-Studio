@@ -16,7 +16,7 @@ export function createLazyMediaTool(root, load, notify) {
         if(current===epoch)await instance.open(...args);
       } catch(error) {
         try{instance?.close(true);}catch{}
-        const modal=root.querySelector('.h3ps-modal');
+        const modal=root.querySelector('.ps-modal');
         if(modal){modal.inert=false;if(root.classList.contains('is-open'))modal.setAttribute('aria-modal','true');}
         notify(error.message||String(error));
       } finally {pending=null;}

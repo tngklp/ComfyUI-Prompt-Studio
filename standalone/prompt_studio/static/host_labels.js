@@ -5,9 +5,9 @@ function replaceStandaloneText(element) {
     .replaceAll("Models installed in ComfyUI", "Models available to Standalone")
     .replaceAll("ComfyUI Python environment", "Standalone Python environment")
     .replaceAll("ComfyUI/models/LLM/", "models/ (or a configured --model-root)")
-    .replaceAll("Close ComfyUI", "Stop H3 Prompt Writer")
+    .replaceAll("Close ComfyUI", "Stop Prompt Studio")
     .replaceAll("your ComfyUI Portable folder containing python_embeded", "this package's local Python environment")
-    .replaceAll("restart ComfyUI", "restart H3 Prompt Writer")
+    .replaceAll("restart ComfyUI", "restart Prompt Studio")
     .replaceAll("llama-cpp-python", "llama.cpp");
   if (next !== text) element.textContent = next;
 }

@@ -1,10 +1,10 @@
-# H3 Prompt Writer Standalone for Windows
+# Prompt Studio Standalone for Windows
 
-Use H3 Prompt Writer without ComfyUI.
+Use Prompt Studio without ComfyUI.
 
-Current Standalone version: **0.1.7**
+Current Standalone version: **1.1.0**
 
-[Download H3 Prompt Writer Standalone v0.1.7](../../../releases/download/standalone-v0.1.7/H3-Prompt-Writer-Standalone-Windows-v0.1.7.zip)
+[Download Prompt Studio Standalone v1.1.0](../../../releases/download/standalone-v1.1.0/Prompt-Studio-Standalone-Windows-v1.1.0.zip)
 
 ## This is the Standalone version
 
@@ -13,7 +13,7 @@ Current Standalone version: **0.1.7**
 You do not need ComfyUI. Do not install this ZIP into ComfyUI `custom_nodes`.
 
 Looking for the ComfyUI extension? See
-[H3 Prompt Writer for ComfyUI](../README.md).
+[Prompt Studio for ComfyUI](../README.md).
 
 - ✓ Ollama
 - ✓ API providers
@@ -38,7 +38,7 @@ The ZIP contains `data/settings.example.json`, not a live `settings.json`. Exist
 runtime and model locations are therefore not replaced when a newer ZIP is extracted
 over the same folder.
 
-The Writer opens directly in a full-window browser view. Close the browser tab or
+The Prompt Studio opens directly in a full-window browser view. Close the browser tab or
 window normally.
 
 ### Linux
@@ -55,21 +55,21 @@ chmod +x start-linux.sh
 For Local GGUF, point it to your Linux `llama-server` executable:
 
 ```bash
-H3_LLAMA_SERVER="/path/to/llama-server" ./start-linux.sh
+PS_LLAMA_SERVER="/path/to/llama-server" ./start-linux.sh
 ```
 
 You can also provide model paths on first launch:
 
 ```bash
-H3_MODEL_ROOT="/path/to/models" \
-H3_MODEL="/path/to/model.gguf" \
-H3_PROJECTOR="/path/to/mmproj.gguf" \
+PS_MODEL_ROOT="/path/to/models" \
+PS_MODEL="/path/to/model.gguf" \
+PS_PROJECTOR="/path/to/mmproj.gguf" \
 ./start-linux.sh
 ```
 
 Python 3.10 or newer is required. The Linux launcher has been tested on WSL2.
 
-## What's new in v0.1.7
+## What's new in v1.1.0
 
 - Fixed video trimming and cropping failing because NumPy was missing.
 - Existing Windows environments now install missing dependencies on launch.
@@ -89,17 +89,17 @@ for supported providers.
 ### Ollama
 
 Choose an installed Ollama model. Existing local and remote-host behavior is provided
-by H3 Prompt Writer.
+by Prompt Studio.
 
 ### API providers
 
 Connect a supported provider in Settings. API keys stay in backend memory for the
-current Writer session and are not saved by Standalone.
+current Prompt Studio session and are not saved by Standalone.
 
 ### External llama.cpp
 
 Connect to a `llama-server` that you already started. Compatible routers let you
-select and unload models from Writer. Context and KV cache remain server-managed.
+select and unload models from Prompt Studio. Context and KV cache remain server-managed.
 
 ### Local GGUF
 
@@ -123,7 +123,7 @@ to choose; the actual `llama-server` load is the final compatibility check.
 
 Standalone does not guess or download CUDA, CPU, or Vulkan builds. It starts at most
 one managed server on `127.0.0.1`, reuses it while the configuration is unchanged,
-and keeps native runtime failures outside the Writer process. `llama-cpp-python` is
+and keeps native runtime failures outside the Prompt Studio process. `llama-cpp-python` is
 not used for Local GGUF.
 
 If a Local GGUF connection is interrupted, Technical details includes the server log
@@ -132,7 +132,7 @@ started automatically. You do not normally need to restart Windows.
 
 ## Notes
 
-- The local Writer host binds only to `127.0.0.1`.
+- The local Prompt Studio host binds only to `127.0.0.1`.
 - Browser requests use the local host; provider calls are made by the Python backend.
 - Local runtime paths and model locations are stored only in the extracted copy's
   `data/` folder.
@@ -148,17 +148,17 @@ The standalone layer is intentionally small. In this repository it imports the s
 clean snapshot of those shared files. Standalone-specific behavior stays in adapter
 files so normal core commits are immediately available to both hosts.
 
-Host capabilities are declared in `h3_standalone/static/app.js`. Keep ComfyUI-only
-actions behind these shared guards, and use Writer's theme and size tokens for
+Host capabilities are declared in `prompt_studio/static/app.js`. Keep ComfyUI-only
+actions behind these shared guards, and use Prompt Studio's theme and size tokens for
 Standalone controls. CI tests both hosts. The build copies tracked source files only.
 
 Optional development settings live in `data/settings.json`:
 
 ```json
 {
-  "upstream_repo": "C:\\path\\to\\prompt-writer",
+  "upstream_repo": "C:\\path\\to\\prompt-studio",
   "model_roots": ["D:\\Models"],
-  "port": 8765,
+  "port": 8766,
   "open_browser": true
 }
 ```
@@ -166,7 +166,7 @@ Optional development settings live in `data/settings.json`:
 Command-line overrides are also available:
 
 ```text
-start.bat --upstream C:\path\to\prompt-writer --model-root D:\Models --port 9000 --no-browser
+start.bat --upstream C:\path\to\prompt-studio --model-root D:\Models --port 9000 --no-browser
 ```
 
 From the repository root, build the portable package with:
@@ -175,6 +175,6 @@ From the repository root, build the portable package with:
 powershell -ExecutionPolicy Bypass -File scripts\build_standalone.ps1
 ```
 
-The result is `dist\H3-Prompt-Writer-Standalone-Windows-v0.1.7.zip`. It records the
+The result is `dist\Prompt-Studio-Standalone-Windows-v1.1.0.zip`. It records the
 repository commit in `upstream\UPSTREAM_SNAPSHOT.txt` and excludes local settings,
 logs, models, `llama-server`, CUDA libraries, and test artifacts.

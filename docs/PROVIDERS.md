@@ -2,7 +2,7 @@
 
 Not sure? Start with Ollama. It's the simplest local setup.
 
-The provider determines how Writer reaches its prompt model. That prompt model reads the brief and references, then writes text. It is separate from the MiniMax H3 model in your video workflow. Tested Ollama tags are listed in the Ollama guide, and verified GGUF pairs are listed in the Direct guide.
+The provider determines how Prompt Studio reaches its prompt model. That prompt model reads the brief and references, then writes text. It is separate from the MiniMax H3 model in your video workflow. Tested Ollama tags are listed in the Ollama guide, and verified GGUF pairs are listed in the Direct guide.
 
 Provider setup can differ by host. Direct GGUF on this page means the ComfyUI extension path using `llama-cpp-python`. Standalone Local GGUF starts a user-selected `llama-server.exe` instead; see the [Standalone setup guide](../standalone/README.md#local-gguf).
 
@@ -19,25 +19,25 @@ External llama.cpp can also use a text-only model for requests without images or
 
 ## Ollama
 
-Choose Ollama if you want a local model without managing Python wheels, GGUF projector pairing, or llama.cpp build flags inside ComfyUI. Prompt Writer detects installed compatible vision models. Its built-in Gemma 4 list marks exact tags tested with H3; it is not a whitelist. Qwen 3.6 has also completed all five H3 modes through Ollama as a compatibility test, not a quality ranking.
+Choose Ollama if you want a local model without managing Python wheels, GGUF projector pairing, or llama.cpp build flags inside ComfyUI. Prompt Studio detects installed compatible vision models. Its built-in Gemma 4 list marks exact tags tested with H3; it is not a whitelist. Qwen 3.6 has also completed all five H3 modes through Ollama as a compatibility test, not a quality ranking.
 
-Prompt Writer does not install or start Ollama, and it never pulls a model automatically.
+Prompt Studio does not install or start Ollama, and it never pulls a model automatically.
 
 The default Ollama host is on this computer. If you choose a remote host, it receives the brief, instructions, and prepared visual inputs.
 
 ## Direct GGUF
 
-Choose Direct when you want Prompt Writer to load a supported GGUF and optional matching projector directly inside ComfyUI. This path exposes managed runtime controls and lets Writer manage model loading and unload. Gemma 4 uses the established adapter. Qwen 3.8 and Qwen3-VL require `llama-cpp-python 0.3.35` or newer and use model-aware planning from 16K to 48K.
+Choose Direct when you want Prompt Studio to load a supported GGUF and optional matching projector directly inside ComfyUI. This path exposes managed runtime controls and lets Prompt Studio manage model loading and unload. Gemma 4 uses the established adapter. Qwen 3.8 and Qwen3-VL require `llama-cpp-python 0.3.35` or newer and use model-aware planning from 16K to 48K.
 
 Direct is optional. It depends on a native `llama-cpp-python` wheel, so compatibility is narrower than the other provider paths.
 
 ## External llama.cpp
 
-Choose External if you already use llama.cpp or want your own current/custom build. Prompt Writer handles the H3 request and cancellation. Your server controls model loading, context, KV cache, GPU placement, optimizations, and server lifetime.
+Choose External if you already use llama.cpp or want your own current/custom build. Prompt Studio handles the H3 request and cancellation. Your server controls model loading, context, KV cache, GPU placement, optimizations, and server lifetime.
 
 External has its own local provider path and is the recommended advanced alternative when the Direct Python runtime is incompatible with a system.
 
-A text-only server works with Music 3, T2VA, and Refine. Add the model's matching `mmproj` when Writer needs to read images or video.
+A text-only server works with Music 3, T2VA, and Refine. Add the model's matching `mmproj` when Prompt Studio needs to read images or video.
 
 ## API providers
 

@@ -11,7 +11,7 @@ if ($version -notmatch '^\d+\.\d+\.\d+$') {
     throw "Invalid Standalone version: $version"
 }
 
-foreach ($required in @("backend\routes.py", "web\main.js", "standalone\h3_standalone\app.py")) {
+foreach ($required in @("backend\routes.py", "web\main.js", "standalone\prompt_studio\app.py")) {
     if (-not (Test-Path -LiteralPath (Join-Path $repositoryRoot $required))) {
         throw "Required source is missing: $required"
     }
@@ -30,7 +30,7 @@ if ($repositoryDirty) {
 }
 
 $distRoot = Join-Path $repositoryRoot "dist"
-$packageName = "H3-Prompt-Writer-Standalone-Windows-v$version"
+$packageName = "Prompt-Studio-Standalone-Windows-v$version"
 $target = Join-Path $distRoot $packageName
 $zip = Join-Path $distRoot "$packageName.zip"
 $resolvedDist = [IO.Path]::GetFullPath($distRoot)
@@ -56,7 +56,7 @@ function Copy-TrackedTree([string]$Relative, [string]$Destination) {
     }
 }
 
-foreach ($name in @("h3_standalone", "ui")) {
+foreach ($name in @("prompt_studio", "ui")) {
     Copy-TrackedTree "standalone/$name" (Join-Path $target $name)
 }
 foreach ($name in @("start.bat", "requirements.txt", "README.md", "CHANGELOG.md", "RELEASE_NOTES.md", "VERSION")) {
@@ -88,7 +88,7 @@ $versionSource = [IO.File]::ReadAllText((Join-Path $repositoryRoot "backend\vers
 $extensionMatch = [regex]::Match($versionSource, 'VERSION\s*=\s*"([^"]+)"')
 $extensionVersion = if ($extensionMatch.Success) { $extensionMatch.Groups[1].Value } else { "unknown" }
 $snapshot = @(
-    "H3 Prompt Writer core snapshot"
+    "Prompt Studio core snapshot"
     "repository_commit=$repositoryCommit"
     "dirty=$($repositoryDirty.ToString().ToLowerInvariant())"
     "extension_version=$extensionVersion"

@@ -87,11 +87,11 @@ class RouteStabilityTests(unittest.IsolatedAsyncioTestCase):
             with patch.object(routes.STORE, "get", return_value=asset):
                 response = await routes.media_content(request)
                 self.assertEqual(response._path, original)
-                self.assertEqual(response.headers["X-H3PS-Content-Hash"], hashlib.sha256(original.read_bytes()).hexdigest())
+                self.assertEqual(response.headers["X-PS-Content-Hash"], hashlib.sha256(original.read_bytes()).hexdigest())
                 asset["_edited_path"] = str(applied)
                 response = await routes.media_content(request)
                 self.assertEqual(response._path, applied)
-                self.assertEqual(response.headers["X-H3PS-Content-Hash"], hashlib.sha256(applied.read_bytes()).hexdigest())
+                self.assertEqual(response.headers["X-PS-Content-Hash"], hashlib.sha256(applied.read_bytes()).hexdigest())
                 asset["content_revision"] = 3
                 with self.assertRaises(routes.web.HTTPConflict):
                     await routes.media_content(request)
@@ -1130,6 +1130,69 @@ class RouteStabilityTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.payload(response), {"assets": assets})
         self.assertNotIn(reference_key, routes.GENERATION_CACHE)
         self.assertIn(text_key, routes.GENERATION_CACHE)
+
+
+class JsonErrorContractTests(unittest.IsolatedAsyncioTestCase):
+    """Every route must answer with JSON, including when a handler crashes.
+
+    The ComfyUI build surfaces a bare ``text/plain`` error page to the studio as
+    "The server returned a non-JSON response", which hides the real exception.
+    aiohttp's default 500 page is exactly that, so a handler that raises must be
+    converted into the normal error envelope instead.
+    """
+
+    async def test_the_module_router_guards_every_registered_handler(self):
+        self.assertEqual(type(routes.routes).__name__, "_GuardedRouter")
+
+    async def test_an_unexpected_exception_becomes_a_json_error(self):
+        async def explode(_request):
+            raise RuntimeError("boom from inside the handler")
+
+        guarded = routes._json_guard(explode)
+        response = await guarded(_Request())
+        self.assertEqual(response.status, 500)
+        self.assertEqual(response.content_type, "application/json")
+        payload = json.loads(response.body)
+        self.assertEqual(payload["error"]["code"], "RuntimeError")
+        self.assertEqual(payload["error"]["message"], "boom from inside the handler")
+
+    async def test_a_typed_error_keeps_its_own_code(self):
+        async def explode(_request):
+            raise routes.ModelError("MODEL_NOT_FOUND", "The selected prompt model was not found.")
+
+        response = await routes._json_guard(explode)(_Request())
+        self.assertEqual(response.status, 500)
+        payload = json.loads(response.body)
+        self.assertEqual(payload["error"]["code"], "MODEL_NOT_FOUND")
+        self.assertEqual(payload["error"]["message"], "The selected prompt model was not found.")
+
+    async def test_a_successful_response_passes_through_untouched(self):
+        from aiohttp import web
+
+        async def ok(_request):
+            return web.json_response({"fine": True})
+
+        response = await routes._json_guard(ok)(_Request())
+        self.assertEqual(response.status, 200)
+        self.assertEqual(json.loads(response.body), {"fine": True})
+
+    async def test_http_exceptions_still_reach_aiohttp_unchanged(self):
+        # Redirects and routing errors carry a correct status already, so the
+        # guard must not rewrite them into a 500.
+        from aiohttp import web
+
+        async def missing(_request):
+            raise web.HTTPNotFound()
+
+        with self.assertRaises(web.HTTPNotFound):
+            await routes._json_guard(missing)(_Request())
+
+    async def test_cancellation_is_not_swallowed(self):
+        async def cancelled(_request):
+            raise asyncio.CancelledError()
+
+        with self.assertRaises(asyncio.CancelledError):
+            await routes._json_guard(cancelled)(_Request())
 
 
 if __name__ == "__main__":

@@ -12,23 +12,26 @@ import av
 import folder_paths
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
+from . import targets
+from .targets import TargetError
 
-CACHE_ROOT = Path(folder_paths.get_temp_directory()) / "h3_prompt_studio"
+
+CACHE_ROOT = Path(folder_paths.get_temp_directory()) / "prompt_studio"
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"}
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v"}
 AUDIO_EXTENSIONS = {".wav", ".mp3", ".flac", ".m4a", ".ogg", ".aac", ".opus"}
 MAX_FILE_BYTES = 1024 * 1024 * 1024
-REFERENCE_LIMITS = {"image": 9, "video": 3, "audio": 3, "total": 12}
 REFERENCE_DURATION_TOLERANCE_SECONDS = 15.1
 CONTACT_SHEET_INDEX_BASE_SIZE = 18
 CONTACT_SHEET_INDEX_SCALE = 1.75
-MODE_LIMITS = {
-    "T2VA": {},
-    "I2VA": {"image": 1},
-    "FL2VA": {"image": 2},
-    "L2VA": {"image": 1},
-    "Reference": REFERENCE_LIMITS,
-}
+
+
+def mode_limits(mode: str) -> dict[str, int]:
+    """Per-type media limits for a mode, from the target registry."""
+    try:
+        return targets.mode_limits(mode)
+    except TargetError as error:
+        raise MediaError("INVALID_MODE", "The selected mode is not supported.") from error
 
 
 def _reset_cache() -> None:
@@ -59,16 +62,18 @@ def media_type(filename: str, content_type: str | None = None) -> str | None:
 
 
 def validate_capacity(mode: str, assets: list[dict[str, Any]], kind: str) -> None:
-    limits = MODE_LIMITS.get(mode)
-    if limits is None:
-        raise MediaError("INVALID_MODE", "The selected MiniMax mode is not supported.")
+    limits = mode_limits(mode)
     if kind not in limits:
         raise MediaError("UNSUPPORTED_MEDIA", f"{mode} does not accept {kind} files.")
     mode_assets = [asset for asset in assets if asset["mode"] == mode]
     if len([asset for asset in mode_assets if asset["type"] == kind]) >= limits[kind]:
         raise MediaError("MEDIA_LIMIT_REACHED", f"{mode} has reached its {kind} limit.")
-    if mode == "Reference" and len(mode_assets) >= REFERENCE_LIMITS["total"]:
-        raise MediaError("MEDIA_LIMIT_REACHED", "Reference mode accepts at most 12 files in total.")
+    total = limits.get("total")
+    if total is not None and len(mode_assets) >= total:
+        raise MediaError(
+            "MEDIA_LIMIT_REACHED",
+            f"{mode} accepts at most {total} files in total.",
+        )
 
 
 def validate_reference_durations(_assets: list[dict[str, Any]], incoming: dict[str, Any]) -> None:
@@ -134,7 +139,7 @@ class MediaStore:
             asset_root.relative_to(session_root)
             visual_path.relative_to(asset_root)
         except ValueError as error:
-            raise MediaError("MEDIA_PATH_INVALID", "The prepared model visual is outside this Writer session.") from error
+            raise MediaError("MEDIA_PATH_INVALID", "The prepared model visual is outside this Prompt Studio session.") from error
         if not visual_path.is_file():
             raise MediaError("MEDIA_NOT_FOUND", "The prepared model visual is missing.")
 
@@ -145,7 +150,7 @@ class MediaStore:
 
     def public(self, asset: dict[str, Any]) -> dict[str, Any]:
         result = {key: value for key, value in asset.items() if not key.startswith("_")}
-        result["content_url"] = f"/h3studio/media/{asset['id']}/content?session_id={asset['session_id']}"
+        result["content_url"] = f"/promptstudio/media/{asset['id']}/content?session_id={asset['session_id']}"
         content_revision = asset.get("content_revision", asset.get("sample_index", 0))
         result["source_url"] = f"{result['content_url']}&kind=source&revision={asset.get('_source_revision', 0)}"
         if asset.get("_preview_path"):
@@ -330,8 +335,7 @@ class MediaStore:
         return directories
 
     def clear_mode(self, session_id: str, mode: str) -> list[dict[str, Any]]:
-        if mode not in MODE_LIMITS:
-            raise MediaError("INVALID_MODE", "The selected MiniMax mode is not supported.")
+        mode_limits(mode)  # raises MediaError for an unknown mode
         assets = self.sessions.get(session_id, [])
         removed = [asset for asset in assets if asset["mode"] == mode]
         remaining = [asset for asset in assets if asset["mode"] != mode]
@@ -504,6 +508,10 @@ class MediaStore:
             if mode == "Reference":
                 names = {"image": "Picture", "video": "Video", "audio": "Audio"}
                 asset["reference"] = f"<{names[asset['type']]} {per_type[asset['type']]}>"
+            elif mode == "ImageEdit":
+                # Qwen Image 2.1 edit syntax, per the edit guide: "<image1>",
+                # lowercase, no space. Matches the guide's own `ratio_follow` value.
+                asset["reference"] = f"<image{per_type['image']}>"
             elif mode == "FL2VA":
                 asset["reference"] = "First frame" if per_type["image"] == 1 else "Last frame"
             elif mode == "I2VA":

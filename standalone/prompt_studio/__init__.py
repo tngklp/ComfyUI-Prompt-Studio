@@ -1,4 +1,4 @@
-"""Thin standalone host for H3 Prompt Writer."""
+"""Thin standalone host for Prompt Studio."""
 
 from pathlib import Path
 

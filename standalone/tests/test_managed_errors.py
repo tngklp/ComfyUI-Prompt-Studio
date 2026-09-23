@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 from backend.models.contract import ModelError
-from h3_standalone.managed_gguf import ManagedGGUFBackend
+from prompt_studio.managed_gguf import ManagedGGUFBackend
 
 
 class ManagedGenerationErrorTests(unittest.TestCase):
@@ -14,7 +14,7 @@ class ManagedGenerationErrorTests(unittest.TestCase):
         external = Mock()
         external.generate.side_effect = error
         backend = ManagedGGUFBackend(SimpleNamespace(runtime=runtime), external, ModelError, {})
-        backend._remote_model = {"id": "h3-managed"}
+        backend._remote_model = {"id": "ps-managed"}
         return backend, runtime
 
     def test_transport_failure_keeps_diagnostics_before_unload(self):

@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import test from "node:test";
 
-const source = await readFile(process.env.H3_WRITER_SOURCE || new URL("../web/main.js", import.meta.url), "utf8");
+const source = await readFile(process.env.PS_WRITER_SOURCE || new URL("../web/main.js", import.meta.url), "utf8");
 
 function deferred() {
   let resolve;

@@ -4,12 +4,12 @@ cd /d "%~dp0"
 
 rem A future portable release can place a self-contained Python runtime here.
 if exist "runtime\python\python.exe" (
-  "runtime\python\python.exe" -m h3_standalone %*
+  "runtime\python\python.exe" -m prompt_studio %*
   goto :done
 )
 
 if not exist ".venv\Scripts\python.exe" (
-  echo Preparing H3 Prompt Writer for the first launch...
+  echo Preparing Prompt Studio for the first launch...
   where uv >nul 2>nul
   if not errorlevel 1 (
     uv venv ".venv" || goto :setup_failed
@@ -36,7 +36,7 @@ if errorlevel 1 (
   )
 )
 
-".venv\Scripts\python.exe" -m h3_standalone %*
+".venv\Scripts\python.exe" -m prompt_studio %*
 goto :done
 
 :python_missing

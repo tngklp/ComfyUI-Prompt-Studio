@@ -293,8 +293,8 @@ class DirectMusicRuntimeTests(unittest.TestCase):
         console = output.getvalue()
         self.assertNotIn("PRIVATE_PROMPT_CONTENT", console)
         self.assertNotIn("encoding image slice", console)
-        self.assertIn("[H3 Prompt Writer] MTMD warning: vision memory is low", console)
-        self.assertIn("[H3 Prompt Writer] MTMD error: vision evaluation failed", console)
+        self.assertIn("[Prompt Studio] MTMD warning: vision memory is low", console)
+        self.assertIn("[Prompt Studio] MTMD error: vision evaluation failed", console)
         self.assertIn("OTHER_NODE_INFO", console)
 
     def test_native_log_filter_removes_only_known_llama_noise(self):
@@ -348,7 +348,7 @@ class DirectMusicRuntimeTests(unittest.TestCase):
                 patch.object(backend, "load", side_effect=fake_load),
                 patch.object(backend, "_logits_processors", return_value=[]),
                 patch.object(backend, "_console"),
-                patch("backend.models.gguf_backend.run_h3_pipeline", return_value={"prompt": "result"}),
+                patch("backend.models.gguf_backend.run_pipeline", return_value={"prompt": "result"}),
             ):
                 backend.generate(
                     info, assembled, "session",
@@ -436,7 +436,7 @@ class DirectMusicRuntimeTests(unittest.TestCase):
         with (
             patch.object(backend, "load", side_effect=fake_load),
             patch.object(backend, "_logits_processors", return_value=[]),
-            patch("backend.models.gguf_backend.run_h3_pipeline", side_effect=fake_pipeline),
+            patch("backend.models.gguf_backend.run_pipeline", side_effect=fake_pipeline),
             redirect_stderr(output),
         ):
             backend.generate(
@@ -480,7 +480,7 @@ class DirectMusicRuntimeTests(unittest.TestCase):
             patch.object(backend, "load", side_effect=fake_load),
             patch.object(backend, "_logits_processors", return_value=[]),
             patch(
-                "backend.models.gguf_backend.run_h3_pipeline",
+                "backend.models.gguf_backend.run_pipeline",
                 side_effect=ModelError(
                     "GENERATION_TRUNCATED",
                     "PRIVATE_PROMPT_CONTENT",

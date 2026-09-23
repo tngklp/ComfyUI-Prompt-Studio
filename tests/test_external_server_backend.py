@@ -365,7 +365,7 @@ class ExternalServerBackendTests(unittest.TestCase):
         for thinking in (False, True):
             with self.subTest(thinking=thinking):
                 payloads.clear()
-                with patch("backend.models.external_server_backend.run_h3_pipeline", side_effect=pipeline):
+                with patch("backend.models.external_server_backend.run_pipeline", side_effect=pipeline):
                     result = backend.generate(
                         model,
                         {"messages": [], "media_inputs": []},

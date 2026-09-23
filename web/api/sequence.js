@@ -26,12 +26,12 @@ export async function readSequenceStream(response, onEvent) {
 }
 
 export async function generateSequence(payload, onEvent) {
-  const response = await api.fetchApi("/h3studio/sequence", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+  const response = await api.fetchApi("/promptstudio/sequence", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
   return readSequenceStream(response, onEvent);
 }
 
 export async function cancelSequence(operationId, sessionId) {
-  return readApiResponse(await api.fetchApi("/h3studio/sequence/cancel", {
+  return readApiResponse(await api.fetchApi("/promptstudio/sequence/cancel", {
     method:"POST", headers:{"Content-Type":"application/json"},
     body:JSON.stringify({operation_id:operationId,session_id:sessionId}),
   }));

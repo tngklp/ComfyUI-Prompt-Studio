@@ -9,7 +9,7 @@ from typing import Any, Iterable
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 SETTINGS_PATH = PACKAGE_ROOT / "data" / "settings.json"
-DEFAULT_PORT = 8765
+DEFAULT_PORT = 8766
 
 
 @dataclass(frozen=True)
@@ -42,7 +42,7 @@ def _default_upstream() -> Path:
     repository = PACKAGE_ROOT.parent
     if (repository / "backend" / "routes.py").is_file() and (repository / "web" / "main.js").is_file():
         return repository.resolve()
-    return (PACKAGE_ROOT.parent.parent / "prompt-writer" / "repo").resolve()
+    return (PACKAGE_ROOT.parent.parent / "prompt-studio" / "repo").resolve()
 
 
 def _normalize_roots(values: Iterable[str | os.PathLike[str]]) -> tuple[Path, ...]:
@@ -70,7 +70,7 @@ def load_settings(
     raw = _read_json(SETTINGS_PATH)
     upstream_value = (
         upstream_override
-        or os.environ.get("H3_WRITER_UPSTREAM")
+        or os.environ.get("PS_UPSTREAM")
         or str(raw.get("upstream_repo") or "").strip()
     )
     upstream = _resolve_path(upstream_value) if upstream_value else _default_upstream()
@@ -78,7 +78,7 @@ def load_settings(
     configured_roots = raw.get("model_roots")
     if not isinstance(configured_roots, list):
         configured_roots = []
-    env_roots = [item for item in os.environ.get("H3_WRITER_MODEL_ROOTS", "").split(os.pathsep) if item]
+    env_roots = [item for item in os.environ.get("PS_MODEL_ROOTS", "").split(os.pathsep) if item]
     roots = _normalize_roots([*configured_roots, *env_roots, *model_root_overrides])
 
     raw_port = port_override if port_override is not None else raw.get("port", DEFAULT_PORT)
@@ -102,5 +102,16 @@ def validate_upstream(path: Path) -> None:
     missing = [str(item) for item in required if not item.is_file()]
     if missing:
         raise FileNotFoundError(
-            "Prompt Writer upstream repo was not found. Expected: " + ", ".join(missing)
+            "Prompt Studio upstream repo was not found. Expected: " + ", ".join(missing)
+        )
+
+    # A pre-rebrand checkout contains none of these. Serving one silently produces
+    # the old interface, which is confusing to diagnose, so fail loudly instead.
+    modern_markers = ("web/target_registry.js", "targets.json", "backend/targets/__init__.py")
+    absent = [marker for marker in modern_markers if not (path / marker).exists()]
+    if absent:
+        raise RuntimeError(
+            f"The checkout at {path} is out of date: it is missing {', '.join(absent)}. "
+            "Point --upstream at a current Prompt Studio checkout (>= 1.0.0), or reinstall "
+            "the Standalone package, which vendors its own copy."
         )

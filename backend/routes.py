@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import hashlib
 import shutil
 import sys
 import threading
 import time
+import traceback
 from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
@@ -17,8 +19,8 @@ from .assembly import AssemblyError, assemble_lyrics_request, assemble_refinemen
 from .catalog import discover_models_with_diagnostics, find_model, model_setup_catalog
 from .comfy_state import comfyui_runtime_snapshot
 from .devlog import DEVELOPER_MODE, LOG_PATH, PeakVRAMMonitor, gpu_memory_snapshot, write_event
-from .guides import MODE_GUIDES, guide_catalog, guide_for_mode
-from .media import CACHE_ROOT, MAX_FILE_BYTES, MODE_LIMITS, STORE, MediaError, parse_session_id
+from .guides import guide_catalog, guide_for_mode
+from .media import CACHE_ROOT, MAX_FILE_BYTES, STORE, MediaError, mode_limits, parse_session_id
 from .media_editor import browser_source, commit_edit, prepare_edit, video_frame
 from .memory import assess_free_vram
 from .models.gguf_backend import BACKEND as GGUF_BACKEND
@@ -27,13 +29,15 @@ from .models.ollama_backend import BACKEND as OLLAMA_BACKEND, normalize_ollama_u
 from .models.api_provider_backend import BACKEND as API_PROVIDER_BACKEND
 from .models.contract import ModelError
 from .runtime_diagnostics import get_gguf_runtime_diagnostics
-from .system_prompts import SystemPromptError, system_prompt_for_mode
+from .system_prompts import SystemPromptError, system_prompt_for_mode, system_prompt_profile
+from . import targets as target_registry
 from .version import VERSION
 from .sequence_routes import register_sequence_routes
 
 
-ROUTE_PREFIX = "/h3studio"
-MODES = {"T2VA", "I2VA", "FL2VA", "L2VA", "Reference", "Music3"}
+ROUTE_PREFIX = "/promptstudio"
+# Mode ids are declared per target in targets.json; see backend/targets/__init__.py.
+MODES = set(target_registry.mode_ids())
 STATE: dict[str, Any] = {
     "phase": "idle",
     "active_request_id": None,
@@ -87,7 +91,7 @@ def _generation_busy_error() -> web.Response | None:
     with STATE_LOCK:
         if STATE["active_request_id"] is None and not STATE["media_mutation_active"]:
             return None
-    return _error("GENERATION_BUSY", "Media cannot be changed while H3 Prompt Writer is busy.", status=409)
+    return _error("GENERATION_BUSY", "Media cannot be changed while Prompt Studio is busy.", status=409)
 
 
 def _claim_media_mutation() -> bool:
@@ -101,6 +105,41 @@ def _claim_media_mutation() -> bool:
 def _release_media_mutation() -> None:
     with STATE_LOCK:
         STATE["media_mutation_active"] = False
+
+
+def _json_guard(handler: Callable[..., Any]) -> Callable[..., Any]:
+    """Never let a handler answer with a non-JSON body.
+
+    aiohttp's default error page is ``text/plain``/``text/html``. In the ComfyUI
+    build that page reaches the studio as an opaque "The server returned a
+    non-JSON response", which hides the real exception and its traceback. Any
+    exception that escapes a handler is therefore converted into the same JSON
+    error envelope as everything else, and the original is logged so it is not
+    lost.
+
+    Only unexpected exceptions are wrapped. The handler's own ``_error``
+    responses and deliberate ``ModelError``/``AssemblyError`` handling are
+    untouched, so existing status codes and payloads do not change.
+    """
+
+    @functools.wraps(handler)
+    async def guarded(request: web.Request) -> web.Response:
+        try:
+            return await handler(request)
+        except web.HTTPException:
+            # Redirects, 404/405 routing errors and similar already carry a
+            # correct status; re-raise so aiohttp can finish them normally.
+            raise
+        except asyncio.CancelledError:
+            raise
+        except Exception as error:  # noqa: BLE001 - the point is to catch everything
+            traceback.print_exc()
+            code = getattr(error, "code", None) or type(error).__name__
+            message = getattr(error, "message", None) or str(error) or type(error).__name__
+            details = getattr(error, "details", None)
+            return _error(code, message, status=500, details=details)
+
+    return guarded
 
 
 async def _run_thread_worker(
@@ -460,6 +499,63 @@ def _model_error_status(error: ModelError) -> int:
     return 400
 
 
+def target_descriptor(target: Any) -> dict[str, Any]:
+    """Serialise one generation target for the frontend."""
+    return {
+        "id": target.id,
+        "label": target.label,
+        "category": target.category,
+        "workspace": target.workspace,
+        "description": target.description,
+        "default_mode": target.default_mode,
+        "default_aspect_ratio": target.default_aspect_ratio,
+        "aspect_ratios": list(target.aspect_ratios),
+        "durations": (
+            None
+            if target.durations is None
+            else {"min": target.durations.min, "max": target.durations.max, "default": target.durations.default}
+        ),
+        "media_capabilities": list(target.media_capabilities),
+        "output_tokens": target.output_tokens,
+        "output_contract": {
+            "profile": target.output_contract.profile,
+            "brief_limit": target.output_contract.brief_limit,
+            "requires_duration": target.output_contract.requires_duration,
+            "requires_aspect_ratio": target.output_contract.requires_aspect_ratio,
+            "shot_numbering": target.output_contract.shot_numbering,
+            "timestamp_syntax": target.output_contract.timestamp_syntax,
+            "lyrics_limit": target.output_contract.lyrics_limit,
+            "edit_instruction_limit": target.output_contract.edit_instruction_limit,
+        },
+        "modes": [
+            {
+                "id": mode.id,
+                "label": mode.label,
+                "title": mode.title,
+                "hint": mode.hint,
+                "guide": mode.guide,
+                "system_prompt": mode.system_prompt,
+                "requires_media": mode.requires_media,
+                "limits": dict(mode.limits),
+                "instruction_field": mode.instruction_field,
+                "instruction_limit": mode.instruction_limit,
+                "output_only": mode.output_only,
+            }
+            for mode in target.modes
+        ],
+        "guides": [
+            {
+                "id": guide.id,
+                "title": guide.title,
+                "filename": guide.filename,
+                "source_url": guide.source_url,
+                "pinned": guide.source_sha256 is not None,
+            }
+            for guide in target.guides
+        ],
+    }
+
+
 def _error(code: str, message: str, *, status: int, details: Any = None) -> web.Response:
     payload: dict[str, Any] = {"error": {"code": code, "message": message}}
     if details is not None:
@@ -479,7 +575,46 @@ async def _json_body(request: web.Request) -> dict[str, Any] | None:
     return body if isinstance(body, dict) else None
 
 
-routes = PromptServer.instance.routes
+class _GuardedRouter:
+    """Proxy that guards every handler registered through it.
+
+    The routes are declared with ``@routes.get(...)`` / ``@routes.post(...)``
+    across this module and in :mod:`backend.sequence_routes`, so wrapping the
+    decorator is the one place that covers all of them without touching each
+    handler. Everything else is forwarded to the real router unchanged.
+    """
+
+    def __init__(self, router: Any):
+        self._router = router
+
+    def _register(self, method: str) -> Callable[[str], Callable[[Any], Any]]:
+        def decorator(path: str) -> Callable[[Any], Any]:
+            inner = getattr(self._router, method)
+
+            def register(handler: Callable[..., Any]) -> Callable[..., Any]:
+                return inner(path)(_json_guard(handler))
+
+            return register
+
+        return decorator
+
+    def get(self, path: str) -> Callable[[Any], Any]:
+        return self._register("get")(path)
+
+    def post(self, path: str) -> Callable[[Any], Any]:
+        return self._register("post")(path)
+
+    def delete(self, path: str) -> Callable[[Any], Any]:
+        return self._register("delete")(path)
+
+    def __iter__(self) -> Any:
+        return iter(self._router)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._router, name)
+
+
+routes = _GuardedRouter(PromptServer.instance.routes)
 
 
 @routes.get(f"{ROUTE_PREFIX}/status")
@@ -615,6 +750,12 @@ async def disconnect_api_provider(request: web.Request) -> web.Response:
     return web.json_response({"disconnected": disconnected})
 
 
+@routes.get(f"{ROUTE_PREFIX}/targets")
+async def get_targets(_request: web.Request) -> web.Response:
+    """Generation targets, their modes, limits and guide metadata."""
+    return web.json_response({"targets": [target_descriptor(item) for item in target_registry.targets()]})
+
+
 @routes.get(f"{ROUTE_PREFIX}/guides")
 async def get_guides(_request: web.Request) -> web.Response:
     return web.json_response({"guides": guide_catalog()})
@@ -623,9 +764,13 @@ async def get_guides(_request: web.Request) -> web.Response:
 @routes.get(f"{ROUTE_PREFIX}/guides/{{mode}}")
 async def get_guide(request: web.Request) -> web.Response:
     mode = request.match_info["mode"]
-    if mode not in MODE_GUIDES:
-        return _error("INVALID_MODE", "The selected MiniMax mode is not supported.", status=404)
-    return web.json_response({"guide": guide_for_mode(mode)})
+    if mode not in MODES:
+        return _error("INVALID_MODE", "The selected mode is not supported.", status=404)
+    try:
+        guide = guide_for_mode(mode)
+    except KeyError as error:
+        return _error("NO_GUIDE", str(error), status=404)
+    return web.json_response({"guide": guide})
 
 
 @routes.get(f"{ROUTE_PREFIX}/system-prompt/{{mode}}")
@@ -633,11 +778,12 @@ async def get_system_prompt(request: web.Request) -> web.Response:
     mode = request.match_info["mode"]
     try:
         prompt = system_prompt_for_mode(mode)
+        profile = system_prompt_profile(mode)
     except SystemPromptError as error:
         return _error(error.code, error.message, status=404)
     return web.json_response({
         "mode": mode,
-        "profile": "music3_lyrics" if mode == "Music3Lyrics" else "music3" if mode == "Music3" else "reference" if mode == "Reference" else "standard",
+        "profile": profile,
         "system_prompt": prompt,
     })
 
@@ -668,7 +814,7 @@ async def generate(request: web.Request) -> web.Response:
     if missing:
         return _error("INVALID_REQUEST", "Required fields are missing.", status=400, details={"fields": missing})
     if body["mode"] not in MODES:
-        return _error("INVALID_MODE", "The selected MiniMax mode is not supported.", status=400)
+        return _error("INVALID_MODE", "The selected mode is not supported.", status=400)
 
     if not isinstance(body.get("thinking", False), bool) or not isinstance(body.get("unload_after", True), bool):
         return _error("INVALID_REQUEST", "Thinking and unload_after must be booleans.", status=400)
@@ -684,7 +830,7 @@ async def generate(request: web.Request) -> web.Response:
 
     request_id = _claim_generation_request()
     if request_id is None:
-        return _error("GENERATION_BUSY", "Another H3 Prompt Writer request is already running.", status=409)
+        return _error("GENERATION_BUSY", "Another Prompt Studio request is already running.", status=409)
     try:
         model, backend, runtime_plan = await _prepare_generation_runtime(body, assembled, request_id)
     except ModelError as error:
@@ -889,7 +1035,7 @@ async def refine(request: web.Request) -> web.Response:
 
     request_id = _claim_generation_request()
     if request_id is None:
-        return _error("GENERATION_BUSY", "Another H3 Prompt Writer request is already running.", status=409)
+        return _error("GENERATION_BUSY", "Another Prompt Studio request is already running.", status=409)
     try:
         model, backend, runtime_plan = await _prepare_generation_runtime(body, assembled, request_id)
     except ModelError as error:
@@ -1028,7 +1174,7 @@ async def upload_media(request: web.Request) -> web.Response:
                 continue
             if session_id is None:
                 session_id = parse_session_id(None)
-            if mode not in MODE_LIMITS:
+            if mode not in MODES:
                 raise MediaError("INVALID_MODE", "Select a valid mode before uploading media.")
             if replace_asset_id and pending_replacement is not None:
                 raise MediaError("INVALID_REPLACEMENT", "Replace accepts exactly one file.")
@@ -1045,7 +1191,7 @@ async def upload_media(request: web.Request) -> web.Response:
                         raise MediaError("MEDIA_TOO_LARGE", "A media file cannot exceed 1 GB.")
                     output.write(chunk)
             if not media_claimed and not _claim_media_mutation():
-                raise MediaError("GENERATION_BUSY", "Media cannot be changed while H3 Prompt Writer is generating or refining.")
+                raise MediaError("GENERATION_BUSY", "Media cannot be changed while Prompt Studio is generating or refining.")
             media_claimed = True
             if replace_asset_id:
                 old_asset = STORE.get(session_id, replace_asset_id)
@@ -1117,8 +1263,8 @@ async def list_media(request: web.Request) -> web.Response:
 @routes.get(f"{ROUTE_PREFIX}/media/manifest")
 async def media_manifest(request: web.Request) -> web.Response:
     mode = request.query.get("mode", "")
-    if mode not in MODE_LIMITS:
-        return _error("INVALID_MODE", "The selected MiniMax mode is not supported.", status=400)
+    if mode not in MODES:
+        return _error("INVALID_MODE", "The selected mode is not supported.", status=400)
     try:
         session_id = parse_session_id(request.query.get("session_id"))
     except ValueError:
@@ -1147,7 +1293,7 @@ async def media_content(request: web.Request) -> web.StreamResponse:
                 return digest.hexdigest()
 
             try:
-                headers["X-H3PS-Content-Hash"] = await asyncio.to_thread(content_hash)
+                headers["X-PS-Content-Hash"] = await asyncio.to_thread(content_hash)
             except OSError:
                 raise web.HTTPNotFound()
             current = STORE.get(session_id, request.match_info["asset_id"])
@@ -1182,7 +1328,7 @@ async def edit_media(request: web.Request) -> web.StreamResponse:
     if not isinstance(body, dict) or body.get("action") not in {"preview", "save", "download", "frame", "source"}:
         return _error("INVALID_EDIT", "Select a valid media edit action.", status=400)
     if not _claim_media_mutation():
-        return _error("GENERATION_BUSY", "Wait for the current Writer operation to finish.", status=409)
+        return _error("GENERATION_BUSY", "Wait for the current Prompt Studio operation to finish.", status=409)
     prepared = None
     try:
         session_id = parse_session_id(body.get("session_id"))
@@ -1271,7 +1417,7 @@ async def resample_media(request: web.Request) -> web.Response:
         return busy
     body = await _json_body(request)
     if not _claim_media_mutation():
-        return _error("GENERATION_BUSY", "Media cannot be changed while H3 Prompt Writer is generating or refining.", status=409)
+        return _error("GENERATION_BUSY", "Media cannot be changed while Prompt Studio is generating or refining.", status=409)
     prepared: dict[str, Any] | None = None
     try:
         session_id = parse_session_id((body or {}).get("session_id"))
@@ -1314,7 +1460,7 @@ async def reorder_media(request: web.Request) -> web.Response:
     if busy is not None:
         return busy
     body = await _json_body(request)
-    if body is None or body.get("mode") not in MODE_LIMITS or not isinstance(body.get("asset_ids"), list):
+    if body is None or body.get("mode") not in MODES or not isinstance(body.get("asset_ids"), list):
         return _error("INVALID_REQUEST", "Mode and ordered asset IDs are required.", status=400)
     busy = _generation_busy_error()
     if busy is not None:

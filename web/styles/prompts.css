@@ -1,98 +1,86 @@
-/* System prompts */
-.h3ps-system-prompt-profiles { display:grid; grid-template-columns:1fr 1fr; gap:calc(6px * var(--h3ps-interface-scale)); margin-bottom:9px; }
-.h3ps-system-prompt-profiles > button { display:flex; min-height:calc(39px * var(--h3ps-interface-scale)); padding:calc(6px * var(--h3ps-interface-scale)) calc(9px * var(--h3ps-interface-scale)); flex-direction:column; border:1px solid var(--h3ps-border-field); border-radius:7px; background:var(--h3ps-field); color:var(--h3ps-text-section); text-align:left; cursor:pointer; }.h3ps-system-prompt-profiles > button:hover { border-color:var(--h3ps-border-hover); }.h3ps-system-prompt-profiles > button.is-selected { border-color:var(--h3ps-border-selected-profile); background:var(--h3ps-selection); box-shadow:inset 2px 0 var(--h3ps-accent-strong); color:var(--h3ps-text-theme-emphasis); }.h3ps-system-prompt-profiles > button { font-size:var(--h3ps-font-label-sm); font-weight:620; }.h3ps-system-prompt-profiles small { margin-top:2px; color:var(--h3ps-muted); font-size:var(--h3ps-font-caption-xs); font-weight:400; }
-.h3ps-system-prompt-panel { position:relative; }.h3ps-system-prompt-panel[hidden] { display:none; }
-.h3ps-system-prompt-panel-status { position:absolute; top:1px; right:2px; display:flex; align-items:center; gap:calc(5px * var(--h3ps-interface-scale)); color:var(--h3ps-green); }.h3ps-system-prompt-panel-status em { color:var(--h3ps-muted); font-size:var(--h3ps-font-caption); font-style:normal; }
-.h3ps-system-prompt-panel > p { margin:0 74px 8px 1px; color:var(--h3ps-dim); font-size:var(--h3ps-font-caption); line-height:1.45; }
-.h3ps-system-prompt-card textarea { width:100%; min-height:190px; height:190px; resize:vertical; overflow-y:auto; padding:calc(9px * var(--h3ps-interface-scale)) calc(10px * var(--h3ps-interface-scale)); border:1px solid var(--h3ps-border-editor); border-radius:7px; outline:none; background:var(--h3ps-field); color:var(--h3ps-text-control); font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:var(--h3ps-font-caption); line-height:1.45; scrollbar-width:thin; scrollbar-color:var(--h3ps-scrollbar) transparent; }
-.h3ps-system-prompt-card textarea:focus { border-color:rgba(255,115,86,.62); box-shadow:0 0 0 2px rgba(255,115,86,.08); }
-.h3ps-system-prompt-card textarea:disabled { opacity:.45; }
-.h3ps-system-prompt-panel > footer { display:flex; align-items:center; min-height:calc(27px * var(--h3ps-interface-scale)); padding:calc(6px * var(--h3ps-interface-scale)) calc(1px * var(--h3ps-interface-scale)) 0; }.h3ps-system-prompt-panel > footer small { color:var(--h3ps-dim); font-size:var(--h3ps-font-caption-xs); }.h3ps-system-prompt-panel > footer button { margin-left:auto; border:0; background:transparent; color:var(--h3ps-reset-action); font-size:var(--h3ps-font-caption-sm); cursor:pointer; }.h3ps-system-prompt-panel > footer button:hover { color:var(--h3ps-reset-action-hover); }
-.h3ps-draft-defaults-action { display:flex; justify-content:flex-end; max-width:620px; padding-top:calc(11px * var(--h3ps-interface-scale)); }.h3ps-draft-defaults-action button { display:inline-flex; align-items:center; gap:calc(6px * var(--h3ps-interface-scale)); min-height:calc(28px * var(--h3ps-interface-scale)); padding:0 calc(9px * var(--h3ps-interface-scale)); border:1px solid var(--h3ps-border); border-radius:6px; background:var(--h3ps-control-muted); color:var(--h3ps-muted); font-size:var(--h3ps-font-label-sm); cursor:pointer; }.h3ps-draft-defaults-action button:hover { border-color:var(--h3ps-border-muted-hover); color:var(--h3ps-text); }
+/*
+ * Prompt-behaviour surfaces.
+ *
+ * Rebranded from the pre-rename `h3ps-` token set, which survived the rename and
+ * left every rule in this file inert. The classes below are the ones the current
+ * markup actually uses:
+ *
+ *   .ps-system-prompt-panel     panel used by the sequence instructions editor
+ *   .ps-music-system-prompt*    collapsible section hosting sequence instructions
+ *
+ * The Settings system-prompt card, its "Restore default drafts" action, and the
+ * Music panel editor were all removed, so their rules are gone too.
+ */
 
-/* System prompt */
-.h3ps-system-prompt-card > header { margin-bottom: 14px; }
-.h3ps-system-prompt-overview {
-  display: grid;
-  max-width: 620px;
-  border-top: 1px solid var(--h3ps-divider-strong);
+/* Generic panel: a textarea plus a footer of actions. */
+.ps-system-prompt-panel { position: relative; }
+.ps-system-prompt-panel[hidden] { display: none; }
+
+.ps-system-prompt-panel textarea {
+  width: 100%;
+  min-height: 160px;
+  max-height: 320px;
+  padding: calc(10px * var(--ps-interface-scale)) calc(11px * var(--ps-interface-scale));
+  overflow-y: auto;
+  color: var(--ps-text-control);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--ps-font-body-sm);
+  line-height: 1.55;
+  resize: vertical;
+  border: 1px solid var(--ps-border-editor);
+  border-radius: 7px;
+  outline: none;
+  background: var(--ps-field);
+  scrollbar-width: thin;
+  scrollbar-color: var(--ps-scrollbar) transparent;
 }
-.h3ps-system-prompt-overview[hidden],
-.h3ps-system-prompt-editor[hidden] { display: none; }
-.h3ps-system-prompt-overview > button {
+
+.ps-system-prompt-panel textarea:focus { border-color: var(--ps-border-strong); }
+
+/*
+ * Collapsible "Sequence Instructions" section. Uses the music-named classes for
+ * historical reasons; it lives in the sequence workspace, not the music one.
+ */
+.ps-music-system-prompt {
+  margin-top: calc(22px * var(--ps-interface-scale));
+  border-top: 1px solid var(--ps-divider-strong);
+  border-bottom: 1px solid var(--ps-divider-strong);
+}
+
+.ps-music-system-prompt-toggle {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: calc(57px * var(--h3ps-interface-scale));
-  padding: calc(8px * var(--h3ps-interface-scale)) calc(2px * var(--h3ps-interface-scale));
+  width: 100%;
+  min-height: calc(48px * var(--ps-interface-scale));
+  padding: 0;
+  color: var(--ps-text);
+  cursor: pointer;
   border: 0;
-  border-bottom: 1px solid var(--h3ps-divider-strong);
-  border-radius: 0;
   background: transparent;
-  color: var(--h3ps-text);
-  text-align: left;
-  cursor: pointer;
 }
-.h3ps-system-prompt-overview > button:hover { background: transparent; color: var(--h3ps-text-theme-emphasis); }
-.h3ps-system-prompt-overview > button > span { display: flex; align-items: center; }
-.h3ps-system-prompt-overview > button > span:first-child { align-items: flex-start; flex-direction: column; }
-.h3ps-system-prompt-overview strong { font-size: var(--h3ps-font-body-sm); font-weight: 550; }
-.h3ps-system-prompt-overview small { margin-top: 3px; color: var(--h3ps-dim); font-size: var(--h3ps-font-label-sm); }
-.h3ps-system-prompt-overview em {
-  margin-right: 18px;
-  color: var(--h3ps-dim);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: var(--h3ps-font-label-sm);
-  font-style: normal;
+
+.ps-music-system-prompt-toggle > strong {
+  font-size: var(--ps-font-control);
+  font-weight: 580;
 }
-.h3ps-system-prompt-overview b { margin-right: 5px; color: var(--h3ps-muted); font-size: var(--h3ps-font-label); font-weight: 500; }
-.h3ps-system-prompt-overview svg { color: var(--h3ps-dim); }
-.h3ps-system-prompt-editor { max-width: 760px; }
-.h3ps-system-prompt-editor-heading {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+
+.ps-music-system-prompt-toggle > span {
+  display: flex;
   align-items: center;
-  gap: calc(14px * var(--h3ps-interface-scale));
-  margin-bottom: 16px;
+  gap: calc(9px * var(--ps-interface-scale));
 }
-.h3ps-system-prompt-editor-heading > button {
-  display: inline-flex;
-  align-items: center;
-  gap: calc(5px * var(--h3ps-interface-scale));
-  min-height: calc(28px * var(--h3ps-interface-scale));
-  padding: 0 calc(8px * var(--h3ps-interface-scale));
-  border: 1px solid var(--h3ps-border);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--h3ps-muted);
-  font-size: var(--h3ps-font-label-sm);
-  cursor: pointer;
+
+.ps-music-system-prompt-toggle svg {
+  color: var(--ps-dim);
+  transition: transform .16s ease;
 }
-.h3ps-system-prompt-editor-heading > button svg { transform: rotate(180deg); }
-.h3ps-system-prompt-editor-heading > span:nth-child(2) { display: flex; flex-direction: column; }
-.h3ps-system-prompt-editor-heading small { color: var(--h3ps-dim); font-size: var(--h3ps-font-caption-sm); letter-spacing: .11em; text-transform: uppercase; }
-.h3ps-system-prompt-editor-heading strong { margin-top: 2px; font-size: var(--h3ps-font-body); font-weight: 600; }
-.h3ps-system-prompt-panel-status { position: static; color: var(--h3ps-green); }
-.h3ps-system-prompt-panel-status em { color: var(--h3ps-dim); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: var(--h3ps-font-label-sm); }
-.h3ps-system-prompt-panel > p {
-  max-width: 68ch;
-  margin: 0 0 12px;
-  color: var(--h3ps-dim);
-  font-size: var(--h3ps-font-control);
-  line-height: 1.55;
+
+.ps-music-system-prompt-toggle[aria-expanded="true"] svg { transform: rotate(90deg); }
+.ps-music-system-prompt-toggle:hover > strong { color: var(--ps-text-hover); }
+
+.ps-music-system-prompt > [data-seq-instructions-panel] {
+  padding: 0 0 calc(12px * var(--ps-interface-scale));
 }
-.h3ps-system-prompt-card textarea {
-  min-height: 216px;
-  height: 216px;
-  padding: calc(13px * var(--h3ps-interface-scale)) calc(14px * var(--h3ps-interface-scale));
-  border-color: var(--h3ps-border-subtle);
-  border-radius: 9px;
-  background: var(--h3ps-canvas);
-  color: var(--h3ps-text-panel-heading);
-  font-size: var(--h3ps-font-control);
-  line-height: 1.62;
-}
-.h3ps-system-prompt-card textarea:focus { border-color: rgba(232, 97, 60, .4); box-shadow: none; }
-.h3ps-system-prompt-panel > footer small { color: #494951; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: var(--h3ps-font-label-sm); }
-.h3ps-system-prompt-panel > footer button { color: var(--h3ps-muted); font-size: var(--h3ps-font-label); }
-.h3ps-system-prompt-panel > footer button:hover { color: var(--h3ps-text); }
+
+.ps-music-system-prompt > [data-seq-instructions-panel][hidden] { display: none; }

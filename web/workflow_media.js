@@ -12,7 +12,7 @@ export function workflowMediaSnapshot(asset) {
   const query = new URLSearchParams({ session_id: asset.session_id, kind: "workflow",
     revision: String(asset.content_revision ?? asset.sample_index ?? 0) });
   return { id: asset.id, kind: asset.type, filename: asset.filename,
-    url: `/h3studio/media/${encodeURIComponent(asset.id)}/content?${query}` };
+    url: `/promptstudio/media/${encodeURIComponent(asset.id)}/content?${query}` };
 }
 
 export function supportedLoader(type, definition, kind) {
@@ -57,10 +57,10 @@ function updateLoaderPreview(node, type, value, previousParams) {
 export function createMediaMaterializer(fetchApi) {
   // ComfyUI deduplicates unchanged bytes under the same content-based name.
   async function upload(snapshot, signal) {
-    const response = requireOk(await fetchApi(snapshot.url, { signal }), "Could not read Writer media.");
+    const response = requireOk(await fetchApi(snapshot.url, { signal }), "Could not read Prompt Studio media.");
     const blob = await response.blob();
-    const hash = response.headers.get("X-H3PS-Content-Hash");
-    if (!/^[a-f0-9]{64}$/.test(hash || "")) throw new Error("Writer media identity is unavailable. Refresh and try again.");
+    const hash = response.headers.get("X-PS-Content-Hash");
+    if (!/^[a-f0-9]{64}$/.test(hash || "")) throw new Error("Prompt Studio media identity is unavailable. Refresh and try again.");
     const extensions = { "image/png":"png", "image/jpeg":"jpg", "image/webp":"webp", "image/avif":"avif", "image/gif":"gif",
       "image/bmp":"bmp", "image/tiff":"tiff", "video/mp4":"mp4", "video/webm":"webm", "video/quicktime":"mov",
       "video/x-matroska":"mkv", "audio/wav":"wav", "audio/x-wav":"wav", "audio/mpeg":"mp3",
@@ -71,7 +71,7 @@ export function createMediaMaterializer(fetchApi) {
     const body = new FormData();
     body.append("image", blob, `pw-${hash}.${ext}`);
     body.append("type", "input");
-    body.append("subfolder", "prompt-writer");
+    body.append("subfolder", "prompt-studio");
     const uploaded = requireOk(await fetchApi("/upload/image", { method: "POST", body, signal }), "ComfyUI media upload failed.");
     const data = await uploaded.json();
     if (data.type !== "input" || !data.name || typeof data.name !== "string" || typeof data.subfolder !== "string")

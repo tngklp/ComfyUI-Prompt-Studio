@@ -1,7 +1,7 @@
 [project]
-name = "MiniMaxH3-Prompt-Writer"
-version = "0.4.6"
-description = "A multimodal MiniMax H3 prompt-writing extension for ComfyUI with local and API providers."
+name = "prompt-studio"
+version = "1.0.0"
+description = "A multimodal prompt studio for ComfyUI with local and API providers, supporting multiple generation-target models."
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
 dependencies = []
@@ -10,11 +10,11 @@ classifiers = [
 ]
 
 [project.urls]
-Repository = "https://github.com/duckyshell/ComfyUI-MiniMaxH3-Prompt-Writer"
-Documentation = "https://github.com/duckyshell/ComfyUI-MiniMaxH3-Prompt-Writer#readme"
-"Bug Tracker" = "https://github.com/duckyshell/ComfyUI-MiniMaxH3-Prompt-Writer/issues"
+Repository = "https://github.com/tngklp/ComfyUI-Prompt-Studio"
+Documentation = "https://github.com/tngklp/ComfyUI-Prompt-Studio#readme"
+"Bug Tracker" = "https://github.com/tngklp/ComfyUI-Prompt-Studio/issues"
 
 [tool.comfy]
-PublisherId = "duckyshell"
-DisplayName = "H3 Prompt Writer"
-Icon = "https://raw.githubusercontent.com/duckyshell/ComfyUI-MiniMaxH3-Prompt-Writer/main/web/assets/h3-prompt-writer-launcher.svg"
+PublisherId = "tngklp"
+DisplayName = "Prompt Studio"
+Icon = "https://raw.githubusercontent.com/tngklp/ComfyUI-Prompt-Studio/main/web/assets/prompt-studio-launcher.svg"

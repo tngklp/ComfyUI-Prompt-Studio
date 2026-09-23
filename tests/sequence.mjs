@@ -85,7 +85,7 @@ test("snapshot failure and cancelled preparation release ownership",async()=>{
 test("real DOM Add/Delete, shell sync and repeated workspace switches preserve DOM owners",async()=>{
   const window=new Window(); globalThis.document=window.document;
   const root=document.createElement("div");document.body.append(root);
-  root.innerHTML=`<div data-workspace="video"></div><div data-video-modes></div><div data-music-inputs></div><span data-output-label></span><span data-output-mobile-label></span><textarea data-output>Single prompt</textarea><span data-copy-label></span><span data-refine-media-note></span><span data-refine-title></span><span data-refine-helper></span><textarea data-refine-instruction></textarea><div class="h3ps-workspace"><div data-video-inputs><div class="h3ps-section-actions"></div><div data-h3ps-media><div tabindex="0" data-asset-id="a"></div><div tabindex="0" data-asset-id="b"></div></div></div></div><button data-generate><span data-generate-label>Generate prompt</span></button>`;
+  root.innerHTML=`<div data-workspace="video"></div><div data-video-modes></div><div data-music-inputs></div><span data-output-label></span><span data-output-mobile-label></span><textarea data-output>Single prompt</textarea><span data-copy-label></span><span data-refine-media-note></span><span data-refine-title></span><span data-refine-helper></span><textarea data-refine-instruction></textarea><div class="ps-workspace"><div data-video-inputs><div class="ps-section-actions"></div><div data-ps-media><div tabindex="0" data-asset-id="a"></div><div tabindex="0" data-asset-id="b"></div></div></div></div><button data-generate><span data-generate-label>Generate prompt</span></button>`;
   const studio={root,mode:"T2VA"};
   const context=vm.createContext({studio,rememberReferenceInsertTarget(){},toggleLyricsRefine(){},setMusicSystemPromptExpanded(){},syncModeAvailability(){}});
   vm.runInContext(main.match(/^function syncWorkspace\([^]*?^}/m)[0],context);
@@ -113,11 +113,11 @@ test("real DOM Add/Delete, shell sync and repeated workspace switches preserve D
   assert.equal(workspace.state.chunks[0].duration,15);
   click('[data-seq-global-media] [data-key="references"] [data-seq-action="select-media"]'); click('[data-asset-id="a"]');
   assert.deepEqual(workspace.state.references,["a"]);
-  click('.h3ps-sequence-conditioning [data-seq-action="remove-media"]');assert.deepEqual(workspace.state.chunks[0].exclusions,["a"]);
-  click('.h3ps-sequence-conditioning [data-seq-action="select-media"]'); click('[data-asset-id="a"]');
+  click('.ps-sequence-conditioning [data-seq-action="remove-media"]');assert.deepEqual(workspace.state.chunks[0].exclusions,["a"]);
+  click('.ps-sequence-conditioning [data-seq-action="select-media"]'); click('[data-asset-id="a"]');
   assert.deepEqual(workspace.state.chunks[0].exclusions,[]);
   const drop=new window.Event("drop",{bubbles:true});drop.dataTransfer={getData:()=>"b"};
-  root.querySelector('.h3ps-sequence-conditioning [data-asset="a"]').dispatchEvent(drop);
+  root.querySelector('.ps-sequence-conditioning [data-asset="a"]').dispatchEvent(drop);
   assert.deepEqual(effectiveMedia(workspace.state,workspace.state.chunks[0].id,assets).map(m=>m.assetId),["b"]);
   assert.deepEqual(workspace.state.references,["a"]);
   const oldEditor=input('[data-seq-prompt]',"manual current text");workspace.refresh();
@@ -215,14 +215,14 @@ test("completed work survives transport failure, missing output, cancellation an
 
 test("shared Aspect and split controls keep independent values and keyboard-facing state",async()=>{
   const {aspectRatioMarkup,bindAspectRatio,splitMenuMarkup,setSplitMenuOpen}=await import("../web/writer_controls.js");
-  const w=new Window(),root=w.document.createElement("div");root.className="h3ps-root";w.document.body.append(root);
-  root.innerHTML=aspectRatioMarkup(()=>"")+aspectRatioMarkup(()=>"","sequence-aspect")+'<div class="h3ps-clear-control">'+splitMenuMarkup(()=>"",{label:"Actions",primary:"data-primary",toggle:"data-toggle",menu:"data-menu",contents:"",ariaLabel:"Actions"})+'</div>';
-  const [single,sequence]=root.querySelectorAll(".h3ps-choice"),values=[];
+  const w=new Window(),root=w.document.createElement("div");root.className="ps-root";w.document.body.append(root);
+  root.innerHTML=aspectRatioMarkup(()=>"")+aspectRatioMarkup(()=>"","sequence-aspect")+'<div class="ps-clear-control">'+splitMenuMarkup(()=>"",{label:"Actions",primary:"data-primary",toggle:"data-toggle",menu:"data-menu",contents:"",ariaLabel:"Actions"})+'</div>';
+  const [single,sequence]=root.querySelectorAll(".ps-choice"),values=[];
   bindAspectRatio(single,"16:9",v=>values.push(["single",v]));bindAspectRatio(sequence,"9:16",v=>values.push(["sequence",v]));
   sequence.querySelector("[data-choice-toggle]").click();assert.equal(sequence.querySelector("[data-choice-menu]").hidden,false);
   sequence.querySelector('[data-aspect="1:1"]').click();assert.equal(single.querySelector("[data-aspect-label]").textContent,"16:9");
   assert.equal(sequence.querySelector("[data-choice-toggle]").getAttribute("aria-expanded"),"false");assert.deepEqual(values,[["sequence","1:1"]]);
-  const split=root.querySelector(".h3ps-clear-control");setSplitMenuOpen(split,true);
+  const split=root.querySelector(".ps-clear-control");setSplitMenuOpen(split,true);
   assert.equal(split.querySelector("[data-menu]").hidden,false);assert.ok([...split.querySelectorAll("button")].every(b=>b.getAttribute("aria-expanded")==="true"));
   setSplitMenuOpen(split,false);assert.equal(split.querySelector("[data-menu]").hidden,true);
   await w.happyDOM.close();
@@ -230,9 +230,9 @@ test("shared Aspect and split controls keep independent values and keyboard-faci
 
 async function sequenceFixture(overrides = {}) {
   const window=new Window();globalThis.document=window.document;
-  const root=document.createElement("div");root.className="h3ps-root";document.body.append(root);
+  const root=document.createElement("div");root.className="ps-root";document.body.append(root);
   const assets=[{id:"a",type:"image",reference:"<Picture 7>"},{id:"b",type:"image",reference:"<Picture 8>"},{id:"v",type:"video",reference:"<Video 9>"},{id:"n",type:"image",status:"needs_edit",reference:null}];
-  root.innerHTML=`<div class="h3ps-workspace"><div class="h3ps-input-panel"><div data-video-inputs><div class="h3ps-section-actions"></div><div data-h3ps-media>${assets.map(a=>`<div tabindex="0" data-asset-id="${a.id}"><button data-media-tag="${a.reference || ''}">${a.reference || ''}</button></div>`).join("")}</div></div></div><div class="h3ps-output-panel"><textarea data-output>Single unchanged</textarea></div></div><footer class="h3ps-footer"><button data-generate><span data-generate-label></span></button></footer>`;
+  root.innerHTML=`<div class="ps-workspace"><div class="ps-input-panel"><div data-video-inputs><div class="ps-section-actions"></div><div data-ps-media>${assets.map(a=>`<div tabindex="0" data-asset-id="${a.id}"><button data-media-tag="${a.reference || ''}">${a.reference || ''}</button></div>`).join("")}</div></div></div><div class="ps-output-panel"><textarea data-output>Single unchanged</textarea></div></div><footer class="ps-footer"><button data-generate><span data-generate-label></span></button></footer>`;
   const errors=[],requests=[],copies=[];
   const {insertReferenceAtCaret:sharedInsert}=await import("../web/compat.js");
   const insertReferenceAtCaret=(...args)=>{
@@ -261,7 +261,7 @@ test("selection ends on choose, same assignment, Cancel, Escape and outside clic
   assert.equal(root.querySelector('[data-asset-id="n"]').classList.contains("is-sequence-selectable"),false);
   click('[data-asset-id="a"]');assert.deepEqual(workspace.state.references,["a"]);assert.equal(root.classList.contains("is-sequence-selecting"),false);
   click(add);click('[data-asset-id="a"]');assert.deepEqual(workspace.state.references,["a"]);assert.equal(root.classList.contains("is-sequence-selecting"),false);
-  click('[data-seq-global-media] [data-asset="a"] .h3ps-add-asset');assert.equal(root.classList.contains("is-sequence-selecting"),false);
+  click('[data-seq-global-media] [data-asset="a"] .ps-add-asset');assert.equal(root.classList.contains("is-sequence-selecting"),false);
   click(add);click('.is-selecting [data-seq-action="selection-cancel"]');assert.equal(root.classList.contains("is-sequence-selecting"),false);
   click(add);root.dispatchEvent(new window.KeyboardEvent("keydown",{key:"Escape",bubbles:true}));assert.equal(root.classList.contains("is-sequence-selecting"),false);
   click(add);click('[data-seq-brief]');assert.equal(root.classList.contains("is-sequence-selecting"),false);
@@ -311,10 +311,10 @@ test("primary CTA fills missing prompts then regenerates all current inputs whil
 test("Reader copy format persists separately, renders canonical text and never enters inference",async()=>{
   const {window,root,workspace,click,input,copies,requests,flush}=await sequenceFixture(),state=workspace.state;
   addChunk(state);state.chunks[0].prompt="first {index}";state.chunks[1].prompt="second";workspace.refresh();
-  const canonical=state.chunks.map(c=>c.prompt),header=root.querySelector('.h3ps-sequence-output>header'),left=root.querySelector('.h3ps-input-panel'),editor=root.querySelector('[data-seq-prompt]');
+  const canonical=state.chunks.map(c=>c.prompt),header=root.querySelector('.ps-sequence-output>header'),left=root.querySelector('.ps-input-panel'),editor=root.querySelector('[data-seq-prompt]');
   click('[data-seq-action="copy-all"]');await flush();assert.equal(copies.at(-1),"first {index}\n\nsecond");
   click('[data-seq-action="reader"]');assert.equal(workspace.reader,true);assert.equal(left.hidden,false);
-  assert.equal(root.querySelector('.h3ps-sequence-output>header'),header);assert.equal(root.querySelector('[data-seq-prompt]'),editor);
+  assert.equal(root.querySelector('.ps-sequence-output>header'),header);assert.equal(root.querySelector('[data-seq-prompt]'),editor);
   click('[data-seq-action="copy-custom"]');input('[data-seq-copy-template]',"[{start}-{end}s] PART {index} ({duration})\n{prompt}");input('[data-seq-copy-separator]',"\\n---\\n");
   click('[data-seq-action="copy-all"]');await flush();assert.equal(copies.at(-1),"[0-10s] PART 1 (10)\nfirst {index}\n---\n[10-20s] PART 2 (10)\nsecond");
   assert.deepEqual(state.chunks.map(c=>c.prompt),canonical);assert.equal(root.querySelector('[data-seq-copy-preview]').textContent,copies.at(-1));
@@ -374,7 +374,7 @@ test("visible working results, warning recovery, Reader and Copy remain coherent
   const {workspace:w,root,click,input,window,flush,copies,errors}=f;
   addChunk(w.state);addChunk(w.state);w.state.chunks.forEach((c,i)=>c.prompt=`old ${i}`);w.refresh();
   const op=w.controller.start("all");await flush();
-  assert.ok(root.querySelector('[data-seq-generate] .h3ps-spinner'));
+  assert.ok(root.querySelector('[data-seq-generate] .ps-spinner'));
   assert.deepEqual([...root.querySelectorAll('[data-seq-prompt]')].map(e=>e.value),['','','']);
   assert.deepEqual(w.state.chunks.map(c=>c.undo.at(-1)),['old 0','old 1','old 2']);
   const emit=(type,index,extra={})=>send({type,chunk_id:w.state.chunks[index].id,operation_id:payload.operation_id,...extra});
@@ -385,7 +385,7 @@ test("visible working results, warning recovery, Reader and Copy remain coherent
   emit('phase',1,{phase:'repairing'});assert.equal(root.querySelectorAll('[data-seq-status]')[1].textContent,'Repairing…');
   emit('chunk',1,{prompt:'model text to fix',attention:'The model omitted the frame definition. Suggested fix: add the supplied frame binding.',repair:'failed'});
   done.resolve();await op;
-  assert.equal(root.querySelector('[data-seq-generate] .h3ps-spinner'),null);
+  assert.equal(root.querySelector('[data-seq-generate] .ps-spinner'),null);
   assert.equal(root.querySelector('[data-seq-generate]').textContent,'Generate sequence');
   assert.equal(root.querySelectorAll('[data-seq-status]')[2].textContent,'Not started');
   const second=root.querySelectorAll('[data-chunk]')[1];
@@ -393,7 +393,7 @@ test("visible working results, warning recovery, Reader and Copy remain coherent
   assert.match(second.querySelector('[data-seq-help]').textContent,/model.*Suggested fix/);
   assert.equal(second.querySelector('[data-seq-action="generate"]').textContent,'Regenerate');
   click('[data-seq-action="reader"]');click('[data-seq-action="copy-custom"]');
-  assert.equal(root.querySelector('.h3ps-sequence-chunks').hidden,false);
+  assert.equal(root.querySelector('.ps-sequence-chunks').hidden,false);
   assert.equal(second.querySelector('[data-seq-reader-text]').textContent,'model text to fix');
   click('[data-seq-action="copy-all"]');await flush();assert.equal(copies.length,0);assert.match(errors.at(-1),/Chunk 2 needs attention/);
   second.querySelector('[data-seq-action="copy"]').click();await flush();assert.equal(copies.at(-1),'model text to fix');
@@ -420,7 +420,7 @@ test("Generate touches only empty or warned chunks and cancel keeps completed pr
   send({type:'chunk',operation_id:payload.operation_id,chunk_id:w.state.chunks[1].id,prompt:'fixed'});
   w.controller.cancel();send({type:'chunk',operation_id:payload.operation_id,chunk_id:w.state.chunks[2].id,prompt:'late'});done.resolve();await op;
   assert.deepEqual(w.state.chunks.map(c=>c.prompt),['keep','fixed','']);
-  assert.equal(root.querySelector('[data-seq-generate] .h3ps-spinner'),null);
+  assert.equal(root.querySelector('[data-seq-generate] .ps-spinner'),null);
   assert.equal(w.state.chunks[1].attention,undefined);
   await window.happyDOM.close();
 });
@@ -428,13 +428,13 @@ test("Generate touches only empty or warned chunks and cancel keeps completed pr
 test("Sequence severity uses the existing persistent toast and warning timeout",async()=>{
   const {sequenceNotificationOptions}=await import('../web/writer_controls.js');
   const w=new Window(),root=w.document.createElement('div');
-  root.innerHTML='<div data-h3ps-toast><strong data-toast-title></strong><span data-toast-message></span><details data-toast-details><pre></pre></details><button data-toast-action></button></div>';
+  root.innerHTML='<div data-ps-toast><strong data-toast-title></strong><span data-toast-message></span><details data-toast-details><pre></pre></details><button data-toast-action></button></div>';
   const timers=[];let hidden=0;const studio={root};
   const context=vm.createContext({studio,setTimeout:(fn,ms)=>{timers.push({fn,ms});return timers.length;},clearTimeout:()=>{},hideToast:()=>hidden++});
   vm.runInContext(main.match(/^function showToast\([^]*?^}/m)[0],context);
   context.showToast('Sequence','Runtime failed',null,null,sequenceNotificationOptions(new Error()));
   assert.deepEqual(timers.map(t=>t.ms),[0]);timers[0].fn();assert.equal(studio.toastDismissOnWorkspaceClick,true);
-  assert.ok(root.querySelector('[data-h3ps-toast]').classList.contains('is-persistent'));
+  assert.ok(root.querySelector('[data-ps-toast]').classList.contains('is-persistent'));
   timers.length=0;context.showToast('Sequence','Needs attention',null,null,sequenceNotificationOptions({severity:'warning'}));
   assert.deepEqual(timers.map(t=>t.ms),[0,8000]);timers[1].fn();assert.equal(hidden,1);
   await w.happyDOM.close();
@@ -451,6 +451,33 @@ test("shared prompt highlighting is lossless, escaped and preserves dialogue as 
   assert.equal(view.querySelector('mark.is-dialogue mark'),null);
   assert.equal(view.querySelectorAll('mark.is-image').length,1);
   assert.equal(promptHighlightMarkup(''), '');
+  await w.happyDOM.close();
+});
+
+test("Qwen Image 2.1 edit tags highlight like H3 picture tags",async()=>{
+  const {promptHighlightMarkup}=await import('../web/prompt_highlights.js');
+  const w=new Window(),view=w.document.createElement('pre');
+  // Qwen's edit guide writes "<image1>": lowercase, no space. It must highlight
+  // as an image reference exactly like H3's "<Picture 1>", and the tag must
+  // round-trip the author's spelling so the hover peek can match asset.reference.
+  const text='Change the wall to sage green, keeping <image1> intact, and take the rug from <image2>.';
+  view.innerHTML=promptHighlightMarkup(text);
+  assert.equal(view.textContent,text);
+  const marks=[...view.querySelectorAll('mark.is-image')];
+  assert.equal(marks.length,2);
+  assert.deepEqual(marks.map(m=>m.dataset.promptReference),['<image1>','<image2>']);
+  assert.equal(promptHighlightMarkup(''), '');
+
+  // Both syntaxes coexist and both mark as is-image.
+  const mixed=w.document.createElement('pre');
+  mixed.innerHTML=promptHighlightMarkup('<Picture 1> from H3 and <image2> from Qwen.');
+  assert.equal(mixed.textContent,'<Picture 1> from H3 and <image2> from Qwen.');
+  assert.deepEqual([...mixed.querySelectorAll('mark.is-image')].map(m=>m.dataset.promptReference),['<Picture 1>','<image2>']);
+
+  // A bare "image1" without angle brackets, and unrelated text, must not mark.
+  const plain=w.document.createElement('pre');
+  plain.innerHTML=promptHighlightMarkup('See image1 and image two for reference.');
+  assert.equal(plain.querySelectorAll('mark').length,0);
   await w.happyDOM.close();
 });
 
@@ -538,7 +565,7 @@ test("Compact highlighting follows format selection without changing text or sel
 test("Sequence text fields disable browser spelling underlines",async()=>{
   const {workspace:w,root,window,click}=await sequenceFixture();
   click('[data-seq-action="add"]');w.refresh();
-  const fields=root.querySelectorAll('.h3ps-sequence-inputs textarea,.h3ps-sequence-output textarea,[data-seq-instruction]');
+  const fields=root.querySelectorAll('.ps-sequence-inputs textarea,.ps-sequence-output textarea,[data-seq-instruction]');
   assert.ok(fields.length>4);
   for(const field of fields)assert.equal(field.getAttribute('spellcheck'),'false');
   await window.happyDOM.close();
@@ -546,9 +573,9 @@ test("Sequence text fields disable browser spelling underlines",async()=>{
 
 test("Sequence overlay and editor share shaping at every interface scale",async()=>{
   const css=await readFile(new URL('../web/styles/sequence.css',import.meta.url),'utf8');
-  const shared=css.match(/:is\(\.h3ps-sequence-prompt,\.h3ps-sequence-highlights,\.h3ps-sequence-reader-text\)\{([^}]+)\}/)[1];
+  const shared=css.match(/:is\(\.ps-sequence-prompt,\.ps-sequence-highlights,\.ps-sequence-reader-text\)\{([^}]+)\}/)[1];
   for(const rule of ['font-kerning:none','font-variant-ligatures:none','letter-spacing:0','word-spacing:0','font-weight:400','text-rendering:geometricPrecision'])assert.ok(shared.includes(rule),rule);
-  assert.match(css,/\.h3ps-sequence-chunk\{position:relative;z-index:0;/);
+  assert.match(css,/\.ps-sequence-chunk\{position:relative;z-index:0;/);
 });
 
 test("native highlight ranges keep one mirror text run and release obsolete ranges",async()=>{
@@ -562,12 +589,12 @@ test("native highlight ranges keep one mirror text run and release obsolete rang
   painter.paint(b,promptHighlightMarkup(text));
   assert.equal(a.childNodes.length,1);assert.equal(a.textContent,text);
   assert.equal(a.querySelector('mark'),null);
-  const times=w.CSS.highlights.get('h3ps-sequence-time');
+  const times=w.CSS.highlights.get('ps-sequence-time');
   assert.equal(times.size,2);
   for(const range of times) assert.equal(range.toString(),'00:05.000');
   painter.clear();assert.equal(w.CSS.highlights.size,0);
   painter.paint(a,promptHighlightMarkup(text,'compact'));
-  assert.deepEqual([...w.CSS.highlights.keys()],['h3ps-sequence-image']);
+  assert.deepEqual([...w.CSS.highlights.keys()],['ps-sequence-image']);
   assert.equal(a.childNodes.length,1);assert.equal(a.textContent,text);
   painter.clear();
   painter.paint(a,promptHighlightMarkup(''));

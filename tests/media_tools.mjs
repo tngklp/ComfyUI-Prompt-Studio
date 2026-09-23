@@ -17,7 +17,7 @@ test('lazy media tool init failure is local and a later click can retry',async()
   assert.equal(tool.close(),true);
 });
 
-test('closing Writer while importing does not open a tool after it closes',async()=>{
+test('closing Prompt Studio while importing does not open a tool after it closes',async()=>{
   let resolve,opens=0;
   const root={children:[]};
   const tool=createLazyMediaTool(root,()=>new Promise(r=>{resolve=r;}),assert.fail);

@@ -2,7 +2,7 @@
 
 This page primarily covers the ComfyUI extension. Standalone users should start with the [Standalone setup guide](../standalone/README.md). The `llama-cpp-python` and ComfyUI VRAM instructions below do not apply to Standalone Local GGUF.
 
-Start by updating H3 Prompt Writer, restarting ComfyUI, and using `Ctrl+F5` if the browser still shows an older interface.
+Start by updating Prompt Studio, restarting ComfyUI, and using `Ctrl+F5` if the browser still shows an older interface.
 
 ## I installed it but cannot find a node
 
@@ -12,15 +12,15 @@ ComfyUI Manager reports that the extension has no nodes, or nothing new appears 
 
 **Cause**
 
-H3 Prompt Writer is a UI extension, not a workflow node.
+Prompt Studio is a UI extension, not a workflow node.
 
 **Fix**
 
-Open the floating **H3 Prompt Writer** button or use **Extensions > H3 Prompt Writer**. If neither is present, confirm that the repository is directly below `ComfyUI/custom_nodes`, restart ComfyUI, and check the startup console for an import error.
+Open the floating **Prompt Studio** button or use **Extensions > Prompt Studio**. If neither is present, confirm that the repository is directly below `ComfyUI/custom_nodes`, restart ComfyUI, and check the startup console for an import error.
 
 **Verify**
 
-The Writer window opens. No graph node is expected.
+The Prompt Studio window opens. No graph node is expected.
 
 ## Direct runtime is not installed
 
@@ -71,7 +71,7 @@ Do not install into system Python, copy native DLLs manually, or replace ComfyUI
 
 Restart ComfyUI and complete a real Direct model load and generation.
 
-If Gemma is available but a Qwen model says the runtime is unsupported, check Scan details. Gemma remains supported on 0.3.34, while the validated Qwen adapters require 0.3.35 or newer. Use the clean replacement command above; Writer blocks Qwen before loading weights when the installed runtime is too old.
+If Gemma is available but a Qwen model says the runtime is unsupported, check Scan details. Gemma remains supported on 0.3.34, while the validated Qwen adapters require 0.3.35 or newer. Use the clean replacement command above; Prompt Studio blocks Qwen before loading weights when the installed runtime is too old.
 
 ## `GGML_TYPE_F16` cannot be imported
 
@@ -137,7 +137,7 @@ Direct shows no models, or an installed model is marked text-only because its pr
 
 **Cause**
 
-Writer needs a model GGUF and the Direct runtime for text generation. Visual modes additionally need one matching model-class projector in the same scanned folder. Writer does not guess among several projector candidates.
+Prompt Studio needs a model GGUF and the Direct runtime for text generation. Visual modes additionally need one matching model-class projector in the same scanned folder. Prompt Studio does not guess among several projector candidates.
 
 **Fix**
 
@@ -145,7 +145,7 @@ Put the model under `ComfyUI/models/LLM`. To enable I2VA, FL2VA, L2VA, or Refere
 
 Do not reuse a projector from another model class just because its filename looks compatible.
 
-Without an unambiguous compatible projector, the model remains available for T2VA and Refine. Writer disables the visual modes and Music 3 instead of blocking all Direct work.
+Without an unambiguous compatible projector, the model remains available for T2VA and Refine. Prompt Studio disables the visual modes and Music 3 instead of blocking all Direct work.
 
 **Verify**
 
@@ -159,7 +159,7 @@ Ollama Settings show **Start Ollama** and the selected service does not respond.
 
 **Cause**
 
-Writer does not start the Ollama application or service. A custom host may also be unavailable from this computer.
+Prompt Studio does not start the Ollama application or service. A custom host may also be unavailable from this computer.
 
 **Fix**
 
@@ -187,7 +187,7 @@ Run a command such as:
 ollama pull gemma4:e4b
 ```
 
-After it finishes, select **Refresh** in Ollama Settings. Writer never downloads the model itself.
+After it finishes, select **Refresh** in Ollama Settings. Prompt Studio never downloads the model itself.
 
 **Verify**
 
@@ -221,7 +221,7 @@ External Settings show the connected model. A text-only model is ready for Music
 
 **Symptom**
 
-A server or Custom endpoint connects, but Writer refuses image or video references.
+A server or Custom endpoint connects, but Prompt Studio refuses image or video references.
 
 **Cause**
 
@@ -247,7 +247,7 @@ Authentication, quotas, pricing, context, and output limits are provider and mod
 
 **Fix**
 
-Confirm the key and selected model in the provider's console. Check current billing and rate-limit status. For Gemini, try **Minimal** or a lower Thinking level when latency or token use is the concern. Do not treat a response with `finish_reason=length` as a complete H3 prompt; Writer rejects it.
+Confirm the key and selected model in the provider's console. Check current billing and rate-limit status. For Gemini, try **Minimal** or a lower Thinking level when latency or token use is the concern. Do not treat a response with `finish_reason=length` as a complete H3 prompt; Prompt Studio rejects it.
 
 **Verify**
 
@@ -257,7 +257,7 @@ The request ends normally and the full editable prompt appears. Technical detail
 
 **Symptom**
 
-Writer reports `CONTEXT_BUDGET_EXCEEDED`, `THINKING_CONTEXT_INSUFFICIENT`, insufficient free VRAM, or a runtime out-of-memory error.
+Prompt Studio reports `CONTEXT_BUDGET_EXCEEDED`, `THINKING_CONTEXT_INSUFFICIENT`, insufficient free VRAM, or a runtime out-of-memory error.
 
 **Cause**
 
@@ -265,15 +265,15 @@ Context capacity and memory are different limits. A request can exceed the selec
 
 **Fix**
 
-For Direct Auto, let Writer select a supported preset. If a manual Context or Generation budget does not fit, increase Context or reduce the budget. Custom Context cannot exceed a native context reported by the GGUF. Reduce active references or use a model with a larger context limit when the request still does not fit.
+For Direct Auto, let Prompt Studio select a supported preset. If a manual Context or Generation budget does not fit, increase Context or reduce the budget. Custom Context cannot exceed a native context reported by the GGUF. Reduce active references or use a model with a larger context limit when the request still does not fit.
 
 For actual memory failure, use **Free ComfyUI VRAM**, close other GPU-heavy applications, select a smaller model, or reduce context. Do not increase context as a generic response to an OOM.
 
-Ollama context is automatic in Writer; Ollama decides whether to offload parts of the model to CPU/RAM.
+Ollama context is automatic in Prompt Studio; Ollama decides whether to offload parts of the model to CPU/RAM.
 
 **Verify**
 
-The next request completes without a context-limit or allocation error. If Thinking falls back, Writer reports it instead of presenting it as a full Thinking result.
+The next request completes without a context-limit or allocation error. If Thinking falls back, Prompt Studio reports it instead of presenting it as a full Thinking result.
 
 ## Sequence stops or repeats an action
 
@@ -289,7 +289,7 @@ The model may return an incomplete plan, unsupported prompt structure, or ambigu
 
 Review the brief and Chunk Direction. Make required event order or endpoint explicit, then regenerate the affected chunks. Open-ended activity does not need an invented endpoint. An incomplete or ambiguous plan stops generation without fallback. The message identifies missing steps, a missing ending, or unreadable JSON. Run Generate Sequence again. Technical details show the exact planner failure. A redundant interval number is ignored only when it matches the requested interval. A repairable H3 format problem gets one automatic correction. If it still needs attention, the model output stays visible and later chunks are not started. Select the orange icon for the model error and a suggested fix. Use Refine, Regenerate, or edit the text yourself. A manual edit clears that old warning. Completed chunks survive cancellation or a later failure; previous versions remain in Undo/Redo. If one model repeatedly fails, try another supported model.
 
-For context errors, increase the supported Context or reduce Generation budget or reference load. Writer does not silently truncate continuity evidence. Do not increase context for a VRAM allocation failure; follow the memory guidance above.
+For context errors, increase the supported Context or reduce Generation budget or reference load. Prompt Studio does not silently truncate continuity evidence. Do not increase context for a VRAM allocation failure; follow the memory guidance above.
 
 **Verify**
 
@@ -349,7 +349,7 @@ The browser can retain an older extension script after files are updated.
 
 **Fix**
 
-Restart ComfyUI and hard-refresh the Writer page with `Ctrl+F5`.
+Restart ComfyUI and hard-refresh the Prompt Studio page with `Ctrl+F5`.
 
 **Verify**
 

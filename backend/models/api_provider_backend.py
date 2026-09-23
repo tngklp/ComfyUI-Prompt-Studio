@@ -19,7 +19,7 @@ from ..context import (
     estimate_text_tokens,
     non_thinking_output_tokens,
 )
-from ..h3_pipeline import run_h3_pipeline, validate_media_capabilities
+from ..pipeline import run_pipeline, validate_media_capabilities
 from ..version import VERSION
 from .contract import ModelError
 
@@ -281,12 +281,12 @@ class ApiProviderBackend:
         if not isinstance(credential, dict):
             credential = {}
         if credential.get("source") not in {None, "", "session"} or credential.get("environment_name"):
-            raise ModelError("API_CREDENTIAL_SOURCE_INVALID", "API keys must be entered for the current Writer session.")
+            raise ModelError("API_CREDENTIAL_SOURCE_INVALID", "API keys must be entered for the current Prompt Studio session.")
         key = str(credential.get("value") or "").strip()
         if not key and preset != "custom":
             raise ModelError(
                 "API_CREDENTIAL_MISSING",
-                f"Enter a {PRESETS[preset]['name']} API key for this Writer session.",
+                f"Enter a {PRESETS[preset]['name']} API key for this Prompt Studio session.",
             )
         return key
 
@@ -355,7 +355,7 @@ class ApiProviderBackend:
         headers = {
             "Accept": accept,
             "Content-Type": "application/json",
-            "User-Agent": f"H3-Prompt-Writer/{VERSION}",
+            "User-Agent": f"Prompt-Studio/{VERSION}",
         }
         if connection.api_key:
             headers["Authorization"] = f"Bearer {connection.api_key}"
@@ -377,7 +377,7 @@ class ApiProviderBackend:
         except (OSError, TimeoutError, AttributeError, ValueError, http.client.HTTPException) as error:
             raise ModelError(
                 "API_PROVIDER_UNAVAILABLE",
-                "H3 Prompt Writer could not reach the API provider.",
+                "Prompt Studio could not reach the API provider.",
                 {"provider": connection.preset, "reason": str(error)},
             ) from error
         finally:
@@ -875,7 +875,7 @@ class ApiProviderBackend:
                     kwargs.pop("purpose", None)
                     return handler(**kwargs)
 
-                result = run_h3_pipeline(
+                result = run_pipeline(
                     model_info,
                     assembled,
                     session_id,

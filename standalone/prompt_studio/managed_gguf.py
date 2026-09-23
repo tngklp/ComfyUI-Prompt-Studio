@@ -628,7 +628,7 @@ class ManagedGGUFBackend:
                 context_tokens=selected_context_tokens,
                 kv_cache=requested_kv,
             )
-            remote = self.external.probe_model({"url": runtime["endpoint"], "model": "h3-managed"})
+            remote = self.external.probe_model({"url": runtime["endpoint"], "model": "ps-managed"})
         except self.model_error:
             self.controller.runtime.stop()
             raise
@@ -666,7 +666,7 @@ class ManagedGGUFBackend:
                 "CONTEXT_BUDGET_EXCEEDED",
                 "This request and Generation budget do not fit the selected Context."
                 if generation_budget is not None
-                else "This request does not leave enough context for a complete MiniMax prompt.",
+                else "This request does not leave enough context for a complete prompt.",
                 {
                     "estimated_input_tokens": plan["estimated_input_tokens"],
                     "generation_budget": generation_budget,

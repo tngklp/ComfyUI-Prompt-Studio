@@ -1,1 +1,1 @@
-"""Backend services for H3 Prompt Writer."""
+"""Backend services for Prompt Studio."""

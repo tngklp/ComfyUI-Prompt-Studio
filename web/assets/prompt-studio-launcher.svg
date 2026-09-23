@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-labelledby="title desc">
+  <title id="title">Prompt Studio</title>
+  <desc id="desc">A stack of three prompt lines narrowing upward to a point, inside a rounded square.</desc>
+  <defs>
+    <linearGradient id="ps-panel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2b2f37"/>
+      <stop offset="1" stop-color="#15171b"/>
+    </linearGradient>
+    <linearGradient id="ps-accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#b79dfb"/>
+      <stop offset="1" stop-color="#a78bfa"/>
+    </linearGradient>
+  </defs>
+
+  <!--
+    A squircle field. It holds its shape as a 32px header mark, a launcher tile,
+    and a favicon, which a free-standing glyph would not.
+  -->
+  <rect x="6" y="6" width="108" height="108" rx="26" fill="url(#ps-panel)"/>
+  <rect x="6" y="6" width="108" height="108" rx="26" fill="none" stroke="#3b404a" stroke-width="3"/>
+
+  <!--
+    Three lines of a prompt, left-aligned like text. The stack narrows upward and
+    the shortest line carries the accent, so the eye moves up the stack into the
+    finished prompt: the long grey lines are the input brief, the short accent one
+    is what came out.
+  -->
+  <rect x="28" y="38" width="46" height="11" rx="5.5" fill="#5d6470"/>
+  <rect x="28" y="56" width="60" height="11" rx="5.5" fill="#8d94a1"/>
+  <rect x="28" y="74" width="34" height="11" rx="5.5" fill="url(#ps-accent)"/>
+
+  <!--
+    The caret sitting where the shortest line ends. It is what turns three bars
+    into a prompt rather than a bar chart, and it echoes a text cursor.
+  -->
+  <path d="M78 79.5 L90 79.5" stroke="#b79dfb" stroke-width="4.5" stroke-linecap="round"/>
+  <path d="M84 73.5 L84 85.5" stroke="#b79dfb" stroke-width="4.5" stroke-linecap="round"/>
+</svg>

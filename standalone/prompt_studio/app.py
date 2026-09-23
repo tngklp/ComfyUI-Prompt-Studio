@@ -31,8 +31,8 @@ def _prepare_environment(settings: Settings) -> None:
     temp_root.mkdir(parents=True, exist_ok=True)
 
     roots = [local_models, *settings.model_roots]
-    os.environ["H3_STANDALONE_MODEL_ROOTS"] = os.pathsep.join(str(path) for path in roots)
-    os.environ["H3_STANDALONE_TEMP"] = str(temp_root)
+    os.environ["PS_STANDALONE_MODEL_ROOTS"] = os.pathsep.join(str(path) for path in roots)
+    os.environ["PS_STANDALONE_TEMP"] = str(temp_root)
 
     compat_dir = Path(__file__).resolve().parent / "compat"
     for path in (settings.upstream_repo, compat_dir):
@@ -279,8 +279,8 @@ def _pick_port(preferred: int) -> int:
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run H3 Prompt Writer without ComfyUI.")
-    parser.add_argument("--upstream", help="Path to the Prompt Writer repository.")
+    parser = argparse.ArgumentParser(description="Run Prompt Studio without ComfyUI.")
+    parser.add_argument("--upstream", help="Path to the Prompt Studio repository.")
     parser.add_argument("--model-root", action="append", default=[], help="Additional GGUF folder; repeatable.")
     parser.add_argument("--port", type=int, help="Preferred localhost port. Uses another free port if occupied.")
     parser.add_argument("--no-browser", action="store_true", help="Do not open the browser automatically.")
@@ -302,7 +302,7 @@ def main(argv: list[str] | None = None) -> None:
 
     port = _pick_port(settings.port)
     url = f"http://{LOCALHOST}:{port}/"
-    print(f"H3 Prompt Writer Standalone {STANDALONE_VERSION}")
+    print(f"Prompt Studio Standalone {STANDALONE_VERSION}")
     print(f"Core:     {app[VERSION_KEY]}")
     print(f"Upstream: {settings.upstream_repo}")
     print(f"Serving:  {url}")

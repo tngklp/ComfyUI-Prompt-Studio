@@ -1,4 +1,4 @@
-"""The small part of ComfyUI's server module used by Prompt Writer."""
+"""The small part of ComfyUI's server module used by Prompt Studio."""
 
 from aiohttp import web
 

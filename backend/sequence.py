@@ -5,16 +5,25 @@ import copy
 import re
 from typing import Any
 
-from .assembly import AssemblyError, ASPECT_RATIOS, CAPABILITY_BY_TYPE, _guide_messages, _media_line
+from .assembly import AssemblyError, CAPABILITY_BY_TYPE, _guide_messages, _media_line
 from .guides import guide_for_mode
-from .h3_pipeline import _asset_data_uri
+from .pipeline import _asset_data_uri
 from .media import STORE, parse_session_id
 from .sequence_plan import interval_context
 from .models.contract import ModelError
-from .prompt_audit import REFERENCE_SECTIONS
+from .prompt_audit import reference_sections
+from .targets import target_for_mode
 from .sequence_repair import media_contract, normalize_image_task_prefix
 from .sequence_output import validate_output, without_literals, LITERAL
 from .sequence_format import COMPACT_CONTRACT, validate_compact
+
+
+def _sequence_target(state: dict):
+    """The generation target a sequence draft writes for."""
+    mode_id = state.get("mode")
+    if not isinstance(mode_id, str) or not mode_id:
+        return target_for_mode("T2VA")
+    return target_for_mode(mode_id)
 
 
 def validate_sequence(body: dict) -> dict:
@@ -30,7 +39,8 @@ def validate_sequence(body: dict) -> dict:
             invalid(f"Sequence {name} is required.")
     if len(state["brief"]) > 8000 or len(state["instructions"]) > 32000:
         invalid("The Creative Brief or Sequence Instructions are too long.")
-    if state.get("aspectRatio") not in ASPECT_RATIOS:
+    allowed_ratios = set(_sequence_target(state).aspect_ratios)
+    if state.get("aspectRatio") not in allowed_ratios:
         invalid("Select a supported aspect ratio.")
     chunks = state.get("chunks")
     if not isinstance(chunks, list) or not chunks:
@@ -151,7 +161,7 @@ def normalize_local_timestamps(prompt, duration):
                     minutes, rest = divmod(value, 60000)
                     seconds, milliseconds = divmod(rest, 1000)
                     return match[0][:match.start(2)-match.start()] + f"{minutes:02d}:{seconds:02d}.{milliseconds:03d}"
-            raise ModelError("INVALID_SEQUENCE_PROMPT", f"Ambiguous or out-of-range local timestamp {raw!r}; Writer cannot safely infer the intended time.")
+            raise ModelError("INVALID_SEQUENCE_PROMPT", f"Ambiguous or out-of-range local timestamp {raw!r}; Prompt Studio cannot safely infer the intended time.")
         return temporal.sub(replace, text)
     parts, start = [], 0
     for match in protected.finditer(prompt):
@@ -167,11 +177,11 @@ def plain_chunk_prompt(text, mode, duration, assets=None, output_format="officia
     prompt = fence[1] if fence else text
     if output_format == "compact":
         return validate_compact(normalize_local_timestamps(prompt, duration), duration, assets)
-    fields = REFERENCE_SECTIONS if mode == "Reference" else (
+    fields = reference_sections() if mode == "Reference" else (
         "integrated_multimodal_description", "overall_soundscape", "non_diegetic_music")
     matches = list(re.finditer(r"(?m)^\s*(" + "|".join(fields) + r")\s*:[ \t]*", without_literals(prompt)))
     def invalid():
-        raise ModelError("INVALID_SEQUENCE_PROMPT", "The chunk has an unsupported wrapper or incomplete H3 sections. Writer cannot safely supply missing content.")
+        raise ModelError("INVALID_SEQUENCE_PROMPT", "The chunk has an unsupported wrapper or incomplete H3 sections. Prompt Studio cannot safely supply missing content.")
     if [m[1] for m in matches] != list(fields):
         invalid()
     prefix = prompt[:matches[0].start()].strip()

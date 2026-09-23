@@ -1,21 +1,21 @@
 import { clampPanelPosition, workflowMediaSnapshot } from "./workflow_media.js";
 
-const DRAG_TYPE = "application/x-h3ps-workflow-media";
-const POSITION_KEY = "h3ps-floating-media-position";
+const DRAG_TYPE = "application/x-ps-workflow-media";
+const POSITION_KEY = "ps-floating-media-position";
 
 export function createFloatingMediaPanel({ app, getState, transfer, icon, openWriter, storage = localStorage }) {
   const root = document.createElement("section");
-  root.className = "h3ps-root h3ps-media-float";
-  root.setAttribute("aria-label", "Prompt Writer media");
-  root.innerHTML = `<header class="h3ps-float-header" tabindex="0" aria-label="Move media panel">
+  root.className = "ps-root ps-media-float";
+  root.setAttribute("aria-label", "Prompt Studio media");
+  root.innerHTML = `<header class="ps-float-header" tabindex="0" aria-label="Move media panel">
     <strong>Media</strong><span></span>
-    <button type="button" class="h3ps-icon-button" data-float-writer title="Open Prompt Writer" aria-label="Open Prompt Writer">${icon("expand", 15)}</button>
-    <button type="button" class="h3ps-icon-button" data-float-close title="Close media panel" aria-label="Close media panel">${icon("close", 15)}</button>
-  </header><p class="h3ps-float-hint">Drag media to the canvas to add it, or onto a compatible loader to replace its file.</p>
-  <div class="h3ps-assets h3ps-float-assets"></div>
-  <p class="h3ps-float-status" role="status" aria-live="polite">Original or latest Applied media · no auto-sync</p>`;
+    <button type="button" class="ps-icon-button" data-float-writer title="Open Prompt Studio" aria-label="Open Prompt Studio">${icon("expand", 15)}</button>
+    <button type="button" class="ps-icon-button" data-float-close title="Close media panel" aria-label="Close media panel">${icon("close", 15)}</button>
+  </header><p class="ps-float-hint">Drag media to the canvas to add it, or onto a compatible loader to replace its file.</p>
+  <div class="ps-assets ps-float-assets"></div>
+  <p class="ps-float-status" role="status" aria-live="polite">Original or latest Applied media · no auto-sync</p>`;
   document.body.appendChild(root);
-  const header = root.querySelector("header"), cards = root.querySelector(".h3ps-assets");
+  const header = root.querySelector("header"), cards = root.querySelector(".ps-assets");
   const status = root.querySelector("[role=status]");
   let opened = false, suspended = false, move = null, dragging = null, pending = null, signature = "";
   let position = { x: 24, y: 100 }, events = null;
@@ -46,22 +46,22 @@ export function createFloatingMediaPanel({ app, getState, transfer, icon, openWr
     cards.replaceChildren();
     for (const asset of assets) {
       const card = document.createElement("div");
-      card.className = "h3ps-asset"; card.tabIndex = 0; card.draggable = true; card.dataset.floatAsset = asset.id;
+      card.className = "ps-asset"; card.tabIndex = 0; card.draggable = true; card.dataset.floatAsset = asset.id;
       const title = asset.reference || (asset.status === "needs_edit" ? "Trim required" : asset.type);
       card.title = `${title} · ${asset.filename}\nDrag original or latest Applied media to the workflow`;
-      const preview = document.createElement("div"); preview.className = "h3ps-asset-preview";
+      const preview = document.createElement("div"); preview.className = "ps-asset-preview";
       if (asset.preview_url && asset.type !== "audio") {
-        const image = document.createElement("img"); image.className = "h3ps-real-thumb";
+        const image = document.createElement("img"); image.className = "ps-real-thumb";
         image.src = asset.preview_url; image.alt = ""; image.draggable = false; preview.appendChild(image);
-      } else { preview.classList.add("h3ps-float-audio"); preview.innerHTML = icon("audio", 26); }
-      const copy = document.createElement("div"); copy.className = "h3ps-asset-copy";
+      } else { preview.classList.add("ps-float-audio"); preview.innerHTML = icon("audio", 26); }
+      const copy = document.createElement("div"); copy.className = "ps-asset-copy";
       const label = document.createElement("strong"); label.textContent = title;
       const filename = document.createElement("small"); filename.textContent = asset.filename;
       copy.append(label, filename); card.append(preview, copy); cards.appendChild(card);
     }
     if (!assets.length) {
-      const empty = document.createElement("p"); empty.className = "h3ps-float-empty";
-      empty.textContent = "Add media in Prompt Writer to use it here."; cards.appendChild(empty);
+      const empty = document.createElement("p"); empty.className = "ps-float-empty";
+      empty.textContent = "Add media in Prompt Studio to use it here."; cards.appendChild(empty);
     }
     if (opened && !suspended) place();
   }
@@ -89,7 +89,7 @@ export function createFloatingMediaPanel({ app, getState, transfer, icon, openWr
       notice("Sending media to workflow…");
       try {
         await transfer.drop(snapshot, [event.clientX, event.clientY], controller.signal);
-        if (!controller.signal.aborted) notice("Media sent. Later Writer edits will not change this loader.");
+        if (!controller.signal.aborted) notice("Media sent. Later Prompt Studio edits will not change this loader.");
       } catch (error) {
         if (!controller.signal.aborted) notice(error.message || "Media transfer failed.");
       } finally { if (pending === controller) pending = null; }

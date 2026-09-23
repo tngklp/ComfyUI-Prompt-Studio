@@ -39,8 +39,8 @@ if ($repositoryDirty) {
 }
 
 $distRoot = Join-Path $repositoryRoot "dist"
-$packageFolderName = "ComfyUI-MiniMaxH3-Prompt-Writer"
-$packageName = "H3-Prompt-Writer-ComfyUI-v$version"
+$packageFolderName = "ComfyUI-Prompt-Studio"
+$packageName = "Prompt-Studio-ComfyUI-v$version"
 $target = Join-Path $distRoot $packageFolderName
 $zip = Join-Path $distRoot "$packageName.zip"
 $resolvedDist = [IO.Path]::GetFullPath($distRoot)

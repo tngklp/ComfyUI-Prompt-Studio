@@ -1,11 +1,11 @@
-const INSTALL_KEY = Symbol.for("minimax.h3.prompt.studio.vramHandoff");
+const INSTALL_KEY = Symbol.for("prompt.studio.vramHandoff");
 const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-export const AUTO_VRAM_TOOLTIP = "Automatically frees ComfyUI VRAM before Prompt Writer generation. Direct GGUF, local Ollama and lifecycle-capable External llama.cpp routers also release their selected models before ComfyUI Queue.";
+export const AUTO_VRAM_TOOLTIP = "Automatically frees ComfyUI VRAM before Prompt Studio generation. Direct GGUF, local Ollama and lifecycle-capable External llama.cpp routers also release their selected models before ComfyUI Queue.";
 
 export function autoVramControlMarkup(supported) {
   if (!supported) return "";
-  return `<label class="h3ps-toggle-control" data-vram-handoff-control title="${AUTO_VRAM_TOOLTIP}" hidden><input type="checkbox" data-vram-handoff><span></span>Auto VRAM</label>`;
+  return `<label class="ps-toggle-control" data-vram-handoff-control title="${AUTO_VRAM_TOOLTIP}" hidden><input type="checkbox" data-vram-handoff><span></span>Auto VRAM</label>`;
 }
 
 export function isLocalOllamaHost(value) {
@@ -82,22 +82,22 @@ export async function releaseComfyVramWhenIdle({
 }) {
   let status = await getStatus(ollamaHost);
   onStatus?.(status);
-  if (!isCurrent()) throw handoffError("WRITER_PREPARATION_CANCELLED", "Writer preparation was superseded by ComfyUI Queue.");
+  if (!isCurrent()) throw handoffError("WRITER_PREPARATION_CANCELLED", "Prompt Studio preparation was superseded by ComfyUI Queue.");
   if (status?.comfyui?.available !== true) throw handoffError("COMFYUI_STATE_UNAVAILABLE", "ComfyUI memory state could not be confirmed.");
   if (comfyQueueIsBusy(status)) throw handoffError("COMFYUI_BUSY", "ComfyUI is busy. Wait for the workflow queue to finish.");
   if (status.comfyui.loaded_models === 0) return status;
 
   await freeComfyVram();
-  if (!isCurrent()) throw handoffError("WRITER_PREPARATION_CANCELLED", "Writer preparation was superseded by ComfyUI Queue.");
+  if (!isCurrent()) throw handoffError("WRITER_PREPARATION_CANCELLED", "Prompt Studio preparation was superseded by ComfyUI Queue.");
 
   let previousFreeMb = null;
   let stableSamples = 0;
   for (let attempt = 0; attempt <= maxPolls; attempt += 1) {
     status = await getStatus(ollamaHost);
     onStatus?.(status);
-    if (!isCurrent()) throw handoffError("WRITER_PREPARATION_CANCELLED", "Writer preparation was superseded by ComfyUI Queue.");
+    if (!isCurrent()) throw handoffError("WRITER_PREPARATION_CANCELLED", "Prompt Studio preparation was superseded by ComfyUI Queue.");
     if (status?.comfyui?.available !== true) throw handoffError("COMFYUI_STATE_UNAVAILABLE", "ComfyUI memory state could not be confirmed.");
-    if (comfyQueueIsBusy(status)) throw handoffError("COMFYUI_BECAME_BUSY", "ComfyUI Queue started while VRAM was being prepared. Writer generation did not start.");
+    if (comfyQueueIsBusy(status)) throw handoffError("COMFYUI_BECAME_BUSY", "ComfyUI Queue started while VRAM was being prepared. Prompt Studio generation did not start.");
 
     if (status.comfyui.loaded_models === 0) {
       const freeMb = Number(status?.gpu_memory?.free_mb);
@@ -112,7 +112,7 @@ export async function releaseComfyVramWhenIdle({
     }
     if (attempt < maxPolls) await sleep(pollIntervalMs);
   }
-  throw handoffError("COMFYUI_RELEASE_TIMEOUT", "ComfyUI did not confirm that workflow models released VRAM. Writer generation did not start.");
+  throw handoffError("COMFYUI_RELEASE_TIMEOUT", "ComfyUI did not confirm that workflow models released VRAM. Prompt Studio generation did not start.");
 }
 
 export async function unloadWriterModels({
@@ -133,7 +133,7 @@ export async function unloadWriterModels({
   for (const target of targets) {
     signal?.throwIfAborted();
     const result = await unloadModel(target);
-    if (result?.unload_requested === false) throw handoffError("WRITER_UNLOAD_FAILED", "Prompt Writer could not unload its local model.");
+    if (result?.unload_requested === false) throw handoffError("WRITER_UNLOAD_FAILED", "Prompt Studio could not unload its local model.");
   }
   if (!targets.length) return [];
 
@@ -144,7 +144,7 @@ export async function unloadWriterModels({
     if (!targets.some((target) => targetIsResident(status, target))) return targets;
     if (attempt < maxPolls) await sleep(pollIntervalMs);
   }
-  throw handoffError("WRITER_UNLOAD_TIMEOUT", "Prompt Writer could not confirm that its models released VRAM.");
+  throw handoffError("WRITER_UNLOAD_TIMEOUT", "Prompt Studio could not confirm that its models released VRAM.");
 }
 
 export function createVramHandoffCoordinator() {

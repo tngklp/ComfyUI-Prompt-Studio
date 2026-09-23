@@ -549,7 +549,7 @@ class ApiProviderBackendTests(unittest.TestCase):
             self.backend.preflight(model, assembled, context_profile="auto", kv_cache="auto", thinking=True)
         self.assertEqual(thinking.exception.code, "API_THINKING_UNAVAILABLE")
 
-    def test_generation_runs_through_shared_h3_pipeline_and_reports_provider_metrics(self):
+    def test_generation_runs_through_shared_pipeline_and_reports_provider_metrics(self):
         configured = self.backend.probe({
             "preset": "custom",
             "base_url": self.base_url,

@@ -2,7 +2,7 @@
 
 This guide is for Direct GGUF inside the ComfyUI extension. Standalone Local GGUF uses a selected `llama-server.exe`, not `llama-cpp-python`; see the [Standalone setup guide](../standalone/README.md#local-gguf).
 
-Direct GGUF loads a local multimodal model inside ComfyUI. Choose it when you want Writer to manage model loading, Context, KV cache, and unload without a separate model server.
+Direct GGUF loads a local multimodal model inside ComfyUI. Choose it when you want Prompt Studio to manage model loading, Context, KV cache, and unload without a separate model server.
 
 This is an optional advanced path. Most users should start with [Ollama](OLLAMA.md).
 
@@ -14,7 +14,7 @@ This is an optional advanced path. Most users should start with [Ollama](OLLAMA.
 - One supported model GGUF.
 - For image and video-reference modes, the matching multimodal projector (`mmproj`) from the same model class.
 
-A model without an active projector remains usable as text-only Direct GGUF. Writer keeps T2VA and Refine available, disables I2VA, FL2VA, L2VA, Reference, and Music 3, and shows why vision is unavailable.
+A model without an active projector remains usable as text-only Direct GGUF. Prompt Studio keeps T2VA and Refine available, disables I2VA, FL2VA, L2VA, Reference, and Music 3, and shows why vision is unavailable.
 
 Workflow safetensors, checkpoints, and text encoders are unrelated to the Direct prompt model.
 
@@ -26,7 +26,7 @@ Open PowerShell or Command Prompt in the ComfyUI Portable folder that contains `
 .\python_embeded\python.exe -m pip install --only-binary=:all: --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu130 "llama-cpp-python==0.3.35"
 ```
 
-Restart ComfyUI and open **H3 Prompt Writer > Settings > Direct GGUF**. Settings shows a supported installed package as **Runtime detected**.
+Restart ComfyUI and open **Prompt Studio > Settings > Direct GGUF**. Settings shows a supported installed package as **Runtime detected**.
 
 This preflight checks that `llama-cpp-python` is installed, its version is supported, and the Python module is available without importing the native runtime. Native compatibility and GPU execution are exercised only when a Direct model is actually loaded and used.
 
@@ -61,7 +61,7 @@ ComfyUI/models/LLM/
     └── mmproj-Qwen3VL-8B-Instruct-Q8_0.gguf
 ```
 
-Do not share a projector across incompatible model classes because the filenames happen to match. Writer reads the GGUF metadata to distinguish models from projectors, so a projector does not need `mmproj` in its filename. The filename is only an Extension compatibility hint when metadata cannot be read. Writer enables vision only when it finds one metadata-compatible projector for a model. A missing or ambiguous projector does not hide the model; it leaves the model available in text-only T2VA and Music3 modes and reports the pairing problem in Direct settings and Scan details.
+Do not share a projector across incompatible model classes because the filenames happen to match. Prompt Studio reads the GGUF metadata to distinguish models from projectors, so a projector does not need `mmproj` in its filename. The filename is only an Extension compatibility hint when metadata cannot be read. Prompt Studio enables vision only when it finds one metadata-compatible projector for a model. A missing or ambiguous projector does not hide the model; it leaves the model available in text-only T2VA and Music3 modes and reports the pairing problem in Direct settings and Scan details.
 
 Select **Refresh** after adding files. Expand **Scan details** if the model does not appear.
 
@@ -97,23 +97,23 @@ Qwen Thinking output is split from the final prompt whether the runtime returns 
 
 The validated Qwen adapter floor is `llama-cpp-python 0.3.35`; Gemma remains compatible with the existing 0.3.34 floor. If 0.3.34 is installed, Qwen is discoverable but not runtime-ready and Settings reports the required update before any weights are loaded.
 
-Direct sends videos as the ordered contact sheet shown in Writer. Native video input is not available through the current stable `llama-cpp-python` high-level path.
+Direct sends videos as the ordered contact sheet shown in Prompt Studio. Native video input is not available through the current stable `llama-cpp-python` high-level path.
 
 ## Runtime controls
 
 Direct exposes managed runtime controls in the ComfyUI extension. Open **Advanced** for KV cache, Generation budget, and reasoning effort.
 
 - **Context Auto** chooses the smallest tier that fits the assembled input, complete output budget, and a safety reserve. Gemma keeps its existing 8K/16K/24K choices; Qwen uses 16K/24K/32K/48K, capped by the GGUF's declared native context.
-- **Context Custom** accepts an exact token count. Writer does not snap it to a preset and rejects values above a known native context.
+- **Context Custom** accepts an exact token count. Prompt Studio does not snap it to a preset and rejects values above a known native context.
 - **KV cache Auto** uses the tested Q8 policy. F16 is available manually.
 - **Generation budget Auto** preserves the model and mode defaults. A preset or Custom value limits the complete generated response, including Thinking and the final prompt. Context preflight reserves that value before loading the model.
 - **Reasoning effort** appears only when the selected GGUF chat template declares accepted values. Auto keeps the model policy. A manual value is used only while Thinking is on.
-- A manual context is respected. Writer reports when the request needs a larger tier instead of silently changing it.
+- A manual context is respected. Prompt Studio reports when the request needs a larger tier instead of silently changing it.
 - Thinking with Auto reserves the full reasoning and final-output budget before choosing context.
 - Qwen text is counted before full load by a cached `vocab_only` tokenizer subprocess. It sets `n_gpu_layers=0` and hides CUDA, so preflight does not allocate model weights or GPU state.
 - Qwen visual input is budgeted from the exact prepared image or contact-sheet dimensions and projector patch/grid metadata. Missing dimensions use a conservative fallback instead of silently assuming a small fixed image cost. Response `usage.prompt_tokens` is not used as the visual-token count because Qwen-VL M-RoPE prompt positions can be much smaller than the projector embedding grid.
 
-The 48K automatic ceiling is intended for Prompt Writer workloads. Direct does not automatically request Qwen 3.6's advertised 128K context or its very large possible output budget.
+The 48K automatic ceiling is intended for Prompt Studio workloads. Direct does not automatically request Qwen 3.6's advertised 128K context or its very large possible output budget.
 
 Increasing context or using F16 KV consumes more VRAM. If preflight reports insufficient free VRAM, use a smaller model or release other GPU models.
 
@@ -158,4 +158,4 @@ writer_models:
 **Scan details** lists every searched folder. **Copy model path** copies the first
 search folder. Subfolders are scanned too. If several compatible projectors share
 one folder, move each model and its intended projector into its own subfolder.
-Writer will not guess which projector to use.
+Prompt Studio will not guess which projector to use.

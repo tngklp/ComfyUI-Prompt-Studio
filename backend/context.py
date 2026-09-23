@@ -273,7 +273,7 @@ def plan_context(
             message = (
                 "The selected Context cannot fit the complete Thinking request."
                 if thinking
-                else "This request does not leave enough context for a complete MiniMax prompt."
+                else "This request does not leave enough context for a complete prompt."
             )
         raise ContextPlanError(
             code,

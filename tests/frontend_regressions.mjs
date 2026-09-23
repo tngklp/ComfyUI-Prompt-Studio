@@ -32,7 +32,12 @@ const {
   unloadWriterModels,
   writerResidencyTargets,
 } = await import(`data:text/javascript;base64,${vramHandoffEncoded}`);
-const stateSource = await readFile(new URL("../web/studio_state.js", import.meta.url), "utf8");
+// studio_state.js imports the generation-target registry by relative path. The
+// base64 data: URL below has no module resolution base, so inline the registry
+// module into the source before encoding it.
+const registrySource = await readFile(new URL("../web/target_registry.js", import.meta.url), "utf8");
+const stateSource = (await readFile(new URL("../web/studio_state.js", import.meta.url), "utf8"))
+  .replace(/^import\s*\{[\s\S]*?\}\s*from\s*"\.\/target_registry\.js";\n?/m, `${registrySource}\n`);
 const stateEncoded = Buffer.from(stateSource).toString("base64");
 const {
   EXTERNAL_SERVER_STORAGE_KEY,
@@ -79,6 +84,9 @@ const settingsSource = await readFile(new URL("../web/settings.js", import.meta.
 const settingsEncoded = Buffer.from(settingsSource).toString("base64");
 const { settingsMarkup } = await import(`data:text/javascript;base64,${settingsEncoded}`);
 const mainSource = await readFile(new URL("../web/main.js", import.meta.url), "utf8");
+const defaultsSource = await readFile(new URL("../web/mode_defaults.js", import.meta.url), "utf8");
+const defaultsEncoded = Buffer.from(defaultsSource).toString("base64");
+const { MODE_DEFAULT_DRAFTS } = await import(`data:text/javascript;base64,${defaultsEncoded}`);
 const composerSource = await readFile(new URL("../web/media_composer.js", import.meta.url), "utf8");
 const styleModules = [
   "tokens",
@@ -97,6 +105,7 @@ const styleModules = [
   "prompts",
   "overlays",
   "music",
+  "target_select",
   "responsive",
 ];
 const styleSources = Object.fromEntries(await Promise.all(styleModules.map(async (name) => [
@@ -104,7 +113,7 @@ const styleSources = Object.fromEntries(await Promise.all(styleModules.map(async
   await readFile(new URL(`../web/styles/${name}.css`, import.meta.url), "utf8"),
 ])));
 const stylesSource = styleModules.map((name) => styleSources[name]).join("\n");
-const skinSource = ["tokens", "themes/dark", "themes/light", "shell", "workbench", "media", "composer", "settings", "models", "providers", "prompts", "overlays", "music", "responsive"]
+const skinSource = ["tokens", "themes/dark", "themes/light", "shell", "workbench", "media", "composer", "settings", "models", "providers", "prompts", "overlays", "music", "target_select", "responsive"]
   .map((name) => styleSources[name])
   .join("\n");
 const componentStyleNames = styleModules.filter((name) => !name.startsWith("themes/") && name !== "tokens");
@@ -113,11 +122,11 @@ const componentStyleNames = styleModules.filter((name) => !name.startsWith("them
 // Alpha colors and artwork/overlay/reference selectors are intentionally handled below.
 const HARDCODED_COLOR_WHITELIST = new Set([
   "#3b4048", "#484850", "#494951", "#4d4d55", "#4f4f57", "#595961", "#595962", "#62626b",
-  "#686871", "#6d6d76", "#707680", "#737b87", "#7f8d9d", "#ee7049", "#fff", "#fff0eb",
+  "#686871", "#6d6d76", "#707680", "#737b87", "#7f8d9d", "#a78bfa", "#fff", "#ece6ff",
 ]);
 
 const HARDCODED_COLOR_SPECIAL_CASE = /(?:rgba?|hsla?|gradient|shadow|backdrop|preview|reference|mark|asset|frame|drag|toast|spinner|primary-button|disabled|drop-before|drop-after)/i;
-const INTERFACE_FIXED_FONT_SELECTOR = /(?:h3ps-section-heading|h3ps-section-hint|h3ps-clear-control|h3ps-output-actions|h3ps-memory-action|h3ps-toggle-control|h3ps-primary-button|h3ps-settings-heading)/i;
+const INTERFACE_FIXED_FONT_SELECTOR = /(?:ps-section-heading|ps-section-hint|ps-clear-control|ps-output-actions|ps-memory-action|ps-toggle-control|ps-primary-button|ps-settings-heading)/i;
 
 function hardcodedColorRecords(source) {
   return [...source.matchAll(/#[0-9a-f]{3,8}\b|\b(?:white|black)(?=\s*[;,)])/gi)].map((match) => {
@@ -133,7 +142,7 @@ function fixedFontSizeViolations(source) {
     const selector = block[1].trim();
     for (const declaration of block[2].matchAll(/font-size\s*:\s*([^;}]*)/g)) {
       const value = declaration[1].trim();
-      const tokenized = /var\(--h3ps-(?:font|toast-font|interface-scale)/.test(value);
+      const tokenized = /var\(--ps-(?:font|toast-font|interface-scale)/.test(value);
       const relative = /^[-+]?\d*\.?\d+(?:em|rem|%)$/.test(value) || value === "0";
       if (!tokenized && !relative && !INTERFACE_FIXED_FONT_SELECTOR.test(selector)) {
         violations.push(`${selector} -> ${value}`);
@@ -158,10 +167,10 @@ test("frontend styles load as ordered modules with scoped dark and light themes"
   assert.ok(mainSource.indexOf('"settings"') < mainSource.indexOf('"models"'));
   assert.match(mainSource, /\.\/styles\/\$\{name\}\.css/);
   assert.doesNotMatch(mainSource, /\.\/skin\.css|\.\/styles\.css/);
-  assert.match(styleSources["themes/dark"], /--h3ps-bg:/);
-  assert.match(styleSources["themes/light"], /\.h3ps-root\[data-theme="light"\]\s*\{[\s\S]*--h3ps-bg:\s*#f5f7fa;/);
+  assert.match(styleSources["themes/dark"], /--ps-bg:/);
+  assert.match(styleSources["themes/light"], /\.ps-root\[data-theme="light"\]\s*\{[\s\S]*--ps-bg:\s*#f5f7fa;/);
   assert.doesNotMatch(styleSources["themes/light"], /(^|\n)\s*(?:html|body|:root)\b/);
-  assert.doesNotMatch(styleSources.tokens, /--h3ps-bg:/);
+  assert.doesNotMatch(styleSources.tokens, /--ps-bg:/);
 });
 
 test("API responses preserve structured server errors", async () => {
@@ -190,7 +199,7 @@ test("API responses replace non-JSON server errors with a readable fallback", as
 
   await assert.rejects(
     readApiResponse(response),
-    /H3 Prompt Writer request failed \(500\)\. The server returned a non-JSON response\./,
+    /Prompt Studio request failed \(500\)\. The server returned a non-JSON response\./,
   );
 });
 
@@ -199,7 +208,7 @@ test("API responses reject invalid success bodies without exposing parser errors
 
   await assert.rejects(
     readApiResponse(response),
-    /H3 Prompt Writer returned an invalid response \(200\)\. ComfyUI may still be restarting\./,
+    /Prompt Studio returned an invalid response \(200\)\. ComfyUI may still be restarting\./,
   );
 });
 
@@ -220,7 +229,7 @@ test("createSessionId preserves native randomUUID when available", () => {
   assert.equal(createSessionId({ randomUUID: () => expected }), expected);
 });
 
-test("VRAM handoff targets only Writer-managed Direct and retained Ollama models", () => {
+test("VRAM handoff targets only Prompt Studio-managed Direct and retained Ollama models", () => {
   assert.deepEqual(writerResidencyTargets({
     prompt_residency: {
       direct: { loaded: true, model_id: "writer.gguf" },
@@ -239,7 +248,7 @@ test("VRAM handoff targets only Writer-managed Direct and retained Ollama models
   assert.equal(isLocalOllamaHost("http://192.168.0.30:11434"), false);
 });
 
-test("VRAM handoff waits for targeted Writer models to leave residency", async () => {
+test("VRAM handoff waits for targeted Prompt Studio models to leave residency", async () => {
   const resident = {
     prompt_residency: {
       direct: { loaded: true, model_id: "writer.gguf" },
@@ -301,7 +310,7 @@ test("Auto VRAM skips empty ComfyUI and otherwise confirms stable /free release"
   assert.equal(freeCalls, 0);
 });
 
-test("Auto VRAM aborts Writer preparation when Queue wins the race", async () => {
+test("Auto VRAM aborts Prompt Studio preparation when Queue wins the race", async () => {
   let current = true;
   await assert.rejects(releaseComfyVramWhenIdle({
     getStatus: async () => ({
@@ -361,7 +370,7 @@ test("VRAM handoff shares preparation without replacing native Queue semantics",
   assert.equal(order.at(-1), "queue:6");
 });
 
-test("Queue invalidates Writer attempts synchronously and tracked requests remain awaitable", async () => {
+test("Queue invalidates Prompt Studio attempts synchronously and tracked requests remain awaitable", async () => {
   const coordinator = createVramHandoffCoordinator();
   const token = coordinator.beginWriterAttempt();
   assert.equal(coordinator.isWriterAttemptCurrent(token), true);
@@ -425,20 +434,20 @@ test("the first click outside the guides control closes its menu", () => {
 test("settings storage preserves the existing keys and schemas", () => {
   const storage = memoryStorage({
     [EXTERNAL_SERVER_STORAGE_KEY]: JSON.stringify({ url: "http://127.0.0.1:8080", model: "gemma.gguf" }),
-    [SYSTEM_PROMPT_STORAGE_KEY]: JSON.stringify({ standard: "Standard custom", reference: "Reference custom", music3: "Music custom" }),
+    [SYSTEM_PROMPT_STORAGE_KEY]: JSON.stringify({ base: "Base custom", ref: "Reference custom", lyrics: "Lyrics custom" }),
     [OLLAMA_MODEL_STORAGE_KEY]: "gemma4:12b",
   });
 
   assert.deepEqual(loadExternalServerConfig(storage), { url: "http://127.0.0.1:8080", model: "gemma.gguf" });
-  assert.deepEqual(loadCustomSystemPrompts(storage), { standard: "Standard custom", reference: "Reference custom", music3: "Music custom" });
+  assert.deepEqual(loadCustomSystemPrompts(storage), { base: "Base custom", ref: "Reference custom", lyrics: "Lyrics custom" });
   assert.equal(loadOllamaModel(storage), "gemma4:12b");
   saveExternalServerConfig(storage, { url: "http://localhost:8081", model: "other.gguf" });
-  saveCustomSystemPrompts(storage, { standard: "Updated" });
+  saveCustomSystemPrompts(storage, { base: "Updated" });
   saveOllamaModel(storage, "gemma4:27b");
 
   assert.deepEqual(storage.entries(), {
     [EXTERNAL_SERVER_STORAGE_KEY]: JSON.stringify({ url: "http://localhost:8081", model: "other.gguf" }),
-    [SYSTEM_PROMPT_STORAGE_KEY]: JSON.stringify({ standard: "Updated" }),
+    [SYSTEM_PROMPT_STORAGE_KEY]: JSON.stringify({ base: "Updated" }),
     [OLLAMA_MODEL_STORAGE_KEY]: "gemma4:27b",
   });
 });
@@ -496,7 +505,7 @@ test("API provider storage persists configuration but never secret values", () =
 
 test("exceptional generation notices persist until a workspace click", () => {
   assert.match(mainSource, /dismissOnWorkspaceClick = options\.dismissOnWorkspaceClick === true/);
-  assert.match(mainSource, /studio\.toastDismissOnWorkspaceClick && !event\.target\.closest\("\[data-h3ps-toast\]"\)/);
+  assert.match(mainSource, /studio\.toastDismissOnWorkspaceClick && !event\.target\.closest\("\[data-ps-toast\]"\)/);
   assert.match(mainSource, /format_repair_failure[\s\S]{0,500}dismissOnWorkspaceClick: true/);
 });
 
@@ -504,7 +513,7 @@ test("technical errors reuse workspace-click dismissal without closing on the op
   assert.match(mainSource, /details != null && durationMs == null/);
   assert.match(mainSource, /studio\.toastDismissOnWorkspaceClick = false/);
   assert.match(mainSource, /setTimeout\(\(\) => \{[\s\S]{0,300}studio\.toastDismissOnWorkspaceClick = dismissOnWorkspaceClick/);
-  assert.match(mainSource, /studio\.toastDismissOnWorkspaceClick && !event\.target\.closest\("\[data-h3ps-toast\]"\)/);
+  assert.match(mainSource, /studio\.toastDismissOnWorkspaceClick && !event\.target\.closest\("\[data-ps-toast\]"\)/);
   assert.doesNotMatch(mainSource, /data-toast-dismiss/);
 });
 
@@ -771,10 +780,10 @@ test("clear prompts removes brief and generated output while preserving lyrics a
   assert.match(mainSource, /data-clear-prompts><strong>Clear prompts<\/strong><small>Keep media<\/small>/);
   assert.match(mainSource, /data-clear-all><strong>Clear all<\/strong><small>Media and prompts<\/small>/);
   assert.match(mainSource, /if \(!await clearCurrentMedia\(\{ notify: false \}\)\) return;/);
-  assert.match(stylesSource, /\.h3ps-clear-control \{[^}]*display: inline-flex;[^}]*border-radius: 7px;/);
-  assert.match(stylesSource, /\.h3ps-clear-menu \{[^}]*right: -20px;[^}]*width: max-content;[^}]*max-width: calc\(100vw - 24px\);/);
-  assert.match(stylesSource, /\.h3ps-clear-menu button \{[^}]*display: grid;[^}]*min-height: calc\(42px \* var\(--h3ps-interface-scale\)\);/);
-  assert.match(stylesSource, /\.h3ps-clear-menu button strong \{[^}]*font-size: 1em;[^}]*letter-spacing: normal;/);
+  assert.match(stylesSource, /\.ps-clear-control \{[^}]*display: inline-flex;[^}]*border-radius: 7px;/);
+  assert.match(stylesSource, /\.ps-clear-menu \{[^}]*right: -20px;[^}]*width: max-content;[^}]*max-width: calc\(100vw - 24px\);/);
+  assert.match(stylesSource, /\.ps-clear-menu button \{[^}]*display: grid;[^}]*min-height: calc\(42px \* var\(--ps-interface-scale\)\);/);
+  assert.match(stylesSource, /\.ps-clear-menu button strong \{[^}]*font-size: 1em;[^}]*letter-spacing: normal;/);
 });
 
 test("custom contact sheet counts accept only whole values from 2 through 24", () => {
@@ -850,8 +859,8 @@ test("clean Ollama preference selects a ready Ollama model before a ready Direct
   }), ollama);
 });
 
-test("studio state owns model, runtime, lifecycle, and System Prompt settings", () => {
-  const storage = memoryStorage({ [SYSTEM_PROMPT_STORAGE_KEY]: JSON.stringify({ reference: "Custom reference" }) });
+test("studio state owns model, runtime, lifecycle, and system prompt resolution", () => {
+  const storage = memoryStorage({ [SYSTEM_PROMPT_STORAGE_KEY]: JSON.stringify({ ref: "Custom reference" }) });
   const state = createStudioState({ sessionId: "11111111-2222-4333-8444-555555555555", storage });
   state.contextProfile = "extended";
   state.kvCache = "q8";
@@ -865,12 +874,11 @@ test("studio state owns model, runtime, lifecycle, and System Prompt settings", 
   assert.deepEqual(state.promptResidency, { direct: null, ollama: [] });
   assert.equal(state.audioSupported, false);
   assert.equal(state.settingsProvider, "external");
-  assert.equal(state.settingsPromptProfile, "standard");
-  assert.equal(state.musicSystemPromptExpanded, false);
-  assert.equal(systemPromptProfile("Reference"), "reference");
-  assert.equal(systemPromptProfile("T2VA"), "standard");
-  assert.equal(systemPromptProfile("Music3"), "music3");
-  assert.equal(systemPromptProfile("Music3Lyrics"), "music3_lyrics");
+  // Profiles still resolve from the registry even though no editor exposes them.
+  assert.equal(systemPromptProfile("Reference"), "ref");
+  assert.equal(systemPromptProfile("T2VA"), "base");
+  assert.equal(systemPromptProfile("Music3"), "base");
+  assert.equal(systemPromptProfile("Music3Lyrics"), "lyrics");
   assert.equal(currentSystemPromptOverride(state, "Reference"), "Custom reference");
 
   selectModelState(state, { id: "direct-model", family: "gguf", capabilities: { audio: true } });
@@ -887,8 +895,8 @@ test("studio state owns model, runtime, lifecycle, and System Prompt settings", 
 });
 
 test("Reference assets replace one dropped file and append multiple dropped files", () => {
-  assert.match(mainSource, /class="h3ps-replace-asset"[^>]*data-replace-asset="\$\{asset\.id\}"[^>]*aria-label="Replace[^>]*>\$\{icon\("refresh", 12\)\}<\/button>/);
-  assert.match(mainSource, /class="h3ps-remove-asset"[^>]*data-remove-asset="\$\{asset\.id\}"/);
+  assert.match(mainSource, /class="ps-replace-asset"[^>]*data-replace-asset="\$\{asset\.id\}"[^>]*aria-label="Replace[^>]*>\$\{icon\("refresh", 12\)\}<\/button>/);
+  assert.match(mainSource, /class="ps-remove-asset"[^>]*data-remove-asset="\$\{asset\.id\}"/);
   assert.doesNotMatch(mainSource, /data-asset-menu|data-asset-menu-toggle|data-preview-asset|icon\("dots"/);
   assert.doesNotMatch(mainSource, /asset\.mode !== "Reference"[^\n]+data-replace-asset/);
   assert.match(mainSource, /input\.multiple = !replaceAssetId/);
@@ -905,22 +913,22 @@ test("Reference assets replace one dropped file and append multiple dropped file
 });
 
 test("media card overlays stay inside the thumbnail and below previews", () => {
-  assert.match(stylesSource, /\.h3ps-duration\s*\{[^}]*position:\s*absolute;[^}]*right:\s*7px;[^}]*bottom:\s*49px;/);
-  assert.match(stylesSource, /\.h3ps-replace-asset, \.h3ps-remove-asset \{[^}]*width:\s*22px;[^}]*height:\s*22px;/);
-  assert.match(stylesSource, /\.h3ps-root \.h3ps-replace-asset svg, \.h3ps-root \.h3ps-remove-asset svg \{ width:12px; height:12px; \}/);
-  assert.match(stylesSource, /\.h3ps-replace-asset \{[^}]*top:\s*32px;[^}]*right:\s*6px;/);
-  assert.match(stylesSource, /\.h3ps-asset:hover \.h3ps-replace-asset[^}]*opacity:\s*1;/);
-  assert.match(stylesSource, /\.h3ps-asset:hover \.h3ps-remove-asset[^}]*opacity:\s*1;/);
-  assert.doesNotMatch(stylesSource, /\.h3ps-asset:focus-within \.h3ps-(?:replace|remove)-asset/);
-  assert.doesNotMatch(stylesSource, /\.h3ps-more|\.h3ps-asset-menu/);
+  assert.match(stylesSource, /\.ps-duration\s*\{[^}]*position:\s*absolute;[^}]*right:\s*7px;[^}]*bottom:\s*49px;/);
+  assert.match(stylesSource, /\.ps-replace-asset, \.ps-remove-asset \{[^}]*width:\s*22px;[^}]*height:\s*22px;/);
+  assert.match(stylesSource, /\.ps-root \.ps-replace-asset svg, \.ps-root \.ps-remove-asset svg \{ width:12px; height:12px; \}/);
+  assert.match(stylesSource, /\.ps-replace-asset \{[^}]*top:\s*32px;[^}]*right:\s*6px;/);
+  assert.match(stylesSource, /\.ps-asset:hover \.ps-replace-asset[^}]*opacity:\s*1;/);
+  assert.match(stylesSource, /\.ps-asset:hover \.ps-remove-asset[^}]*opacity:\s*1;/);
+  assert.doesNotMatch(stylesSource, /\.ps-asset:focus-within \.ps-(?:replace|remove)-asset/);
+  assert.doesNotMatch(stylesSource, /\.ps-more|\.ps-asset-menu/);
 });
 
 test("Actions keeps media tools ordered and explains unavailable states without hiding Compose", async () => {
   const { mediaVisualDescriptor } = await import("../web/media_visual.js");
-  const markup = mainSource.slice(mainSource.indexOf('${splitMenuMarkup(icon, {label: "Actions"'), mainSource.indexOf('<p class="h3ps-section-hint"'));
+  const markup = mainSource.slice(mainSource.indexOf('${splitMenuMarkup(icon, {label: "Actions"'), mainSource.indexOf('<p class="ps-section-hint"'));
   assert.match(markup, /data-media-panel-action[\s\S]*data-open-composer[\s\S]*<hr data-compose-separator>[\s\S]*data-clear-media[\s\S]*data-clear-prompts[\s\S]*data-clear-all/);
   assert.doesNotMatch(markup, /data-open-composer[^>]*hidden|data-compose-separator[^>]*hidden/);
-  assert.match(stylesSource, /\.h3ps-clear-menu button:disabled \{ opacity: .45; cursor: default;/);
+  assert.match(stylesSource, /\.ps-clear-menu button:disabled \{ opacity: .45; cursor: default;/);
   const panel = {}, compose = {};
   const studio = { mode: "Reference", assets: [], requestBusy: false, root: {
     querySelector: selector => selector === "[data-media-panel-action]" ? panel : compose,
@@ -975,9 +983,9 @@ test("Media Composer creates an independent Picture from prepared visual sources
   assert.match(composerSource, /b\.disabled=!layoutAvailable\(b\.dataset\.value\)/);
   assert.match(composerSource, /pad=Math\.max\(10,c\?\.fontSize\*\.45\|\|0\)/);
   assert.match(composerSource, /requestAnimationFrame\(positionCaptionUI\)/);
-  assert.match(styleSources.composer, /caption-inline textarea\{[^}]*color:var\(--h3ps-canvas-text\)/);
-  assert.match(styleSources.composer, /\.h3ps-cmp-source\{cursor:grab/);
-  assert.doesNotMatch(styleSources.composer, /\.h3ps-cmp-source\{height:104px/);
+  assert.match(styleSources.composer, /caption-inline textarea\{[^}]*color:var\(--ps-canvas-text\)/);
+  assert.match(styleSources.composer, /\.ps-cmp-source\{cursor:grab/);
+  assert.doesNotMatch(styleSources.composer, /\.ps-cmp-source\{height:104px/);
 });
 
 test("VRAM retry waits for the required free-memory target", () => {
@@ -1097,7 +1105,7 @@ test("Generate and Refine payloads are built from state rather than Settings DOM
   state.kvCache = "q8";
   state.thinking = true;
   state.keepModelLoaded = true;
-  state.customSystemPrompts.reference = "Custom reference";
+  state.customSystemPrompts.ref = "Custom reference";
   state.externalServerConfig = { url: "http://127.0.0.1:8080", model: "gemma.gguf" };
   selectModelState(state, { id: "external-model", family: "external", capabilities: { audio: false } });
 
@@ -1191,7 +1199,7 @@ test("Ollama remote host controls stay collapsed and disclosure state survives r
   assert.match(mainSource, /studio\.promptResidency\.ollama = \[\]/);
   assert.match(mainSource, /data-ollama-storage-help \$\{studio\.ollamaStorageHelpOpen \? "open" : ""\}/);
   assert.match(mainSource, /studio\.ollamaStorageHelpOpen = !ollamaStorageSummary\.closest\("details"\)\.open/);
-  assert.match(skinSource, /\.h3ps-ollama-host-settings/);
+  assert.match(skinSource, /\.ps-ollama-host-settings/);
 });
 
 test("automatic Ollama refresh renders preserve the unsaved host field value", () => {
@@ -1240,7 +1248,7 @@ test("Settings separates providers, installed models, diagnostics, and verified 
   assert.match(markup, /API providers/);
   assert.match(markup, /data-installed-model/);
   assert.match(markup, /Installed models/);
-  assert.match(markup, /h3ps-installed-model-heading">Select Model/);
+  assert.match(markup, /ps-installed-model-heading">Select Model/);
   assert.doesNotMatch(markup, /Model used for Direct GGUF/);
   assert.match(markup, /data-model-refresh/);
   assert.match(markup, /data-model-scan-slot/);
@@ -1263,7 +1271,7 @@ test("Settings separates providers, installed models, diagnostics, and verified 
   assert.doesNotMatch(mainSource, /dependency !== "llama-cpp-python"/);
   assert.match(mainSource, /Troubleshooting ↗/);
   assert.match(mainSource, /refreshGGUFRuntimeDiagnostics\(\)/);
-  assert.match(markup, /h3ps-model-icon h3ps-provider-icon[^>]+data-provider-icon="direct"/);
+  assert.match(markup, /ps-model-icon ps-provider-icon[^>]+data-provider-icon="direct"/);
   assert.match(mainSource, /runtimeSettings\.hidden = provider !== "direct"/);
   assert.doesNotMatch(mainSource, /Context is sent explicitly with each request/);
   assert.match(mainSource, /studio\.selectedModel\?\.family === "gguf"/);
@@ -1273,16 +1281,16 @@ test("Settings separates providers, installed models, diagnostics, and verified 
   assert.match(mainSource, /data-copy-ollama-command/);
   assert.match(mainSource, /Choose a model for your GPU/);
   assert.match(mainSource, /<code>\$\{escapeHtml\(command\)\}<\/code>/);
-  assert.match(mainSource, /h3ps-ollama-model-state/);
+  assert.match(mainSource, /ps-ollama-model-state/);
   assert.match(mainSource, /is-detected/);
   assert.match(mainSource, /Detected/);
   assert.doesNotMatch(mainSource, /Recommended for your GPU|Lighter model|Larger model/);
   assert.match(mainSource, /data-ollama-model/);
   assert.match(mainSource, /data-ollama-add-model/);
   assert.match(mainSource, /\+ Add model/);
-  assert.match(skinSource, /h3ps-root \.h3ps-ollama-add-model-toggle[^}]+color: var\(--h3ps-accent-strong\)[^}]+font-size: var\(--h3ps-font-label-sm\)[^}]+cursor: pointer/);
-  assert.match(skinSource, /h3ps-ollama-model-select select[\s\S]{0,900}background-position: right 12px center[\s\S]{0,300}cursor: pointer/);
-  assert.match(skinSource, /h3ps-api-model-select select[\s\S]{0,900}background-position: right 12px center[\s\S]{0,300}cursor: pointer/);
+  assert.match(skinSource, /ps-root \.ps-ollama-add-model-toggle[^}]+color: var\(--ps-accent-strong\)[^}]+font-size: var\(--ps-font-label-sm\)[^}]+cursor: pointer/);
+  assert.match(skinSource, /ps-ollama-model-select select[\s\S]{0,900}background-position: right 12px center[\s\S]{0,300}cursor: pointer/);
+  assert.match(skinSource, /ps-api-model-select select[\s\S]{0,900}background-position: right 12px center[\s\S]{0,300}cursor: pointer/);
   assert.match(mainSource, /Choose another tested model/);
   assert.match(mainSource, /studio\.ollamaAddModelOpen = !studio\.ollamaAddModelOpen/);
   assert.match(mainSource, /Need models on another drive\?/);
@@ -1295,7 +1303,7 @@ test("Settings separates providers, installed models, diagnostics, and verified 
     assert.match(mainSource, new RegExp(`icon: "${providerIcon}"`));
     assert.match(skinSource, new RegExp(`data-provider-icon="${providerIcon}"`));
   }
-  assert.doesNotMatch(mainSource, /h3ps-provider-icon">[SO]<\/span>/);
+  assert.doesNotMatch(mainSource, /ps-provider-icon">[SO]<\/span>/);
   assert.match(mainSource, /data-api-provider-form/);
   assert.match(mainSource, /The key is sent once to the local H3 backend/);
   assert.match(mainSource, /Reasoning provider managed/);
@@ -1304,27 +1312,41 @@ test("Settings separates providers, installed models, diagnostics, and verified 
 });
 
 test("Reference defaults use plain Picture 1 and Video 1 text while canonical tags remain user-authored", () => {
-  assert.match(mainSource, /const REFERENCE_DEFAULT_BRIEF = ["`][^"`]*Picture 1[^"`]*Video 1[^"`]*["`]/s);
-  assert.doesNotMatch(mainSource.match(/const REFERENCE_DEFAULT_BRIEF = ["`][^"`]*["`]/s)?.[0] || "", /<Picture 1>|<Video 1>/);
-  assert.match(skinSource, /\.h3ps-assets:has\(> \.h3ps-empty-drop:only-child\) \{ grid-template-columns: minmax\(0, 1fr\); \}/);
+  // The Reference starter now lives in web/mode_defaults.js as the Reference key.
+  const brief = MODE_DEFAULT_DRAFTS.Reference.brief;
+  assert.match(brief, /Picture 1/);
+  assert.match(brief, /Video 1/);
+  // The brief is prose for a human, so it must not carry angle-bracket tags; the
+  // canonical <Picture n> form belongs in the generated prompt, not the brief.
+  assert.doesNotMatch(brief, /<Picture 1>|<Video 1>/);
+  assert.match(defaultsSource, /Reference: \{/);
+  assert.match(skinSource, /\.ps-assets:has\(> \.ps-empty-drop:only-child\) \{ grid-template-columns: minmax\(0, 1fr\); \}/);
 });
 
-test("Settings shows compact global System Prompt summaries and an on-demand editor", () => {
+test("Settings has no System Prompt surface at all", () => {
   const markup = settingsMarkup(() => "<svg></svg>");
-  assert.equal((markup.match(/h3ps-system-prompt-card/g) || []).length, 1);
-  assert.doesNotMatch(markup, /<small>H3 Prompt Writer<\/small>/);
-  assert.match(markup, /Prompt behavior · shared by all providers/);
-  assert.match(markup, /data-system-prompt-overview/);
-  assert.match(markup, /data-system-prompt-summary-status="standard"/);
-  assert.match(markup, /data-system-prompt-summary-status="reference"/);
-  assert.match(markup, /data-system-prompt-editor hidden/);
-  assert.match(markup, /data-system-prompt-back/);
-  assert.match(markup, /data-system-prompt-profile="standard"/);
-  assert.match(markup, /data-system-prompt-profile="reference"/);
-  assert.match(markup, /data-system-prompt-panel="standard"/);
-  assert.match(markup, /data-system-prompt-panel="reference"[^>]*hidden/);
-  assert.match(markup, /data-system-prompt="standard"/);
-  assert.match(markup, /data-system-prompt="reference"/);
+  assert.doesNotMatch(markup, /<small>Prompt Studio<\/small>/);
+  // The card and its drafts action are both gone.
+  assert.doesNotMatch(markup, /ps-system-prompt-card/);
+  assert.doesNotMatch(markup, /ps-draft-defaults-action/);
+  assert.doesNotMatch(markup, /Restore default drafts/);
+  assert.doesNotMatch(markup, /Prompt behavior/);
+  // Every editor hook is gone too.
+  for (const hook of [
+    "data-system-prompt-overview",
+    "data-system-prompt-editor",
+    "data-system-prompt-back",
+    "data-system-prompt-profile",
+    "data-system-prompt-panel",
+    "data-system-prompt=",
+    "data-restore-default-drafts",
+    "data-system-prompt-summary-status",
+    "data-system-prompt-reset",
+  ]) {
+    assert.doesNotMatch(markup, new RegExp(hook), `${hook} should no longer be rendered`);
+  }
+  assert.doesNotMatch(markup, /data-draft-defaults-action/);
+  assert.doesNotMatch(mainSource, /restoreDefaultDrafts|disarmDraftDefaults/);
   assert.doesNotMatch(markup, /data-keep-loaded/);
   assert.doesNotMatch(markup, /data-comfy-memory-action/);
   assert.match(mainSource, /data-thinking/);
@@ -1372,14 +1394,14 @@ test("Settings shows compact global System Prompt summaries and an on-demand edi
   assert.match(mainSource, /overrideCount = Number\(studio\.kvCache !== "auto"\)/);
   assert.match(mainSource, /Number\.isInteger\(studio\.generationBudgetTokens\)/);
   assert.match(mainSource, /overrideCount === 1 \? "" : "s"/);
-  assert.match(stylesSource, /\.h3ps-runtime-picker \{ position:relative/);
-  assert.match(stylesSource, /--h3ps-runtime-field-width:132px/);
-  assert.match(stylesSource, /\.h3ps-runtime-custom input \{[^}]*width:12ch[^}]*appearance:textfield/);
+  assert.match(stylesSource, /\.ps-runtime-picker \{ position:relative/);
+  assert.match(stylesSource, /--ps-runtime-field-width:132px/);
+  assert.match(stylesSource, /\.ps-runtime-custom input \{[^}]*width:12ch[^}]*appearance:textfield/);
   assert.match(stylesSource, /::-webkit-inner-spin-button[^}]*appearance:none/);
   assert.match(stylesSource, /top:calc\(100% \+ 5px\)/);
-  assert.match(stylesSource, /\.h3ps-direct-advanced > summary:hover/);
-  assert.match(stylesSource, /\.h3ps-runtime-control \{[^}]*border:0;[^}]*background:transparent;/);
-  assert.match(stylesSource, /\.h3ps-direct-advanced \{[^}]*border:0;[^}]*border-top:/);
+  assert.match(stylesSource, /\.ps-direct-advanced > summary:hover/);
+  assert.match(stylesSource, /\.ps-runtime-control \{[^}]*border:0;[^}]*background:transparent;/);
+  assert.match(stylesSource, /\.ps-direct-advanced \{[^}]*border:0;[^}]*border-top:/);
   assert.match(mainSource, /const availableContexts = model\.context_profiles/);
   assert.match(mainSource, /studio\.directContextProfile = "auto"/);
   assert.match(mainSource, /button\.disabled = unavailable/);
@@ -1390,30 +1412,27 @@ test("Settings shows compact global System Prompt summaries and an on-demand edi
   assert.match(mainSource, /refine\(buildRefinePayload\(studio/);
 });
 
-test("Settings owns a two-click restore for all mode draft defaults", () => {
-  const markup = settingsMarkup(() => "<svg></svg>");
-  assert.match(markup, /data-restore-default-drafts/);
-  assert.match(markup, /Restore default drafts/);
+test("built-in mode drafts remain the source of default briefs and prompts", () => {
+  // The "Restore default drafts" action was removed with the Settings card, but
+  // the built-in drafts it restored are still what a fresh session starts from.
+  // They now live in web/mode_defaults.js, keyed by mode id.
+  assert.doesNotMatch(mainSource, /data-restore-default-drafts|restoreDefaultDrafts/);
+  assert.doesNotMatch(settingsMarkup(() => "<svg></svg>"), /Restore default drafts/);
   assert.doesNotMatch(mainSource, /data-draft-reset/);
-  assert.match(mainSource, /MODE_DEFAULT_DRAFTS/);
-  assert.match(mainSource, /T2VA:[\s\S]{0,900}rooftop greenhouse/);
-  assert.match(mainSource, /I2VA:[\s\S]{0,1200}<Picture 1>/);
-  assert.match(mainSource, /FL2VA:[\s\S]{0,1400}<Picture 2>/);
-  assert.match(mainSource, /L2VA:[\s\S]{0,1200}final composition established by <Picture 1>/);
+  assert.match(mainSource, /from "\.\/mode_defaults\.js"/);
+  assert.match(mainSource, /function defaultModeDraft\(mode\) \{\s*return defaultModeDraftFor\(mode\);/);
+  assert.match(defaultsSource, /T2VA:[\s\S]{0,900}rooftop greenhouse/);
+  assert.match(defaultsSource, /I2VA:[\s\S]{0,1200}<Picture 1>/);
+  assert.match(defaultsSource, /FL2VA:[\s\S]{0,1400}<Picture 2>/);
+  assert.match(defaultsSource, /L2VA:[\s\S]{0,1200}final composition established by <Picture 1>/);
   assert.match(mainSource, /saveCurrentModeDraft\(\)/);
-  assert.match(mainSource, /Click again to confirm/);
-  assert.match(mainSource, /setTimeout\(disarmDraftDefaults, 5000\)/);
-  assert.match(mainSource, /studio\.modeDrafts = \{\}/);
-  assert.match(mainSource, /mode === "Reference"[\s\S]{0,120}REFERENCE_DEFAULT_BRIEF[\s\S]{0,80}SAMPLE_PROMPT/);
-  assert.match(mainSource, /draftDefaultsArmed && !event\.target\.closest\("\[data-restore-default-drafts\]"\)/);
   assert.doesNotMatch(mainSource, /data-modified-badge/);
   assert.doesNotMatch(mainSource, /Replace the modified prompt with a new generation/);
   assert.doesNotMatch(mainSource, /referenceDraft/);
-  assert.match(stylesSource, /h3ps-draft-defaults-action/);
 });
 
 test("media labels insert references at the last editor caret without opening the inspector", () => {
-  assert.doesNotMatch(mainSource, /data-reference-insert-toggle|h3ps-edit-asset/);
+  assert.doesNotMatch(mainSource, /data-reference-insert-toggle|ps-edit-asset/);
   assert.match(mainSource, /data-media-tag/);
   assert.match(mainSource, /insertReferenceAtCaret\(target\.editor, reference, target\.caret\)/);
   assert.match(mainSource, /\["focus", "click", "keyup", "select", "input"\]/);
@@ -1432,8 +1451,8 @@ test("Music 3 drafts and payload keep lyrics separate from H3 state", () => {
   });
   const state = createStudioState({ sessionId: "music-session", storage });
   state.mode = "Music3";
-  state.customSystemPrompts.music3 = "Return the requested custom music format.";
-  state.customSystemPrompts.music3_lyrics = "Return only the revised lyrics.";
+  state.customSystemPrompts.base = "Return the requested custom music format.";
+  state.customSystemPrompts.lyrics = "Return only the revised lyrics.";
   selectModelState(state, { id: "music-model", family: "gguf", capabilities: { audio: false } });
   const payload = buildGeneratePayload(state, { creativeBrief: "Dry funk at precisely 111 BPM without claps", lyrics: "[Chorus]\nOpen the gate", seed: 7 });
   assert.equal(payload.mode, "Music3");
@@ -1461,23 +1480,23 @@ test("Music 3 drafts and payload keep lyrics separate from H3 state", () => {
   });
   assert.equal(lyricsWithoutBrief.creative_brief, "");
   assert.equal(lyricsWithoutBrief.use_music_brief, false);
-  assert.match(mainSource, /data-workspace="video"/);
-  assert.match(mainSource, /data-workspace="music"/);
+  // The target indicator is rendered from the registry, and is the only target
+  // selector; the workspace tabs it replaced are gone.
+  assert.match(mainSource, /function targetCategoryGroups\(targets\)/);
+  assert.match(mainSource, /data-target-select-id="\$\{escapeHtml\(target\.id\)\}"/);
+  assert.doesNotMatch(mainSource, /workspaceButtonsMarkup|ps-workspaces/);
   assert.match(mainSource, /data-music-brief/);
   assert.match(mainSource, /data-music-lyrics/);
   assert.doesNotMatch(mainSource, /data-music-prompt-toggle/);
-  assert.match(mainSource, /data-music-system-prompt-profile="music3"/);
-  assert.match(mainSource, /data-music-system-prompt-profile="music3_lyrics"/);
-  assert.match(mainSource, /data-music-system-prompt-toggle aria-expanded="false"/);
-  assert.match(mainSource, /data-music-system-prompt-summary>Default/);
-  assert.match(mainSource, /data-music-system-prompt-details hidden/);
+  // The Music system prompt editor was removed along with the Settings one.
+  assert.doesNotMatch(mainSource, /data-music-system-prompt/);
+  assert.doesNotMatch(mainSource, /musicSystemPromptPanelMarkup|setMusicSystemPrompt/);
+  assert.doesNotMatch(mainSource, /data-system-prompt/);
   assert.doesNotMatch(mainSource, /Prompt behavior · shared by all providers/);
-  assert.match(mainSource, /Object\.hasOwn\(studio\.customSystemPrompts, "music3"\)[\s\S]{0,140}Object\.hasOwn\(studio\.customSystemPrompts, "music3_lyrics"\)[\s\S]{0,100}"Custom"/);
-  assert.match(mainSource, /data-system-prompt="\$\{profile\}"/);
-  assert.match(mainSource, /musicSystemPromptPanelMarkup\("music3", "Caption"/);
-  assert.match(mainSource, /musicSystemPromptPanelMarkup\("music3_lyrics", "Lyrics"/);
-  assert.match(mainSource, /data-system-prompt-reset="\$\{profile\}" hidden>Restore default/);
-  assert.match(mainSource, /### Global Metadata[\s\S]*### Vocal Details[\s\S]*### Arrangement/);
+  // Stored overrides still flow into the payload even though nothing edits them.
+  assert.match(stateSource, /customSystemPrompts: loadCustomSystemPrompts\(storage\)/);
+  assert.match(stateSource, /Object\.hasOwn\(state\.customSystemPrompts, profile\)/);
+  assert.match(defaultsSource, /### Global Metadata[\s\S]*### Vocal Details[\s\S]*### Arrangement/);
   assert.doesNotMatch(mainSource, /global_metadata:/);
   assert.match(mainSource, /Refine caption/);
   assert.match(mainSource, /Generated caption/);
@@ -1507,16 +1526,20 @@ test("active requests block add, reorder, and mode switching", () => {
 
 test("text-only Direct UI disables visual modes and explains the fallback", () => {
   assert.match(mainSource, /function syncModeAvailability\(\)/);
-  assert.match(mainSource, /Text-only model · T2VA and Music3 available/);
-  assert.match(mainSource, /Switched to T2VA/);
+  // The available-mode list is derived from the registry, not hardcoded.
+  assert.match(mainSource, /Text-only model · \$\{escapeHtml\(textOnlyModeLabels\(\)\)\} available/);
+  assert.doesNotMatch(mainSource, /Text-only model · T2VA and Music3 available/);
+  // The fallback toast is registry-driven, not a hardcoded mode name.
+  assert.doesNotMatch(mainSource, /Switched to T2VA/);
+  assert.match(mainSource, /if \(switchedToTextOnlyMode && !studio\.preferencesRestoring\)[\s\S]{0,120}showToast\(\s*"Switched mode",[\s\S]{0,200}modeData\(studio\.mode\)\.title/);
   assert.match(mainSource, /if \(!generationModeIsAvailable\(\)\) return/);
-  assert.match(stylesSource, /\.h3ps-modes button:disabled/);
-  assert.match(skinSource, /\.h3ps-workspaces button:disabled/);
+  assert.match(stylesSource, /\.ps-modes button:disabled/);
+  assert.match(skinSource, /\.ps-target-indicator-button/);
 });
 
-test("closed Prompt Writer does not advertise an active modal", () => {
-  assert.match(mainSource, /<section class="h3ps-modal" role="dialog" aria-label="H3 Prompt Writer" hidden>/);
-  assert.doesNotMatch(mainSource, /<section class="h3ps-modal" role="dialog" aria-modal="true"/);
+test("closed Prompt Studio does not advertise an active modal", () => {
+  assert.match(mainSource, /<section class="ps-modal" role="dialog" aria-label="Prompt Studio" hidden>/);
+  assert.doesNotMatch(mainSource, /<section class="ps-modal" role="dialog" aria-modal="true"/);
   assert.match(mainSource, /function openStudio\(\)[\s\S]{0,500}modal\.hidden = false;[\s\S]{0,120}modal\.setAttribute\("aria-modal", "true"\)/);
   assert.match(mainSource, /function closeStudio\(\)[\s\S]{0,500}modal\.removeAttribute\("aria-modal"\);[\s\S]{0,100}modal\.hidden = true;/);
 });
@@ -1528,11 +1551,11 @@ test("theme selection is scoped, persisted, and exposed in the main header", () 
   assert.match(mainSource, /icon\(light \? "moon" : "sun", 17\)/);
   assert.match(mainSource, /studio\.root\.dataset\.theme = studio\.theme/);
   assert.match(mainSource, /setTheme\(studio\.theme === "light" \? "dark" : "light"\)/);
-  assert.match(styleSources["themes/dark"], /\.h3ps-root\s*\{[\s\S]*--h3ps-bg:\s*#09090a;[\s\S]*color-scheme:\s*dark;/);
-  assert.match(styleSources["themes/light"], /\.h3ps-root\[data-theme="light"\]\s*\{[\s\S]*--h3ps-text:\s*#1f2935;[\s\S]*color-scheme:\s*light;/);
-  assert.match(styleSources.settings, /background:\s*var\(--h3ps-settings-header\)/);
-  assert.match(styleSources.workbench, /background:\s*var\(--h3ps-output-surface\)/);
-  assert.match(styleSources.settings, /background:\s*var\(--h3ps-field\)/);
+  assert.match(styleSources["themes/dark"], /\.ps-root\s*\{[\s\S]*--ps-bg:\s*#09090a;[\s\S]*color-scheme:\s*dark;/);
+  assert.match(styleSources["themes/light"], /\.ps-root\[data-theme="light"\]\s*\{[\s\S]*--ps-text:\s*#1f2935;[\s\S]*color-scheme:\s*light;/);
+  assert.match(styleSources.settings, /background:\s*var\(--ps-settings-header\)/);
+  assert.match(styleSources.workbench, /background:\s*var\(--ps-output-surface\)/);
+  assert.match(styleSources.settings, /background:\s*var\(--ps-field\)/);
 });
 
 test("theme maintenance guard keeps component colors on the token path", () => {
@@ -1545,10 +1568,10 @@ test("theme maintenance guard keeps component colors on the token path", () => {
     }
   }
   assert.deepEqual(colorViolations, [], "new opaque component colors need a theme token or an explicit special-case whitelist");
-  assert.match(styleSources.tokens, /--h3ps-accent:\s*#e8613c;/);
-  assert.doesNotMatch(styleSources["themes/dark"], /--h3ps-accent:/);
-  assert.match(styleSources["themes/light"], /--h3ps-surface-raised:\s*var\(--h3ps-surface\);/);
-  assert.match(styleSources["themes/light"], /--h3ps-border-control:\s*var\(--h3ps-border\);/);
+  assert.match(styleSources.tokens, /--ps-accent:\s*#a78bfa;/);
+  assert.doesNotMatch(styleSources["themes/dark"], /--ps-accent:/);
+  assert.match(styleSources["themes/light"], /--ps-surface-raised:\s*var\(--ps-surface\);/);
+  assert.match(styleSources["themes/light"], /--ps-border-control:\s*var\(--ps-border\);/);
 });
 test("interface size is token-based, persisted, and exposed as a header slider", () => {
   const markup = settingsMarkup(() => "");
@@ -1558,32 +1581,35 @@ test("interface size is token-based, persisted, and exposed as a header slider",
   assert.match(mainSource, /INTERFACE_SIZES\[Number\(event\.target\.value\)\]/);
   assert.match(mainSource, /setAttribute\("aria-valuetext", `\$\{size\}%`\)/);
   assert.match(mainSource, /studio\.root\.dataset\.interfaceSize = size/);
-  assert.match(styleSources.tokens, /--h3ps-interface-scale:\s*1;/);
-  assert.match(styleSources.tokens, /\[data-interface-size="110"\][^}]*--h3ps-interface-scale:\s*1\.1/);
-  assert.match(styleSources.tokens, /\[data-interface-size="120"\][^}]*--h3ps-interface-scale:\s*1\.2/);
-  assert.match(styleSources.tokens, /\[data-interface-size="125"\][^}]*--h3ps-interface-scale:\s*1\.25/);
-  assert.match(styleSources.tokens, /--h3ps-font-body:\s*calc\(12px \* var\(--h3ps-interface-scale\)\)/);
-  assert.match(styleSources.foundation, /--h3ps-icon-size\) \* var\(--h3ps-interface-scale\)/);
-  assert.match(styleSources.tokens, /--h3ps-interface-scale-soft:\s*1;/);
-  assert.match(styleSources.tokens, /\[data-interface-size="125"\][^}]*--h3ps-interface-scale-soft:\s*1\.125/);
-  assert.match(styleSources.settings, /\.h3ps-settings-heading > \.h3ps-secondary-button \{[^}]*height:calc\(30px \* var\(--h3ps-interface-scale-soft\)\);[^}]*font-size:calc\(10\.5px \* var\(--h3ps-interface-scale-soft\)\);/);
-  assert.match(styleSources.workbench, /\.h3ps-output-actions \.h3ps-secondary-button \{[^}]*height: 34px;[^}]*font-size: 11px;/);
-  assert.match(styleSources.workbench, /\.h3ps-memory-action \{[^}]*height: 30px;[^}]*font-size: 10px;/);
-  assert.match(styleSources.workbench, /\.h3ps-toggle-control \{[^}]*min-height: 28px;[^}]*font-size: 10\.5px;/);
-  assert.match(styleSources.workbench, /\.h3ps-primary-button \{[^}]*height: 36px;[^}]*font-size: 10\.5px;/);
-  assert.match(styleSources.workbench, /\.h3ps-section-heading strong \{ font-size: 15px; \}/);
-  assert.match(styleSources.shell, /\.h3ps-guide-menu \{[^}]*background: var\(--h3ps-popover\)/);
-  assert.match(styleSources.shell, /\.h3ps-guide-menu a:hover \{ background: var\(--h3ps-menu-hover\); \}/);
-  assert.match(styleSources.tokens, /--h3ps-toast-scale:\s*calc\(1\.25 \* var\(--h3ps-interface-scale\)\)/);
-  assert.match(styleSources.overlays, /min-width:\s*min\(var\(--h3ps-toast-min-width\), calc\(100vw - 24px\)\)/);
-  assert.match(styleSources.overlays, /font-size:\s*var\(--h3ps-toast-font-title\)/);
-  assert.match(styleSources.workbench, /\.h3ps-spinner \{[^}]*display:inline-block;[^}]*animation: h3ps-spin \.7s linear infinite;/);
-  assert.match(styleSources.responsive, /prefers-reduced-motion:[^)]+\)[\s\S]*\.h3ps-root \.h3ps-spinner \{[^}]*animation-duration: \.7s !important;[^}]*animation-iteration-count: infinite !important;/);
-  assert.doesNotMatch(styleSources.shell, /h3ps-guide-menu a:hover[^}]*rgba\(255,\s*255,\s*255/);
-  assert.doesNotMatch(styleSources.models, /h3ps-direct-advanced > summary:hover[^}]*rgba\(255,\s*255,\s*255/);
-  assert.doesNotMatch(styleSources.providers, /h3ps-runtime-menu button:hover[^}]*rgba\(255,\s*255,\s*255/);
-  assert.doesNotMatch(styleSources.overlays, /h3ps-model-setup-row:hover[^}]*rgba\(255,\s*255,\s*255/);
-  assert.match(styleSources.media, /\.h3ps-asset, \.h3ps-add-asset \{[^}]*height:\s*150px;/);
+  assert.match(styleSources.tokens, /--ps-interface-scale:\s*1;/);
+  assert.match(styleSources.tokens, /\[data-interface-size="110"\][^}]*--ps-interface-scale:\s*1\.1/);
+  assert.match(styleSources.tokens, /\[data-interface-size="120"\][^}]*--ps-interface-scale:\s*1\.2/);
+  assert.match(styleSources.tokens, /\[data-interface-size="125"\][^}]*--ps-interface-scale:\s*1\.25/);
+  assert.match(styleSources.tokens, /--ps-font-body:\s*calc\(12px \* var\(--ps-interface-scale\)\)/);
+  assert.match(styleSources.foundation, /--ps-icon-size\) \* var\(--ps-interface-scale\)/);
+  assert.match(styleSources.tokens, /--ps-interface-scale-soft:\s*1;/);
+  assert.match(styleSources.tokens, /\[data-interface-size="125"\][^}]*--ps-interface-scale-soft:\s*1\.125/);
+  assert.match(styleSources.settings, /\.ps-settings-heading > \.ps-secondary-button \{[^}]*height:calc\(30px \* var\(--ps-interface-scale-soft\)\);[^}]*font-size:calc\(10\.5px \* var\(--ps-interface-scale-soft\)\);/);
+  assert.match(styleSources.workbench, /\.ps-output-actions \.ps-secondary-button \{[^}]*height: 34px;[^}]*font-size: 11px;/);
+  assert.match(styleSources.workbench, /\.ps-memory-action \{[^}]*height: 30px;[^}]*font-size: 10px;/);
+  assert.match(styleSources.workbench, /\.ps-toggle-control \{[^}]*min-height: 28px;[^}]*font-size: 10\.5px;/);
+  assert.match(styleSources.workbench, /\.ps-primary-button \{[^}]*height: 36px;[^}]*font-size: 10\.5px;/);
+  assert.match(styleSources.workbench, /\.ps-section-heading strong \{ font-size: 15px; \}/);
+  // The header guide dropdown was removed; the shared button rule it used stays,
+  // because the header Settings button still carries .ps-guide-button.
+  assert.doesNotMatch(styleSources.shell, /\.ps-guide-menu/);
+  assert.doesNotMatch(styleSources.shell, /\.ps-guide-picker/);
+  assert.match(styleSources.shell, /\.ps-guide-button,/);
+  assert.match(styleSources.tokens, /--ps-toast-scale:\s*calc\(1\.25 \* var\(--ps-interface-scale\)\)/);
+  assert.match(styleSources.overlays, /min-width:\s*min\(var\(--ps-toast-min-width\), calc\(100vw - 24px\)\)/);
+  assert.match(styleSources.overlays, /font-size:\s*var\(--ps-toast-font-title\)/);
+  assert.match(styleSources.workbench, /\.ps-spinner \{[^}]*display:inline-block;[^}]*animation: ps-spin \.7s linear infinite;/);
+  assert.match(styleSources.responsive, /prefers-reduced-motion:[^)]+\)[\s\S]*\.ps-root \.ps-spinner \{[^}]*animation-duration: \.7s !important;[^}]*animation-iteration-count: infinite !important;/);
+  assert.doesNotMatch(styleSources.shell, /ps-guide-menu a:hover[^}]*rgba\(255,\s*255,\s*255/);
+  assert.doesNotMatch(styleSources.models, /ps-direct-advanced > summary:hover[^}]*rgba\(255,\s*255,\s*255/);
+  assert.doesNotMatch(styleSources.providers, /ps-runtime-menu button:hover[^}]*rgba\(255,\s*255,\s*255/);
+  assert.doesNotMatch(styleSources.overlays, /ps-model-setup-row:hover[^}]*rgba\(255,\s*255,\s*255/);
+  assert.match(styleSources.media, /\.ps-asset, \.ps-add-asset \{[^}]*height:\s*150px;/);
   assert.doesNotMatch(stylesSource, /\.is-large-text|text-large\.css|zoom:/);
   assert.doesNotMatch(styleSources["themes/dark"] + styleSources["themes/light"], /interface-size|interface-scale/);
 });
@@ -1609,19 +1635,34 @@ test("theme and interface size preferences remain independent at both endpoints"
 });
 test("the current launcher replaces stale duplicate extension launchers", () => {
   assert.match(mainSource, /const LAUNCHER_SCHEMA_VERSION = "2"/);
-  assert.match(mainSource, /existingLauncher\?\.dataset\.h3psLauncherVersion === LAUNCHER_SCHEMA_VERSION/);
+  assert.match(mainSource, /existingLauncher\?\.dataset\.psLauncherVersion === LAUNCHER_SCHEMA_VERSION/);
   assert.match(mainSource, /existingLauncher\?\.remove\(\)/);
-  assert.match(mainSource, /launcher\.dataset\.h3psLauncherVersion = LAUNCHER_SCHEMA_VERSION/);
+  assert.match(mainSource, /launcher\.dataset\.psLauncherVersion = LAUNCHER_SCHEMA_VERSION/);
+});
+
+test("the floating launcher is square, so the tile matches its icon", () => {
+  // The mark is a 1:1 squircle rendered with `object-fit: contain`. A wider button
+  // letterboxed it and read as a stretched control with slack on both sides.
+  const rule = /\.ps-floating-launcher\s*\{([^}]*)\}/.exec(styleSources.foundation);
+  assert.ok(rule, "the launcher rule is missing from foundation.css");
+  const width = /width:\s*(\d+)px/.exec(rule[1]);
+  const height = /height:\s*(\d+)px/.exec(rule[1]);
+  assert.ok(width, "the launcher declares no width");
+  assert.ok(height, "the launcher declares no height");
+  assert.equal(width[1], height[1], "the launcher must be square");
+  // The picker's brand mark is the same size, so the two tiles read as one system.
+  assert.match(styleSources.target_select, /\.ps-target-select-heading \.ps-brand-mark[\s\S]{0,140}width: calc\(52px \* var\(--ps-interface-scale\)\)/);
 });
 
 test("workbench exposes responsive stacking and layered keyboard navigation", () => {
-  assert.match(styleSources.responsive, /@media \(max-width: 920px\)[\s\S]+\.h3ps-workspace \{[\s\S]+grid-template-columns: 1fr;[\s\S]+overflow-y: auto;/);
-  assert.match(styleSources.shell, /\.h3ps-modal > \* \{ min-width: 0; \}/);
-  assert.match(styleSources.responsive, /@media \(max-width: 920px\)[\s\S]+\.h3ps-header \{ flex-wrap: wrap; \}/);
+  assert.match(styleSources.responsive, /@media \(max-width: 920px\)[\s\S]+\.ps-workspace \{[\s\S]+grid-template-columns: 1fr;[\s\S]+overflow-y: auto;/);
+  assert.match(styleSources.shell, /\.ps-modal > \* \{ min-width: 0; \}/);
+  assert.match(styleSources.responsive, /@media \(max-width: 920px\)[\s\S]+\.ps-header \{ flex-wrap: wrap; \}/);
   assert.match(styleSources.responsive, /@media \(prefers-reduced-motion: reduce\)/);
-  assert.match(mainSource, /aria-expanded="false" data-guide-toggle/);
+  // The header guide dropdown was removed together with the "Official guides" button.
+  assert.doesNotMatch(mainSource, /data-guide-toggle|data-guide-menu|Official guides|isGuideMenuInteraction|getGuides/);
   assert.doesNotMatch(mainSource, /role="(?:menu|menuitem|listbox|option)"|aria-haspopup="menu"/);
-  assert.match(aspectRatioMarkup(()=>""), /class="h3ps-choice-menu h3ps-aspect-menu"[^>]*role="group"/);
+  assert.match(aspectRatioMarkup(()=>""), /class="ps-choice-menu ps-aspect-menu"[^>]*role="group"/);
   assert.match(aspectRatioMarkup(()=>""), /aria-pressed="false"\s+data-aspect="16:9"/);
   assert.match(mainSource, /role="status" aria-live="polite" aria-atomic="true" data-status/);
   assert.match(mainSource, /if \(event\.key === "Tab"\)[\s\S]{0,1000}focusable/);
@@ -1634,15 +1675,15 @@ test("runtime pickers and the verified-model dialog keep keyboard state in sync"
   assert.match(mainSource, /else if \(runtimeMenu\) setRuntimeMenuOpen\(runtimeMenu\.dataset\.runtimeMenu, false, true\)/);
   assert.match(mainSource, /data-other-models-backdrop[^>]*hidden/);
   assert.match(mainSource, /role="dialog" aria-modal="true" aria-label="Other verified models"/);
-  assert.match(styleSources.overlays, /\.h3ps-other-models-backdrop\s*\{[^}]*position:\s*fixed;[^}]*z-index:\s*119;/);
+  assert.match(styleSources.overlays, /\.ps-other-models-backdrop\s*\{[^}]*position:\s*fixed;[^}]*z-index:\s*119;/);
   assert.doesNotMatch(styleSources.overlays, /100vmax/);
 });
 
 test("focus styling stays visible for controls without outlining the dialog shell", () => {
-  assert.match(styleSources.foundation, /\.h3ps-root \.h3ps-modal:focus,[\s\S]{0,80}\.h3ps-root \.h3ps-modal:focus-visible\s*\{\s*outline:\s*none !important;/);
-  assert.match(styleSources.foundation, /\.h3ps-floating-launcher:focus-visible\s*\{[^}]*outline:\s*2px solid rgba\(232, 97, 60, \.72\) !important/);
-  assert.doesNotMatch(styleSources.settings, /\.h3ps-provider-selector > button:focus-visible\s*\{[^}]*outline:\s*0/);
-  assert.match(styleSources["themes/dark"], /\.h3ps-root\s*\{[\s\S]*color-scheme:\s*dark;/);
+  assert.match(styleSources.foundation, /\.ps-root \.ps-modal:focus,[\s\S]{0,80}\.ps-root \.ps-modal:focus-visible\s*\{\s*outline:\s*none !important;/);
+  assert.match(styleSources.foundation, /\.ps-floating-launcher:focus-visible\s*\{[^}]*outline:\s*2px solid rgba\(167, 139, 250, \.72\) !important/);
+  assert.doesNotMatch(styleSources.settings, /\.ps-provider-selector > button:focus-visible\s*\{[^}]*outline:\s*0/);
+  assert.match(styleSources["themes/dark"], /\.ps-root\s*\{[\s\S]*color-scheme:\s*dark;/);
   assert.doesNotMatch(styleSources["themes/dark"], /:root\s*\{[^}]*color-scheme:/);
 });
 
@@ -1656,25 +1697,25 @@ test("fullscreen reuses the studio root and persists its UI state", () => {
   assert.match(mainSource, /\(modal\.querySelector\("\[data-close-studio\]:not\(\[hidden\]\)"\) \|\| modal\)\.focus\(\{ preventScroll: true \}\)/);
   assert.match(mainSource, /studioReturnFocus\?\.focus\?\.\(\{ preventScroll: true \}\)/);
   assert.match(mainSource, /const fullscreen = studio\.fullscreen && studio\.root\.classList\.contains\("is-open"\)/);
-  assert.match(stylesSource, /\.h3ps-root\.is-fullscreen \.h3ps-brief textarea \{ max-height: none; \}/);
+  assert.match(stylesSource, /\.ps-root\.is-fullscreen \.ps-brief textarea \{ max-height: none; \}/);
 });
 
 test("prompt refinement keeps actions above a vertically resizable editor", () => {
-  assert.match(mainSource, /h3ps-refine-heading-actions[\s\S]{0,500}data-refine-cancel[\s\S]{0,250}data-refine-submit/);
+  assert.match(mainSource, /ps-refine-heading-actions[\s\S]{0,500}data-refine-cancel[\s\S]{0,250}data-refine-submit/);
   assert.match(mainSource, /data-refine-helper[\s\S]{0,160}data-refine-media-note/);
   assert.doesNotMatch(mainSource, /refine_height|refineHeight/);
-  assert.match(stylesSource, /\.h3ps-refine\[data-refine-panel\] textarea \{[^}]*min-height: 72px;[^}]*resize: vertical;/);
+  assert.match(stylesSource, /\.ps-refine\[data-refine-panel\] textarea \{[^}]*min-height: 72px;[^}]*resize: vertical;/);
 });
 
 test("refined media UI has neutral actions, no dead preview flow or reorder thumbnail ghost",()=>{
   assert.match(splitMenuMarkup(()=>"",{label:"Actions",primary:"data-actions-menu-toggle",toggle:"data-clear-menu-toggle",menu:"data-clear-menu",contents:"",ariaLabel:"Media actions"}),/data-actions-menu-toggle[^>]*>Actions/);
   assert.match(mainSource,/splitMenuMarkup\(icon, \{label: "Actions"/);
-  assert.doesNotMatch(mainSource,/h3ps-compose-button|openVideoPreview|openImagePreview|resampleCurrentVideo|h3ps-drag-ghost/);
+  assert.doesNotMatch(mainSource,/ps-compose-button|openVideoPreview|openImagePreview|resampleCurrentVideo|ps-drag-ghost/);
   assert.match(mainSource,/ghost.width = ghost.height = 1/);
   assert.match(mainSource,/setDragImage\(ghost, 0, 0\)/);
   assert.match(mainSource,/dismissOnWorkspaceClick:true/);
   assert.doesNotMatch(mainSource,/toast.onclick|options.persistent/);
-  assert.match(mainSource,/!event.target.closest\("\[data-h3ps-toast\]"\)/);
+  assert.match(mainSource,/!event.target.closest\("\[data-ps-toast\]"\)/);
   const fields=new Map(),classes=new Set(),timers=[];
   const toast={classList:{contains:c=>classes.has(c),add:c=>classes.add(c),toggle:(c,on)=>on?classes.add(c):classes.delete(c)},querySelector(selector){
     if(!fields.has(selector))fields.set(selector,{querySelector:()=>({})});
@@ -1686,7 +1727,7 @@ test("refined media UI has neutral actions, no dead preview flow or reorder thum
   new Function('studio','hideToast','setTimeout','clearTimeout',show+';showToast("Trim required","Keep this notice",null,null,{dismissOnWorkspaceClick:true});')(studio,()=>dismissed++,(fn,ms)=>timers.push({fn,ms}),()=>{});
   assert.equal(timers.length,1);assert.equal(timers[0].ms,0);timers[0].fn();
   assert.equal(studio.toastDismissOnWorkspaceClick,true);
-  const rule=mainSource.match(/if \(studio.toastDismissOnWorkspaceClick && !event.target.closest\("\[data-h3ps-toast\]"\)\) hideToast\(\);/)[0];
+  const rule=mainSource.match(/if \(studio.toastDismissOnWorkspaceClick && !event.target.closest\("\[data-ps-toast\]"\)\) hideToast\(\);/)[0];
   const click=new Function('studio','event','hideToast',rule);
   click(studio,{target:{closest:()=>toast}},()=>dismissed++);assert.equal(dismissed,0);
   click(studio,{target:{closest:()=>null}},()=>dismissed++);assert.equal(dismissed,1);
@@ -1700,9 +1741,9 @@ test("startup generation state has no legacy preview dependency",()=>{
   new Function('studio','icon','syncModeAvailability','renderMedia','syncLifecycleActions','HOST_CAPABILITIES','generationButtonMarkup',mainSource.slice(start,end)+';setGenerationState("idle","","");')(studio,noop,noop,noop,noop,{comfyMemory:true},generationButtonMarkup);
 });
 
-test("only confirmed Writer ownership makes unknown router state a release target",async()=>{
+test("only confirmed Prompt Studio ownership makes unknown router state a release target",async()=>{
   const status={prompt_residency:{external:{targets:[{model_id:'old',state:'unknown',writer_owned:false},{model_id:'other',state:'loaded',writer_owned:false}]}}};
-  assert.deepEqual(await unloadWriterModels({getStatus:async()=>status,unloadModel:async()=>assert.fail('no confirmed Writer residency')}),[]);
+  assert.deepEqual(await unloadWriterModels({getStatus:async()=>status,unloadModel:async()=>assert.fail('no confirmed Prompt Studio residency')}),[]);
   status.prompt_residency.external.targets[0].writer_owned=true;
   assert.deepEqual(writerResidencyTargets(status),[{family:'external',model_id:'old'}]);
 });

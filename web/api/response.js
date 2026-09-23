@@ -1,9 +1,9 @@
 function fallbackMessage(response, invalidSuccess = false) {
   const status = Number.isInteger(response?.status) ? ` (${response.status})` : "";
   if (invalidSuccess) {
-    return `H3 Prompt Writer returned an invalid response${status}. ComfyUI may still be restarting.`;
+    return `Prompt Studio returned an invalid response${status}. ComfyUI may still be restarting.`;
   }
-  return `H3 Prompt Writer request failed${status}. The server returned a non-JSON response.`;
+  return `Prompt Studio request failed${status}. The server returned a non-JSON response.`;
 }
 
 export async function readApiResponse(response) {

@@ -10,6 +10,7 @@ from .context import (
     estimate_visual_tokens,
     non_thinking_output_tokens,
 )
+from .assembly import normalize_generated_prompt
 from .media import STORE, MediaError
 from .models.contract import ModelError, final_message_text
 from .prompt_audit import audit_prompt, camera_structure_requested
@@ -216,7 +217,7 @@ def validate_media_capabilities(model_info: dict[str, Any], assembled: dict[str,
         )
 
 
-def run_h3_pipeline(
+def run_pipeline(
     model_info: dict[str, Any],
     assembled: dict[str, Any],
     session_id: str,
@@ -316,6 +317,11 @@ def run_h3_pipeline(
         )
     if not text.strip():
         raise ModelError("EMPTY_GENERATION", "The model did not produce a final prompt.")
+
+    # A strategy may need to unwrap a legacy output envelope (Qwen Image 2.1 used to
+    # answer with {"rewritten_prompt": …, "wh_ratio": …}); the ratio fields are
+    # application settings and must not reach the editor or the generated image.
+    text = normalize_generated_prompt(text, assembled["input"]["mode"])
 
     prompt = text
     reasoning_tokens = count_text_tokens(reasoning_content) if reasoning_content else 0

@@ -13,12 +13,12 @@ from PIL import Image
 
 from backend.gguf_metadata import classify_gguf_file
 from backend.models.contract import ModelError
-from h3_standalone.app import create_app
-from h3_standalone import __version__
-from h3_standalone.config import load_settings, validate_upstream
-from h3_standalone.external_backend import _ManagedChatHandler, standalone_external_backend_class
-from h3_standalone.managed_gguf import ManagedGGUFBackend, ManagedGGUFController, managed_runtime_diagnostics
-from h3_standalone.managed_runtime import ManagedLlamaServer
+from prompt_studio.app import create_app
+from prompt_studio import __version__
+from prompt_studio.config import load_settings, validate_upstream
+from prompt_studio.external_backend import _ManagedChatHandler, standalone_external_backend_class
+from prompt_studio.managed_gguf import ManagedGGUFBackend, ManagedGGUFController, managed_runtime_diagnostics
+from prompt_studio.managed_runtime import ManagedLlamaServer
 
 
 class StandaloneHostTest(unittest.IsolatedAsyncioTestCase):
@@ -50,12 +50,12 @@ class StandaloneHostTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_upstream_routes_and_static_assets(self) -> None:
         for path in (
-            "/h3studio/status",
-            "/h3studio/models",
-            "/h3studio/guides",
-            "/h3studio/system-prompt/T2VA",
-            "/h3studio/ollama/status",
-            "/h3studio/api-provider/presets",
+            "/promptstudio/status",
+            "/promptstudio/models",
+            "/promptstudio/guides",
+            "/promptstudio/system-prompt/T2VA",
+            "/promptstudio/ollama/status",
+            "/promptstudio/api-provider/presets",
         ):
             with self.subTest(path=path):
                 response = await self.client.get(path)
@@ -79,7 +79,7 @@ class StandaloneHostTest(unittest.IsolatedAsyncioTestCase):
         response = await self.client.get("/scripts/app.js")
         self.assertEqual(response.status, 200)
         shell = await response.text()
-        self.assertIn("h3psHost", shell)
+        self.assertIn("psHost", shell)
         self.assertIn("windowed: false", shell)
         self.assertIn("comfyMemory: false", shell)
         self.assertIn("workflowMedia: false", shell)
@@ -87,16 +87,16 @@ class StandaloneHostTest(unittest.IsolatedAsyncioTestCase):
             response = await self.client.get(path)
             self.assertEqual(response.status, 200, path)
 
-        response = await self.client.get("/h3studio/models")
+        response = await self.client.get("/promptstudio/models")
         payload = await response.json()
         self.assertGreater(len(payload["setup"]), 0)
         self.assertTrue(all(item.get("model_url") for item in payload["setup"]))
 
     async def test_sequence_routes_exist_without_a_comfy_graph(self) -> None:
-        response = await self.client.post("/h3studio/sequence", json={})
+        response = await self.client.post("/promptstudio/sequence", json={})
         self.assertEqual(response.status, 400)
         self.assertIn("INVALID_SEQUENCE", await response.text())
-        response = await self.client.post("/h3studio/sequence/cancel", json={"operation_id": "stale", "session_id": "test"})
+        response = await self.client.post("/promptstudio/sequence/cancel", json={"operation_id": "stale", "session_id": "test"})
         self.assertEqual(response.status, 200)
         self.assertFalse((await response.json())["cancelled"])
 
@@ -108,11 +108,11 @@ class StandaloneHostTest(unittest.IsolatedAsyncioTestCase):
         body.add_field("session_id", session)
         body.add_field("mode", "Reference")
         body.add_field("file", image.getvalue(), filename="collage.png", content_type="image/png")
-        response = await self.client.post("/h3studio/media/upload", data=body)
+        response = await self.client.post("/promptstudio/media/upload", data=body)
         self.assertEqual(response.status, 201)
         asset = (await response.json())["assets"][0]
         try:
-            response = await self.client.post(f'/h3studio/media/{asset["id"]}/edit', json={
+            response = await self.client.post(f'/promptstudio/media/{asset["id"]}/edit', json={
                 "session_id": session, "action": "save", "revision": asset.get("content_revision", 0),
                 "crop": {"x": 0, "y": 0, "w": 32, "h": 32},
             })
@@ -125,7 +125,53 @@ class StandaloneHostTest(unittest.IsolatedAsyncioTestCase):
             response = await self.client.get(applied["source_url"])
             self.assertEqual(Image.open(io.BytesIO(await response.read())).size, (96, 64))
         finally:
-            await self.client.delete(f'/h3studio/media/{asset["id"]}?session_id={session}')
+            await self.client.delete(f'/promptstudio/media/{asset["id"]}?session_id={session}')
+
+
+class UpstreamValidationTest(unittest.TestCase):
+    """The host must refuse to serve a pre-rebrand checkout."""
+
+    def test_a_current_checkout_passes(self) -> None:
+        validate_upstream(Path(__file__).resolve().parents[2])
+
+    def test_a_checkout_without_the_registry_is_rejected(self) -> None:
+        """Catches pointing --upstream at an old extracted release."""
+        with tempfile.TemporaryDirectory() as raw:
+            stale = Path(raw)
+            (stale / "backend").mkdir()
+            (stale / "web").mkdir()
+            (stale / "backend" / "routes.py").write_text("", encoding="utf-8")
+            (stale / "web" / "main.js").write_text("", encoding="utf-8")
+            with self.assertRaises(RuntimeError) as raised:
+                validate_upstream(stale)
+            self.assertIn("out of date", str(raised.exception))
+            # The message must name what is missing so the cause is obvious.
+            self.assertIn("target_registry.js", str(raised.exception))
+
+    def test_a_checkout_missing_core_files_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            with self.assertRaises(FileNotFoundError):
+                validate_upstream(Path(raw))
+
+
+class EnvironmentVariableNameTest(unittest.TestCase):
+    """Guard the PS_* rename: the old H3_* names must not come back."""
+
+    def test_host_modules_use_only_ps_prefixed_variables(self) -> None:
+        root = Path(__file__).resolve().parents[1] / "prompt_studio"
+        offenders = []
+        for path in sorted(root.rglob("*.py")):
+            source = path.read_text(encoding="utf-8")
+            for legacy in ("H3_WRITER_", "H3_STANDALONE_", "H3_LLAMA_SERVER", "H3_MODEL_ROOT",
+                           "H3_PROJECTOR", "H3_APP_ROOT", "H3_MODEL\""):
+                if legacy in source:
+                    offenders.append(f"{path.name}: {legacy}")
+        self.assertEqual(offenders, [], "Legacy H3_* environment variables remain")
+
+    def test_settings_file_name_is_documented_consistently(self) -> None:
+        source = (Path(__file__).resolve().parents[1] / "prompt_studio" / "config.py").read_text(encoding="utf-8")
+        self.assertIn('"PS_UPSTREAM"', source)
+        self.assertIn('"PS_MODEL_ROOTS"', source)
 
 
 class ManagedGGUFTest(unittest.TestCase):

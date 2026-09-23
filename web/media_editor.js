@@ -31,48 +31,48 @@ export function trimRange(start,end,duration) {
 }
 
 function markup(icon) {
-  return `<section class="h3ps-media-editor" aria-hidden="true">
-    <div class="h3ps-preview-backdrop" data-ed-close></div>
-    <div class="h3ps-cmp-dialog h3ps-ed-dialog" role="dialog" aria-modal="true" aria-labelledby="h3ps-ed-title" tabindex="-1">
-      <header><span><small>Media Editor</small><strong id="h3ps-ed-title"></strong></span><div class="h3ps-cmp-shell-controls" data-ed-shell><button type="button" class="h3ps-icon-button" data-ed-close title="Close (Esc)" aria-label="Close editor">${icon('close',18)}</button><div class="h3ps-ed-close-popover" data-ed-close-popover hidden role="group" aria-label="Unapplied changes"><strong>Unapplied changes</strong><span><button type="button" class="h3ps-secondary-button" data-ed-keep>Keep</button><button type="button" class="h3ps-secondary-button" data-ed-discard>Discard</button></span></div></div></header>
-      <div class="h3ps-ed-body">
-        <div class="h3ps-ed-workspace">
-          <div class="h3ps-ed-viewport" data-ed-stage>
-            <div class="h3ps-ed-frame" data-ed-frame>
+  return `<section class="ps-media-editor" aria-hidden="true">
+    <div class="ps-preview-backdrop" data-ed-close></div>
+    <div class="ps-cmp-dialog ps-ed-dialog" role="dialog" aria-modal="true" aria-labelledby="ps-ed-title" tabindex="-1">
+      <header><span><small>Media Editor</small><strong id="ps-ed-title"></strong></span><div class="ps-cmp-shell-controls" data-ed-shell><button type="button" class="ps-icon-button" data-ed-close title="Close (Esc)" aria-label="Close editor">${icon('close',18)}</button><div class="ps-ed-close-popover" data-ed-close-popover hidden role="group" aria-label="Unapplied changes"><strong>Unapplied changes</strong><span><button type="button" class="ps-secondary-button" data-ed-keep>Keep</button><button type="button" class="ps-secondary-button" data-ed-discard>Discard</button></span></div></div></header>
+      <div class="ps-ed-body">
+        <div class="ps-ed-workspace">
+          <div class="ps-ed-viewport" data-ed-stage>
+            <div class="ps-ed-frame" data-ed-frame>
               <img data-ed-image alt="Source media" draggable="false">
               <video data-ed-video playsinline preload="auto"></video>
-              <img class="h3ps-ed-decoded" data-ed-decoded alt="Decoded source frame" draggable="false" hidden>
-              <div class="h3ps-ed-crop" data-ed-crop tabindex="0" aria-label="Crop rectangle. Drag to move or use arrow keys.">
-                ${['nw','n','ne','e','se','s','sw','w'].map(dir=>`<i data-ed-handle="${dir}" class="h3ps-ed-handle is-${dir}"></i>`).join('')}
+              <img class="ps-ed-decoded" data-ed-decoded alt="Decoded source frame" draggable="false" hidden>
+              <div class="ps-ed-crop" data-ed-crop tabindex="0" aria-label="Crop rectangle. Drag to move or use arrow keys.">
+                ${['nw','n','ne','e','se','s','sw','w'].map(dir=>`<i data-ed-handle="${dir}" class="ps-ed-handle is-${dir}"></i>`).join('')}
               </div>
             </div>
           </div>
-          <section class="h3ps-ed-crop-tools">
-            <div class="h3ps-frame-count h3ps-ed-ratios" role="group" aria-label="Crop aspect ratio">${ratios.map(r=>`<button type="button" data-ed-ratio="${r}">${r==='free'?'Free':r==='original'?'Original':r}</button>`).join('')}</div>
-            <div class="h3ps-ed-crop-summary"><output data-ed-dimensions></output><span class="h3ps-ed-utilities"><label class="h3ps-ed-check"><input type="checkbox" data-ed-snap>Snap ×32</label><label class="h3ps-ed-check" data-ed-loop-control><input type="checkbox" data-ed-loop>Loop</label></span></div>
+          <section class="ps-ed-crop-tools">
+            <div class="ps-frame-count ps-ed-ratios" role="group" aria-label="Crop aspect ratio">${ratios.map(r=>`<button type="button" data-ed-ratio="${r}">${r==='free'?'Free':r==='original'?'Original':r}</button>`).join('')}</div>
+            <div class="ps-ed-crop-summary"><output data-ed-dimensions></output><span class="ps-ed-utilities"><label class="ps-ed-check"><input type="checkbox" data-ed-snap>Snap ×32</label><label class="ps-ed-check" data-ed-loop-control><input type="checkbox" data-ed-loop>Loop</label></span></div>
           </section>
-          <section class="h3ps-ed-timeline" data-ed-temporal>
-            <div class="h3ps-ed-playback"><button type="button" class="h3ps-icon-button" data-ed-play aria-label="Play or pause">${icon('play',20)}</button><button type="button" class="h3ps-icon-button" data-ed-step="-1" title="Previous frame" aria-label="Previous frame">${icon('chevron',20)}</button><button type="button" class="h3ps-icon-button" data-ed-step="1" title="Next frame" aria-label="Next frame">${icon('chevron',20)}</button><output data-ed-time>00:00.0 / 00:00.0</output><button type="button" class="h3ps-icon-button" data-ed-frame-download title="Download current frame with draft crop" aria-label="Download current frame">${icon('download',20)}</button><button type="button" class="h3ps-icon-button" data-ed-frame-add title="Add current frame with draft crop as Picture" aria-label="Add current frame as Picture">${icon('image',20)}${icon('plus',12)}</button><button class="h3ps-cmp-text-action" type="button" data-ed-in>Set Start</button><button class="h3ps-cmp-text-action" type="button" data-ed-out>Set End</button></div>
-            <div class="h3ps-ed-track" data-ed-track tabindex="0" role="slider" aria-label="Source playhead" aria-valuemin="0">
-              <div class="h3ps-ed-filmstrip" data-ed-filmstrip aria-hidden="true"></div><span class="h3ps-ed-dim" data-ed-dim-left></span><span class="h3ps-ed-dim" data-ed-dim-right></span><div class="h3ps-ed-trim" data-ed-trim></div><i class="h3ps-ed-playhead" data-ed-playhead></i><button type="button" data-ed-bound="start" aria-label="Drag trim start"></button><button type="button" data-ed-bound="end" aria-label="Drag trim end"></button></div>
+          <section class="ps-ed-timeline" data-ed-temporal>
+            <div class="ps-ed-playback"><button type="button" class="ps-icon-button" data-ed-play aria-label="Play or pause">${icon('play',20)}</button><button type="button" class="ps-icon-button" data-ed-step="-1" title="Previous frame" aria-label="Previous frame">${icon('chevron',20)}</button><button type="button" class="ps-icon-button" data-ed-step="1" title="Next frame" aria-label="Next frame">${icon('chevron',20)}</button><output data-ed-time>00:00.0 / 00:00.0</output><button type="button" class="ps-icon-button" data-ed-frame-download title="Download current frame with draft crop" aria-label="Download current frame">${icon('download',20)}</button><button type="button" class="ps-icon-button" data-ed-frame-add title="Add current frame with draft crop as Picture" aria-label="Add current frame as Picture">${icon('image',20)}${icon('plus',12)}</button><button class="ps-cmp-text-action" type="button" data-ed-in>Set Start</button><button class="ps-cmp-text-action" type="button" data-ed-out>Set End</button></div>
+            <div class="ps-ed-track" data-ed-track tabindex="0" role="slider" aria-label="Source playhead" aria-valuemin="0">
+              <div class="ps-ed-filmstrip" data-ed-filmstrip aria-hidden="true"></div><span class="ps-ed-dim" data-ed-dim-left></span><span class="ps-ed-dim" data-ed-dim-right></span><div class="ps-ed-trim" data-ed-trim></div><i class="ps-ed-playhead" data-ed-playhead></i><button type="button" data-ed-bound="start" aria-label="Drag trim start"></button><button type="button" data-ed-bound="end" aria-label="Drag trim end"></button></div>
 
-            <div class="h3ps-ed-ticks" data-ed-ticks aria-hidden="true"></div>
-            <output class="h3ps-ed-selection" data-ed-selection></output>
+            <div class="ps-ed-ticks" data-ed-ticks aria-hidden="true"></div>
+            <output class="ps-ed-selection" data-ed-selection></output>
           </section>
         </div>
-        <aside class="h3ps-ed-side">
-          <section class="h3ps-ed-analysis">
-            <div class="h3ps-section-heading"><span><small data-ed-view-title>What the model sees</small><strong data-ed-view-subtitle>Applied media</strong></span></div>
+        <aside class="ps-ed-side">
+          <section class="ps-ed-analysis">
+            <div class="ps-section-heading"><span><small data-ed-view-title>What the model sees</small><strong data-ed-view-subtitle>Applied media</strong></span></div>
             <div data-ed-sampling>
-              <div class="h3ps-sample-controls"><div class="h3ps-frame-count">${['auto','4','6','8'].map(n=>`<button type="button" data-ed-count="${n}">${n==='auto'?'Auto':n}</button>`).join('')}<button type="button" data-ed-custom>Custom</button></div><label class="h3ps-endpoints"><input type="checkbox" data-ed-endpoints>First + last frame</label><button type="button" class="h3ps-secondary-button" data-ed-resample title="Choose a new sampled frame set; Apply to prepare it">Resample</button></div>
-              <label class="h3ps-ed-custom" data-ed-custom-row hidden>Frames <input type="range" min="2" max="24" step="1" data-ed-custom-count aria-label="Custom frame count"><output data-ed-count-value></output></label>
+              <div class="ps-sample-controls"><div class="ps-frame-count">${['auto','4','6','8'].map(n=>`<button type="button" data-ed-count="${n}">${n==='auto'?'Auto':n}</button>`).join('')}<button type="button" data-ed-custom>Custom</button></div><label class="ps-endpoints"><input type="checkbox" data-ed-endpoints>First + last frame</label><button type="button" class="ps-secondary-button" data-ed-resample title="Choose a new sampled frame set; Apply to prepare it">Resample</button></div>
+              <label class="ps-ed-custom" data-ed-custom-row hidden>Frames <input type="range" min="2" max="24" step="1" data-ed-custom-count aria-label="Custom frame count"><output data-ed-count-value></output></label>
             </div>
-            <p class="h3ps-ed-note" data-ed-analysis-state role="status"></p>
-            <div class="h3ps-ed-model-view"><img data-ed-sheet alt="Media representation" hidden></div>
+            <p class="ps-ed-note" data-ed-analysis-state role="status"></p>
+            <div class="ps-ed-model-view"><img data-ed-sheet alt="Media representation" hidden></div>
           </section>
         </aside>
       </div>
-      <footer><span data-ed-status role="status"></span><button type="button" class="h3ps-secondary-button" data-ed-reset>Reset edits</button><button type="button" class="h3ps-secondary-button" data-ed-download>${icon('download',14)}Download</button><button type="button" class="h3ps-primary-button" data-ed-save>Apply</button></footer>
+      <footer><span data-ed-status role="status"></span><button type="button" class="ps-secondary-button" data-ed-reset>Reset edits</button><button type="button" class="ps-secondary-button" data-ed-download>${icon('download',14)}Download</button><button type="button" class="ps-primary-button" data-ed-save>Apply</button></footer>
     </div>
   </section>`;
 }
@@ -269,7 +269,7 @@ export function createMediaEditor({root,icon,request,onSaved,onAddFrame,notify,o
     if(asset)return;asset=current;source={...(current.source||current)};epoch++;version=0;trigger=opener||document.activeElement;mediaReady=false;loading=true;
     edit={crop:{x:0,y:0,w:source.width,h:source.height},start:0,end:source.duration||0,...current.edit,
       frame_count_mode:current.frame_count_mode||'auto',include_endpoints:current.include_endpoints!==false,sample_index:current.sample_index||0};edit.crop={...edit.crop};applied=JSON.stringify(edit);customMode=!['auto','4','6','8'].includes(edit.frame_count_mode);ratio=null;ratioName='free';snap=false;confirming=false;saving=false;loop=false;$('[data-ed-loop]').checked=false;
-    $('#h3ps-ed-title').textContent=current.filename;
+    $('#ps-ed-title').textContent=current.filename;
     $('[data-ed-temporal]').hidden=$('[data-ed-sampling]').hidden=$('[data-ed-loop-control]').hidden=!isVideo();image.hidden=isVideo();video.hidden=!isVideo();decoded.hidden=true;
     const e=epoch,ready=()=>{if(!asset||e!==epoch)return;loading=false;mediaReady=true;sync();};
     let fallback=false;
@@ -284,7 +284,7 @@ export function createMediaEditor({root,icon,request,onSaved,onAddFrame,notify,o
     image.onload=ready;image.onerror=failed;video.onloadeddata=ready;video.onerror=failed;
     if(isVideo()){video.src=current.source_url||current.content_url;video.load();video.onloadedmetadata=()=>{if(asset&&e===epoch)video.currentTime=edit.start;};}else image.src=current.source_url||current.content_url;
     for(const selector of ['[data-theme-toggle]','[data-interface-size-picker]','[data-fullscreen-toggle]']){const control=root.querySelector(selector);if(!control)continue;const home=document.createComment('Media editor control position');control.before(home);homes.push({control,home});$('[data-ed-shell]').insertBefore(control,$('[data-ed-shell] [data-ed-close]'));}
-    el.classList.add('is-open');el.setAttribute('aria-hidden','false');onOpenChange(true);appliedView();timelineView();sync();requestAnimationFrame(()=>$('.h3ps-ed-dialog').focus());
+    el.classList.add('is-open');el.setAttribute('aria-hidden','false');onOpenChange(true);appliedView();timelineView();sync();requestAnimationFrame(()=>$('.ps-ed-dialog').focus());
   }
   function close(force=false){if(!asset)return true;if(busy&&!force)return false;if(!force&&confirming){confirming=false;sync();return false;}if(!force&&dirty()){confirming=true;sync();$('[data-ed-keep]').focus();return false;}stop();epoch++;const returnTo=trigger?.isConnected?trigger:root.querySelector(`[data-asset-id="${asset.id}"]`);asset=null;source=null;video.removeAttribute('src');video.load();image.removeAttribute('src');decoded.removeAttribute('src');for(const {home,control} of homes.splice(0))home.replaceWith(control);el.classList.remove('is-open');el.setAttribute('aria-hidden','true');onOpenChange(false);returnTo?.focus?.({preventScroll:true});return true;}
   return {open,close,destroy(){close(true);observer.disconnect();document.removeEventListener('keydown',onKey);el.remove();}};

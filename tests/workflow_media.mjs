@@ -13,7 +13,7 @@ const definitions = {
   VHS_LoadVideo: { python_module: "custom_nodes.comfyui-videohelpersuite", input: { required: { video: [["old.mp4"]] } } },
 };
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
-const file = { value: "prompt-writer/pw-test.mp4" };
+const file = { value: "prompt-studio/pw-test.mp4" };
 function harness(type = null, materialize = async () => file) {
   let id = 0, hit = null, revision = 0;
   const changes = [];
@@ -131,7 +131,7 @@ test("cancellation during an asynchronous callback rolls back only this transfer
 
 test("VHS preview separates the subfolder without changing source or other controls", async () => {
   for (const extension of ["mp4", "webm", "gif", "webp", "avif"]) {
-    const value = `prompt-writer/nested/clip.${extension}`;
+    const value = `prompt-studio/nested/clip.${extension}`;
     const h = harness("VHS_LoadVideo", async () => ({ value }));
     const preview = { name: "videopreview", value: { params: { force_rate: 12 } } };
     h.node.widgets.push(preview);
@@ -141,7 +141,7 @@ test("VHS preview separates the subfolder without changing source or other contr
     h.node.updateParameters = (params, force) => { order.push("preview"); assert.equal(force, true); Object.assign(preview.value.params, params); };
     await h.transfer.drop({ kind: "video" }, [0, 0]);
     assert.equal(h.node.widgets[0].value, value);
-    assert.deepEqual(preview.value.params, { force_rate: 12, filename: `clip.${extension}`, subfolder: "prompt-writer/nested", type: "input",
+    assert.deepEqual(preview.value.params, { force_rate: 12, filename: `clip.${extension}`, subfolder: "prompt-studio/nested", type: "input",
       format: `${["gif", "webp", "avif"].includes(extension) ? "image" : "video"}/${extension}` });
     assert.deepEqual(order, ["callback", "change", "preview"]);
     assert.deepEqual(h.node.outputs, [{ links: [42] }]);
@@ -171,13 +171,13 @@ test("VHS preview failure rolls back both subfolder and root-input sources", asy
 test("materialization preserves bytes and stable names without browser hashing or overwrite", async () => {
   const bodies = []; let revision = "a";
   const upload = createMediaMaterializer(async (url, options) => {
-    if (url === "/upload/image") { bodies.push(options.body); return Response.json({ type: "input", subfolder: "prompt-writer", name: options.body.get("image").name }); }
-    return new Response("video bytes", { headers: { "Content-Type": "video/mp4", "X-H3PS-Content-Hash": revision.repeat(64) } });
+    if (url === "/upload/image") { bodies.push(options.body); return Response.json({ type: "input", subfolder: "prompt-studio", name: options.body.get("image").name }); }
+    return new Response("video bytes", { headers: { "Content-Type": "video/mp4", "X-PS-Content-Hash": revision.repeat(64) } });
   });
   const a = await upload({ url: "/a" }), b = await upload({ url: "/a" }); revision = "b";
   const c = await upload({ url: "/b" });
   assert.equal(a.value, b.value); assert.notEqual(a.value, c.value);
-  assert.match(a.value, /^prompt-writer\/pw-/);
+  assert.match(a.value, /^prompt-studio\/pw-/);
   assert.equal(await bodies[0].get("image").text(), "video bytes"); assert.equal(bodies[0].has("overwrite"), false);
   assert.doesNotMatch(source, /crypto\.subtle|arrayBuffer|handleFile/);
   await assert.rejects(createMediaMaterializer(async () => new Response("", { status: 409 }))({ url: "/stale" }), /Media changed/);
@@ -190,7 +190,7 @@ test("panel stays non-modal, viewport-clamped and wired through one independent 
   assert.doesNotMatch(opening, /VRAM_HANDOFF_SUPPORTED/);
   assert.match(opening, /Add media first/); assert.match(main, /<strong>Media panel<\/strong><small>ADD TO WORKFLOW/);
   assert.match(main, /querySelectorAll\("\[data-open-floating-media\]"\)/);
-  assert.match(panel, /application\/x-h3ps-workflow-media/);
+  assert.match(panel, /application\/x-ps-workflow-media/);
   assert.match(panel, /pending\?\.abort/); assert.match(panel, /stopImmediatePropagation/);
   assert.doesNotMatch(panel, /aria-modal|backdrop|handleFile/);
   assert.deepEqual(clampPanelPosition({ x: 999, y: -20 }, { width: 800, height: 600 }, { width: 410, height: 200 }), { x: 382, y: 8 });

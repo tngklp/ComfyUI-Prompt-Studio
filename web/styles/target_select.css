@@ -1,0 +1,262 @@
+/*
+ * Generation target selection screen.
+ *
+ * Covers the entire studio on launch: the user picks the model the prompt is
+ * written for before any workspace is shown. Also styles the compact target
+ * indicator that replaces the old mode-tab row.
+ */
+
+/*
+ * Covers the workspace view, which setTargetSelectionOpen() hides outright.
+ *
+ * `.ps-modal` is a 4-row grid (header / toolbar / content / footer) and this
+ * section is inserted right after the header, so it MUST be taken out of grid
+ * flow. As `position: absolute` it contributes no row; if that changes, the
+ * toolbar slides into row 3 and the workspace layout collapses.
+ *
+ * No z-index: .ps-settings-view is a sibling row, not an overlay, so the picker
+ * must stay beneath it for the Settings button to reveal Settings.
+ */
+.ps-target-select-view {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: calc(24px * var(--ps-interface-scale));
+  overflow: auto;
+  background: var(--ps-bg);
+}
+
+.ps-target-select-view[hidden] { display: none; }
+
+/*
+ * Wide enough for three category columns. The previous 760px was sized for a
+ * single stacked list; at three columns each track would be ~230px, too narrow
+ * for a target card with a label and mode chips.
+ */
+.ps-target-select-shell {
+  display: grid;
+  gap: calc(20px * var(--ps-interface-scale));
+  width: min(1040px, 100%);
+  /* heading / list / actions */
+  grid-template-rows: auto auto auto;
+}
+
+.ps-target-select-heading {
+  display: flex;
+  gap: calc(14px * var(--ps-interface-scale));
+  align-items: center;
+}
+
+/*
+ * The launcher logo, previously an unstyled empty span so this row reserved a gap
+ * for a mark that never rendered. Slightly larger here than the header's 36px:
+ * this is the first screen on every launch and has room for it.
+ */
+.ps-target-select-heading .ps-brand-mark {
+  display: block;
+  flex: 0 0 auto;
+  width: calc(52px * var(--ps-interface-scale));
+  height: calc(52px * var(--ps-interface-scale));
+}
+
+.ps-target-select-heading strong {
+  display: block;
+  font-size: var(--ps-font-heading);
+  font-weight: 640;
+}
+
+.ps-target-select-heading p {
+  margin: calc(2px * var(--ps-interface-scale)) 0 0;
+  color: var(--ps-muted);
+  font-size: var(--ps-font-body-sm);
+}
+
+/*
+ * One column per category (Image / Video / Audio), side by side.
+ *
+ * `repeat(3, ...)` rather than `auto-fit`: the categories are a fixed set and
+ * the point of the layout is that they read as parallel columns. `1fr` keeps
+ * them equal even when one category holds more targets than another, and
+ * `align-items: start` stops a short column stretching its card to the height
+ * of the tallest column beside it.
+ *
+ * An "Other" group is appended for a category the interface does not know, so
+ * the count can exceed three; a fourth simply wraps to the next row.
+ * `minmax(0, 1fr)` lets a column shrink below its content width instead of
+ * overflowing the shell.
+ */
+.ps-target-select-list {
+  display: grid;
+  gap: calc(18px * var(--ps-interface-scale));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+}
+
+.ps-target-select-group {
+  display: grid;
+  gap: calc(10px * var(--ps-interface-scale));
+  align-content: start;
+  min-width: 0;
+}
+
+/*
+ * Below the shell's comfortable width the columns would each be too narrow for
+ * the target cards, so the groups stack back into one column.
+ */
+@media (max-width: 720px) {
+  .ps-target-select-list { grid-template-columns: minmax(0, 1fr); }
+}
+
+.ps-target-select-group-heading {
+  display: flex;
+  gap: calc(8px * var(--ps-interface-scale));
+  align-items: center;
+  color: var(--ps-muted);
+}
+
+.ps-target-select-group-heading strong {
+  color: var(--ps-text);
+  font-size: var(--ps-font-label);
+  font-weight: 680;
+  letter-spacing: .075em;
+  text-transform: uppercase;
+}
+
+.ps-target-select-group-heading small {
+  font-size: var(--ps-font-caption);
+}
+
+.ps-target-select-group-items {
+  display: grid;
+  gap: calc(10px * var(--ps-interface-scale));
+  grid-template-columns: 1fr;
+}
+
+.ps-target-select-item {
+  display: grid;
+  gap: calc(6px * var(--ps-interface-scale));
+  padding: calc(16px * var(--ps-interface-scale));
+  color: var(--ps-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border: 1px solid var(--ps-border);
+  border-radius: var(--ps-radius-md);
+  background: var(--ps-control);
+}
+
+.ps-target-select-item:hover { border-color: var(--ps-border-field-action); }
+
+.ps-target-select-item.is-selected {
+  border-color: var(--ps-border-strong);
+  background: var(--ps-control-selected);
+  box-shadow: inset 0 -2px var(--ps-accent);
+}
+
+.ps-target-select-item.is-unavailable { opacity: .55; cursor: not-allowed; }
+
+.ps-target-select-item-head {
+  display: flex;
+  gap: calc(8px * var(--ps-interface-scale));
+  align-items: center;
+}
+
+.ps-target-select-item-head strong {
+  font-size: var(--ps-font-control);
+  font-weight: 620;
+}
+
+.ps-target-select-item small {
+  color: var(--ps-muted);
+  font-size: var(--ps-font-caption);
+}
+
+.ps-target-select-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(4px * var(--ps-interface-scale));
+  margin-top: calc(2px * var(--ps-interface-scale));
+}
+
+.ps-target-select-modes span {
+  padding: calc(2px * var(--ps-interface-scale)) calc(6px * var(--ps-interface-scale));
+  color: var(--ps-muted);
+  font-size: var(--ps-font-caption);
+  border: 1px solid var(--ps-border);
+  border-radius: 999px;
+}
+
+.ps-target-select-actions {
+  display: flex;
+  gap: calc(12px * var(--ps-interface-scale));
+  align-items: center;
+}
+
+.ps-target-select-status {
+  margin-left: auto;
+  color: var(--ps-muted);
+  font-size: var(--ps-font-caption);
+}
+
+/*
+ * Compact target indicator in the header. It occupies the slot the workspace
+ * tabs (Video / Music / Qwen Image 2.1) used to sit in, so switching target
+ * stays one click even though the picker is the only selector.
+ */
+.ps-target-indicator {
+  display: inline-flex;
+  align-items: center;
+  margin-left: calc(28px * var(--ps-interface-scale));
+}
+
+.ps-target-indicator-button {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(7px * var(--ps-interface-scale));
+  height: calc(34px * var(--ps-interface-scale));
+  max-width: calc(260px * var(--ps-interface-scale));
+  padding: 0 calc(11px * var(--ps-interface-scale));
+  color: var(--ps-text-subtle);
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid var(--ps-border-shell);
+  border-radius: var(--ps-radius-md);
+  background: var(--ps-editor-footer-deep);
+}
+
+.ps-target-indicator-button:hover {
+  border-color: var(--ps-border-field-action);
+  color: var(--ps-text-hover);
+}
+
+.ps-target-indicator-button strong {
+  overflow: hidden;
+  font-size: var(--ps-font-control);
+  font-weight: 620;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ps-target-indicator-button em {
+  flex: 0 0 auto;
+  color: var(--ps-muted);
+  font-size: var(--ps-font-caption);
+  font-style: normal;
+}
+
+@media (max-width: 720px) {
+  .ps-target-indicator { margin-left: 0; }
+  .ps-target-indicator-button em { display: none; }
+  .ps-target-indicator-button { max-width: calc(170px * var(--ps-interface-scale)); }
+}
+
+/*
+ * A mode that does not use media (Qwen Text to Image, H3 T2VA) renders no drop
+ * box. `.ps-media` carries a 150px min-height, so [hidden] must win for the
+ * space to actually collapse. The section heading and hint stay.
+ */
+.ps-root .ps-media[hidden],
+.ps-root .ps-image-inputs .ps-media[hidden] { display: none; }
+
+/* An empty hint line should not reserve its own height or margins. */

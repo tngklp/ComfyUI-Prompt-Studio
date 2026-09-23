@@ -15,13 +15,13 @@ else
   "$PYTHON" -m pip install --disable-pip-version-check -r "$APP_ROOT/requirements.txt"
 fi
 
-if [[ -n "${H3_LLAMA_SERVER:-}" || -n "${H3_MODEL_ROOT:-}" || -n "${H3_MODEL:-}" || -n "${H3_PROJECTOR:-}" ]]; then
-  H3_APP_ROOT="$APP_ROOT" "$PYTHON" - <<'PY'
+if [[ -n "${PS_LLAMA_SERVER:-}" || -n "${PS_MODEL_ROOT:-}" || -n "${PS_MODEL:-}" || -n "${PS_PROJECTOR:-}" ]]; then
+  PS_APP_ROOT="$APP_ROOT" "$PYTHON" - <<'PY'
 import json
 import os
 from pathlib import Path
 
-root = Path(os.environ["H3_APP_ROOT"])
+root = Path(os.environ["PS_APP_ROOT"])
 path = root / "data" / "managed_gguf.json"
 
 try:
@@ -32,10 +32,10 @@ except (OSError, ValueError):
 if not isinstance(config, dict):
     config = {}
 
-server = os.environ.get("H3_LLAMA_SERVER", "").strip()
-model_root = os.environ.get("H3_MODEL_ROOT", "").strip()
-model = os.environ.get("H3_MODEL", "").strip()
-projector = os.environ.get("H3_PROJECTOR", "").strip()
+server = os.environ.get("PS_LLAMA_SERVER", "").strip()
+model_root = os.environ.get("PS_MODEL_ROOT", "").strip()
+model = os.environ.get("PS_MODEL", "").strip()
+projector = os.environ.get("PS_PROJECTOR", "").strip()
 
 if server:
     config["server_path"] = server
@@ -61,4 +61,4 @@ os.replace(temporary, path)
 PY
 fi
 
-exec "$PYTHON" -m h3_standalone "$@"
+exec "$PYTHON" -m prompt_studio "$@"

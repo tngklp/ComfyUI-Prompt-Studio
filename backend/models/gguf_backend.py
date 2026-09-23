@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from typing import Any, Callable
 
 from ..context import ContextPlanError, plan_context
-from ..h3_pipeline import run_h3_pipeline, validate_media_capabilities
+from ..pipeline import run_pipeline, validate_media_capabilities
 from ..native_logging import suppress_known_llama_noise
 from ..runtime_diagnostics import cached_gguf_runtime_diagnostics
 from ..vocab_tokenizer import TokenizerPreflightError, VocabOnlyTokenizerClient, model_identity
@@ -19,7 +19,7 @@ from .gguf_adapters import QWEN_VISION_ADAPTER_IDS
 from .gguf_policies import sampling_options, template_kwargs
 
 
-CONSOLE_PREFIX = "[H3 Prompt Writer]"
+CONSOLE_PREFIX = "[Prompt Studio]"
 _MTMD_LOG_CALLBACK = None
 _MTMD_LOG_LOCK = threading.Lock()
 _MTMD_LAST_LOG_LEVEL = 0
@@ -187,7 +187,7 @@ class GGUFBackend:
                     self.preflight_tokenizer = None
             raise ModelError(
                 "TOKENIZER_PREFLIGHT_FAILED",
-                "Writer could not count Qwen input tokens before model loading.",
+                "Prompt Studio could not count Qwen input tokens before model loading.",
                 {"exception": str(error)},
             ) from error
 
@@ -511,7 +511,7 @@ class GGUFBackend:
                         raise ModelError("GENERATION_CANCELLED", "Generation was cancelled.")
                     return response
 
-                result = run_h3_pipeline(
+                result = run_pipeline(
                     model_info,
                     assembled,
                     session_id,

@@ -2,7 +2,7 @@
 const extensions = [];
 
 export const app = {
-  h3psHost: { windowed: false, comfyMemory: false, workflowMedia: false },
+  psHost: { windowed: false, comfyMemory: false, workflowMedia: false },
   registerExtension(extension) {
     extensions.push(extension);
   },
@@ -15,11 +15,11 @@ export async function boot() {
 
   const openCommand = extensions
     .flatMap((extension) => extension.commands || [])
-    .find((command) => command.id === "h3-prompt-studio.open");
+    .find((command) => command.id === "prompt-studio.open");
   if (typeof openCommand?.function !== "function") {
-    throw new Error("The upstream H3 Prompt Writer open command was not registered.");
+    throw new Error("The upstream Prompt Studio open command was not registered.");
   }
 
   await openCommand.function();
-  document.documentElement.dataset.h3StandaloneReady = "true";
+  document.documentElement.dataset.psStandaloneReady = "true";
 }

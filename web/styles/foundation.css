@@ -1,29 +1,29 @@
 /* Foundation */
-body.h3ps-modal-open { overflow: hidden; }
+body.ps-modal-open { overflow: hidden; }
 
-.h3ps-root,
-.h3ps-root * { box-sizing: border-box; }
+.ps-root,
+.ps-root * { box-sizing: border-box; }
 
-.h3ps-root {
+.ps-root {
   position: fixed;
   inset: 0;
   z-index: 100000;
   display: none;
-  color: var(--h3ps-text);
+  color: var(--ps-text);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  font-size: var(--h3ps-font-control-lg);
+  font-size: var(--ps-font-control-lg);
   line-height: 1.4;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
-.h3ps-root.is-open { display: block; }
-.h3ps-root [hidden] { display: none !important; }
-.h3ps-root button,
-.h3ps-root textarea,
-.h3ps-root input,
-.h3ps-root select { font: inherit; }
-.h3ps-root button { color: inherit; }
-.h3ps-root svg {
+.ps-root.is-open { display: block; }
+.ps-root [hidden] { display: none !important; }
+.ps-root button,
+.ps-root textarea,
+.ps-root input,
+.ps-root select { font: inherit; }
+.ps-root button { color: inherit; }
+.ps-root svg {
   display: block;
   fill: none;
   stroke: currentColor;
@@ -31,53 +31,65 @@ body.h3ps-modal-open { overflow: hidden; }
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.h3ps-root svg[style*="--h3ps-icon-size"] {
-  width: calc(var(--h3ps-icon-size) * var(--h3ps-interface-scale));
-  height: calc(var(--h3ps-icon-size) * var(--h3ps-interface-scale));
+.ps-root svg[style*="--ps-icon-size"] {
+  width: calc(var(--ps-icon-size) * var(--ps-interface-scale));
+  height: calc(var(--ps-icon-size) * var(--ps-interface-scale));
 }
-.h3ps-root ::selection { background: var(--h3ps-accent-soft); }
-.h3ps-root :is(button, textarea, input, select):focus-visible {
-  outline: 1.5px solid rgba(232, 97, 60, .72);
+.ps-root ::selection { background: var(--ps-accent-soft); }
+.ps-root :is(button, textarea, input, select):focus-visible {
+  outline: 1.5px solid rgba(167, 139, 250, .72);
   outline-offset: 2px;
   box-shadow: none;
 }
-.h3ps-root .h3ps-modal:focus,
-.h3ps-root .h3ps-modal:focus-visible { outline: none !important; }
+.ps-root .ps-modal:focus,
+.ps-root .ps-modal:focus-visible { outline: none !important; }
 
-.h3ps-input-panel,
-.h3ps-output-panel,
-.h3ps-editor { scrollbar-width: none; -ms-overflow-style: none; }
-.h3ps-input-panel::-webkit-scrollbar,
-.h3ps-output-panel::-webkit-scrollbar,
-.h3ps-editor::-webkit-scrollbar { display: none; }
+/*
+ * Scrollbars are hidden on the workspace panels. `.ps-input-scroll` is the input
+ * panel's actual scroll container (the panel itself does not scroll, so the
+ * prompt-model pill can be pinned below it), so it needs these rules too —
+ * otherwise a native scrollbar reappears and makes the scrolled content
+ * narrower than the pill beneath it.
+ */
+.ps-input-panel,
+.ps-input-scroll,
+.ps-output-panel,
+.ps-editor { scrollbar-width: none; -ms-overflow-style: none; }
+.ps-input-panel::-webkit-scrollbar,
+.ps-input-scroll::-webkit-scrollbar,
+.ps-output-panel::-webkit-scrollbar,
+.ps-editor::-webkit-scrollbar { display: none; }
 
-.h3ps-floating-launcher {
+.ps-floating-launcher {
   position: fixed;
   z-index: 9000;
   right: 24px;
   bottom: 104px;
   display: block;
-  width: 58px;
-  height: 48px;
+  /* Square, so the launcher tile matches the icon's own 1:1 squircle. The
+     asset's `object-fit: contain` painted the square mark inside a wider box,
+     which read as a stretched button with slack on both sides. */
+  width: 52px;
+  height: 52px;
   padding: 0;
   overflow: visible;
   border: 0;
-  border-radius: 10px;
+  border-radius: 12px;
   background: transparent;
   box-shadow: 0 8px 28px rgba(0, 0, 0, .46);
   cursor: grab;
   user-select: none;
   touch-action: none;
-  transition: filter var(--h3ps-motion-fast) ease, box-shadow var(--h3ps-motion-fast) ease, transform var(--h3ps-motion-fast) ease;
+  transition: filter var(--ps-motion-fast) ease, box-shadow var(--ps-motion-fast) ease, transform var(--ps-motion-fast) ease;
 }
-.h3ps-floating-launcher:hover {
+.ps-floating-launcher:hover {
   filter: brightness(1.06);
-  box-shadow: 0 11px 34px rgba(0, 0, 0, .54), 0 0 0 3px rgba(232, 97, 60, .1);
+  box-shadow: 0 11px 34px rgba(0, 0, 0, .54), 0 0 0 3px rgba(167, 139, 250, .1);
   transform: translateY(-1px);
 }
-.h3ps-floating-launcher:focus-visible {
-  outline: 2px solid rgba(232, 97, 60, .72) !important;
+.ps-floating-launcher:focus-visible {
+  outline: 2px solid rgba(167, 139, 250, .72) !important;
   outline-offset: 4px;
 }
-.h3ps-floating-launcher:active { cursor: grabbing; transform: scale(.97); }
-.h3ps-floating-launcher > img { display: block; width: 100%; height: 100%; border-radius: inherit; object-fit: contain; pointer-events: none; }
+.ps-floating-launcher:active { cursor: grabbing; transform: scale(.97); }
+.ps-floating-launcher > img { display: block; width: 100%; height: 100%; border-radius: inherit; object-fit: contain; pointer-events: none; }

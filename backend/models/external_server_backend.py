@@ -13,7 +13,7 @@ from ..context import (
     ESTIMATED_VISUAL_TOKENS,
     estimate_text_tokens,
 )
-from ..h3_pipeline import run_h3_pipeline, validate_media_capabilities
+from ..pipeline import run_pipeline, validate_media_capabilities
 from .contract import ModelError
 from .external_lifecycle import RouterLifecycle
 
@@ -200,7 +200,7 @@ class ExternalServerBackend:
                 raise ModelError("GENERATION_CANCELLED", "Generation was cancelled.") from error
             raise ModelError(
                 "EXTERNAL_SERVER_UNAVAILABLE",
-                "H3 Prompt Writer could not reach the local llama.cpp server.",
+                "Prompt Studio could not reach the local llama.cpp server.",
                 {"url": endpoint, "reason": self._redact(error)},
             ) from error
         finally:
@@ -557,7 +557,7 @@ class ExternalServerBackend:
                         enable_thinking=thinking,
                     )
 
-                result = run_h3_pipeline(
+                result = run_pipeline(
                     model_info,
                     assembled,
                     session_id,

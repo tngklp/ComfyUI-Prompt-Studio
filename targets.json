@@ -1,0 +1,313 @@
+{
+  "$schema_version": 1,
+  "targets": [
+    {
+      "id": "minimax_h3",
+      "label": "MiniMax H3",
+      "category": "video",
+      "workspace": "video",
+      "description": "MiniMax H3 audiovisual video prompts, with text-only and reference-driven modes.",
+      "strategy": "backend.targets.h3",
+      "output_tokens": 2048,
+      "aspect_ratios": [
+        "1:1",
+        "2:3",
+        "3:2",
+        "3:4",
+        "4:3",
+        "9:16",
+        "16:9",
+        "21:9"
+      ],
+      "durations": {
+        "min": 1,
+        "max": 20,
+        "default": 10
+      },
+      "default_mode": "Reference",
+      "default_aspect_ratio": "16:9",
+      "media_capabilities": [
+        "image",
+        "video",
+        "audio"
+      ],
+      "guide_revision": "bfc8ed0353f5a9733be73e6b2c98ec0948195b86",
+      "guide_source_root": "https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/bfc8ed0353f5a9733be73e6b2c98ec0948195b86/docs",
+      "guides": [
+        {
+          "id": "base",
+          "title": "MiniMax H3 Video Prompt Writing Guide",
+          "filename": "minimax_h3/base.md",
+          "source_sha256": "2cfebc096a6e08370f288d468d90b60f7f9bcb938f94bf090816e910e48e75fc"
+        },
+        {
+          "id": "reference",
+          "title": "MiniMax H3 Reference Prompt Writing Guide",
+          "filename": "minimax_h3/ref.md",
+          "source_sha256": "1e574f356716ad55612247ffb7bbccbcdb484ad96599d63c7dca1af186b1fab7"
+        }
+      ],
+      "system_prompts": {
+        "T2VA": "base",
+        "I2VA": "base",
+        "FL2VA": "base",
+        "L2VA": "base",
+        "Reference": "ref"
+      },
+      "output_contract": {
+        "profile": "official_sections",
+        "brief_limit": 8000,
+        "requires_duration": true,
+        "requires_aspect_ratio": true,
+        "shot_numbering": true,
+        "timestamp_syntax": true
+      },
+      "modes": [
+        {
+          "id": "T2VA",
+          "label": "T2VA",
+          "title": "Text to Video and Audio",
+          "hint": "Creative Brief only · builds the full audiovisual timeline from text",
+          "guide": "base",
+          "system_prompt": "base",
+          "requires_media": false,
+          "limits": {}
+        },
+        {
+          "id": "I2VA",
+          "label": "I2VA",
+          "title": "Image to Video and Audio",
+          "hint": "One first-frame image anchors the opening",
+          "guide": "base",
+          "system_prompt": "base",
+          "requires_media": true,
+          "limits": {
+            "image": 1
+          }
+        },
+        {
+          "id": "FL2VA",
+          "label": "FL2VA",
+          "title": "First and Last Frame to Video and Audio",
+          "hint": "First and last frames constrain a continuous path",
+          "guide": "base",
+          "system_prompt": "base",
+          "requires_media": true,
+          "limits": {
+            "image": 2
+          }
+        },
+        {
+          "id": "L2VA",
+          "label": "L2VA",
+          "title": "Last Frame to Video and Audio",
+          "hint": "One last-frame image anchors the ending",
+          "guide": "base",
+          "system_prompt": "base",
+          "requires_media": true,
+          "limits": {
+            "image": 1
+          }
+        },
+        {
+          "id": "Reference",
+          "label": "Ref2VA",
+          "title": "Reference to Video and Audio",
+          "hint": "Images, video and audio carry assigned reference roles",
+          "guide": "reference",
+          "system_prompt": "ref",
+          "requires_media": true,
+          "limits": {
+            "image": 9,
+            "video": 3,
+            "audio": 3,
+            "total": 12
+          }
+        }
+      ]
+    },
+    {
+      "id": "minimax_music3",
+      "label": "MiniMax Music 3",
+      "category": "audio",
+      "workspace": "music",
+      "description": "MiniMax Music 3 structured music captions and lyric writing.",
+      "strategy": "backend.targets.music3",
+      "output_tokens": 1536,
+      "aspect_ratios": [],
+      "durations": null,
+      "default_mode": "Music3",
+      "default_aspect_ratio": null,
+      "media_capabilities": [],
+      "guides": [],
+      "system_prompts": {},
+      "output_contract": {
+        "profile": "music_caption",
+        "brief_limit": 2000,
+        "requires_duration": false,
+        "requires_aspect_ratio": false,
+        "shot_numbering": false,
+        "timestamp_syntax": false,
+        "lyrics_limit": 4000
+      },
+      "modes": [
+        {
+          "id": "Music3",
+          "label": "Caption",
+          "title": "Music Caption",
+          "hint": "Structured music caption with Global Metadata, Vocal Details and Arrangement",
+          "guide": null,
+          "system_prompt": "base",
+          "requires_media": false,
+          "limits": {}
+        },
+        {
+          "id": "Music3Lyrics",
+          "label": "Lyrics",
+          "title": "Lyrics",
+          "hint": "Create new lyrics or rewrite the current lyrics",
+          "guide": null,
+          "system_prompt": "lyrics",
+          "requires_media": false,
+          "limits": {},
+          "output_only": true
+        }
+      ]
+    },
+    {
+      "id": "qwen_image_2.1",
+      "label": "Qwen Image 2.1",
+      "category": "image",
+      "workspace": "image",
+      "description": "Qwen Image 2.1 text-to-image prompts and instruction-driven image editing.",
+      "strategy": "backend.targets.qwen_image",
+      "output_tokens": 2048,
+      "aspect_ratios": [
+        "1:1",
+        "3:2",
+        "2:3",
+        "4:3",
+        "3:4",
+        "16:9",
+        "9:16"
+      ],
+      "durations": null,
+      "default_mode": "TextToImage",
+      "default_aspect_ratio": "1:1",
+      "media_capabilities": [
+        "image"
+      ],
+      "guide_revision": "7307809d2c9d582be700a1b9b04d393fc9cdf865",
+      "guide_source_root": "https://github.com/QwenLM/Qwen-Image-2.1/blob/7307809d2c9d582be700a1b9b04d393fc9cdf865/prompt_rewrite/prompts",
+      "guides": [
+        {
+          "id": "t2i",
+          "title": "Qwen Image 2.1 Text-to-Image Prompt Writing Guide",
+          "filename": "qwen_image_2.1/t2i.md",
+          "source_filename": "system_prompt_t2i.txt",
+          "source_sha256": "a77c9a06c59b120741141d9514b95682bb8761d02bec49ca61def7b2b3d9fb99"
+        },
+        {
+          "id": "edit",
+          "title": "Qwen Image 2.1 Image Edit Prompt Writing Guide",
+          "filename": "qwen_image_2.1/edit.md",
+          "source_filename": "system_prompt_edit.txt",
+          "source_sha256": "e378fea686a1431581ba4c654d332ae96adad633f144ae738ec8ce9c4fd66439"
+        }
+      ],
+      "system_prompts": {
+        "TextToImage": "base",
+        "ImageEdit": "edit"
+      },
+      "output_contract": {
+        "profile": "image_description",
+        "brief_limit": 8000,
+        "requires_duration": false,
+        "requires_aspect_ratio": true,
+        "shot_numbering": false,
+        "timestamp_syntax": false,
+        "edit_instruction_limit": 4000
+      },
+      "modes": [
+        {
+          "id": "TextToImage",
+          "label": "T2I",
+          "title": "Text to Image",
+          "hint": "Describe the image to generate from scratch",
+          "guide": "t2i",
+          "system_prompt": "base",
+          "requires_media": false,
+          "limits": {}
+        },
+        {
+          "id": "ImageEdit",
+          "label": "Edit",
+          "title": "Image Edit",
+          "hint": "One or more source images plus an edit instruction",
+          "guide": "edit",
+          "system_prompt": "edit",
+          "requires_media": true,
+          "instruction_field": "edit_instruction",
+          "instruction_limit": 4000,
+          "limits": {
+            "image": 10,
+            "total": 10
+          }
+        }
+      ]
+    },
+    {
+      "id": "krea_2",
+      "label": "Krea 2",
+      "category": "image",
+      "workspace": "image",
+      "description": "Krea 2 native text-to-image prompts.",
+      "strategy": "backend.targets.krea_2",
+      "output_tokens": 2048,
+      "aspect_ratios": [
+        "1:1",
+        "3:2",
+        "2:3",
+        "4:3",
+        "3:4",
+        "16:9",
+        "9:16"
+      ],
+      "durations": null,
+      "default_mode": "Krea2TextToImage",
+      "default_aspect_ratio": "1:1",
+      "media_capabilities": [],
+      "guides": [
+        {
+          "id": "base",
+          "title": "Krea 2 Prompt Writing Guide",
+          "filename": "krea_2/t2i.md",
+          "source_sha256": null
+        }
+      ],
+      "system_prompts": {
+        "Krea2TextToImage": "base"
+      },
+      "output_contract": {
+        "profile": "image_description",
+        "brief_limit": 8000,
+        "requires_duration": false,
+        "requires_aspect_ratio": true,
+        "shot_numbering": false,
+        "timestamp_syntax": false
+      },
+      "modes": [
+        {
+          "id": "Krea2TextToImage",
+          "label": "T2I",
+          "title": "Text to Image",
+          "hint": "Describe the image to generate from scratch",
+          "guide": "base",
+          "system_prompt": "base",
+          "requires_media": false,
+          "limits": {}
+        }
+      ]
+    }
+  ]
+}

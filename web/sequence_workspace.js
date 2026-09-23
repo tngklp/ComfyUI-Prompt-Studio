@@ -8,7 +8,7 @@ export const displaySeparator = value => value.replace(/\\/g,"\\\\").replace(/\n
 export const parseSeparator = value => value.replace(/\\([\\nrt])/g,(_, char)=>({n:"\n",r:"\r",t:"\t","\\":"\\"}[char]));
 
 const escape = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const button = (action, label, extra = "") => `<button type="button" class="h3ps-text-button" data-seq-action="${action}" ${extra}>${label}</button>`;
+const button = (action, label, extra = "") => `<button type="button" class="ps-text-button" data-seq-action="${action}" ${extra}>${label}</button>`;
 const paths = { undo:'<path d="M9 5 4 10l5 5M4 10h9a6 6 0 0 1 6 6v3"/>', redo:'<path d="m15 5 5 5-5 5m5-5h-9a6 6 0 0 0-6 6v3"/>', reader:'<path d="M3 4h7l2 2 2-2h7v15h-7l-2 2-2-2H3zM12 6v15"/>', minus:'<path d="M5 12h14"/>', plus:'<path d="M5 12h14M12 5v14"/>' };
 
 export function createSequenceWorkspace(host) {
@@ -17,35 +17,35 @@ export function createSequenceWorkspace(host) {
   let enabled = false, reader = false, selection = null, activeTarget = null;
   const chunks = new Map(), refineDrafts = new Map(), promptCarets = new Map();
   const svg = name => paths[name] ? `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name]}</svg>` : host.icon(name,15);
-  const iconButton = (action, label, name, extra = "") => `<button type="button" class="h3ps-icon-button" data-seq-action="${action}" title="${label}" aria-label="${label}" ${extra}>${svg(name)}</button>`;
+  const iconButton = (action, label, name, extra = "") => `<button type="button" class="ps-icon-button" data-seq-action="${action}" title="${label}" aria-label="${label}" ${extra}>${svg(name)}</button>`;
   const generateButton = document.createElement("button");
-  generateButton.type = "button"; generateButton.className = "h3ps-primary-button"; generateButton.dataset.seqGenerate = "";
+  generateButton.type = "button"; generateButton.className = "ps-primary-button"; generateButton.dataset.seqGenerate = "";
   root.querySelector("[data-generate]").after(generateButton);
   const selector = document.createElement("div");
-  selector.className = "h3ps-clear-control h3ps-sequence-selector";
-  selector.innerHTML = splitMenuMarkup(host.icon, {label:"Single", primary:"data-seq-selector", toggle:"data-seq-selector-caret", menu:"data-seq-menu", ariaLabel:"Writer workspace", contents:`${button("single","<strong>Single</strong><small>DEFAULT H3</small>")}${button("sequence","<strong>Sequence</strong><small>CHUNKED PROMPTS</small>")}`});
-  root.querySelector(".h3ps-section-actions").prepend(selector);
-  const left = document.createElement("div"); left.className = "h3ps-sequence-inputs";
-  left.innerHTML = `<div class="h3ps-control-grid"><label class="h3ps-field h3ps-duration-field" title="Applies to the next Add chunk; existing chunks keep their durations"><span>New chunk duration <b data-seq-default-label></b></span><div><input type="range" min="1" max="${MAX_CHUNK_DURATION}" step="1" data-seq-default><i></i></div></label>${aspectRatioMarkup(host.icon,"sequence-aspect")}</div>
-    <section class="h3ps-sequence-media"><strong title="Add a first frame, last frame, or references to guide the sequence. In the Creative Brief, refer to them as first frame, last frame, or reference 1; inside chunks, use the shown &lt;Picture N&gt; tag.">Sequence media</strong><div data-seq-global-media></div></section>
-    <label class="h3ps-brief"><span><strong>Creative brief</strong><small>Describe the whole sequence, including absolute times</small></span><textarea spellcheck="false" maxlength="8000" data-seq-brief placeholder="At around 15 seconds she stands up…"></textarea></label>
-    <section class="h3ps-music-system-prompt"><button type="button" class="h3ps-music-system-prompt-toggle" data-seq-action="instructions" aria-expanded="false"><strong>Sequence Instructions</strong><span>${host.icon("chevron",12)}</span></button><div data-seq-instructions-panel hidden><div class="h3ps-system-prompt-panel"><textarea spellcheck="false" maxlength="32000" data-seq-instructions aria-label="Sequence Instructions"></textarea><footer class="h3ps-sequence-instructions-footer">${formatChoiceMarkup("Sequence output format",[["format-official","Official"],["format-compact","Compact"]],"format-"+state.outputFormat)}${button("reset", "Restore default")}</footer></div><small class="h3ps-sequence-contract-hint" data-seq-contract></small></div></section>`;
+  selector.className = "ps-clear-control ps-sequence-selector";
+  selector.innerHTML = splitMenuMarkup(host.icon, {label:"Single", primary:"data-seq-selector", toggle:"data-seq-selector-caret", menu:"data-seq-menu", ariaLabel:"Target workspace", contents:`${button("single","<strong>Single</strong><small>DEFAULT H3</small>")}${button("sequence","<strong>Sequence</strong><small>CHUNKED PROMPTS</small>")}`});
+  root.querySelector(".ps-section-actions").prepend(selector);
+  const left = document.createElement("div"); left.className = "ps-sequence-inputs";
+  left.innerHTML = `<div class="ps-control-grid"><label class="ps-field ps-duration-field" title="Applies to the next Add chunk; existing chunks keep their durations"><span>New chunk duration <b data-seq-default-label></b></span><div><input type="range" min="1" max="${MAX_CHUNK_DURATION}" step="1" data-seq-default><i></i></div></label>${aspectRatioMarkup(host.icon,"sequence-aspect")}</div>
+    <section class="ps-sequence-media"><strong title="Add a first frame, last frame, or references to guide the sequence. In the Creative Brief, refer to them as first frame, last frame, or reference 1; inside chunks, use the shown &lt;Picture N&gt; tag.">Sequence media</strong><div data-seq-global-media></div></section>
+    <label class="ps-brief"><span><strong>Creative brief</strong><small>Describe the whole sequence, including absolute times</small></span><textarea spellcheck="false" maxlength="8000" data-seq-brief placeholder="At around 15 seconds she stands up…"></textarea></label>
+    <section class="ps-music-system-prompt"><button type="button" class="ps-music-system-prompt-toggle" data-seq-action="instructions" aria-expanded="false"><strong>Sequence Instructions</strong><span>${host.icon("chevron",12)}</span></button><div data-seq-instructions-panel hidden><div class="ps-system-prompt-panel"><textarea spellcheck="false" maxlength="32000" data-seq-instructions aria-label="Sequence Instructions"></textarea><footer class="ps-sequence-instructions-footer">${formatChoiceMarkup("Sequence output format",[["format-official","Official"],["format-compact","Compact"]],"format-"+state.outputFormat)}${button("reset", "Restore default")}</footer></div><small class="ps-sequence-contract-hint" data-seq-contract></small></div></section>`;
   root.querySelector("[data-video-inputs]").append(left);
   left.querySelector("[data-seq-brief]").value = state.brief;
   left.querySelector("[data-seq-instructions]").value = state.instructions;
   left.querySelector("[data-seq-default]").value = state.defaultDuration;
-  bindAspectRatio(left.querySelector(".h3ps-choice"), state.aspectRatio, value => { state.aspectRatio = value; persist(); });
-  const right = document.createElement("section"); right.className = "h3ps-sequence-output"; right.setAttribute("aria-label","Generated sequence");
-  right.innerHTML = `<header><strong>Generated sequence</strong><span data-seq-count></span>${iconButton("reader","Reader","reader",'aria-pressed="false"')}${copyButtonMarkup(host.icon,'data-seq-action="copy-all" title="Copy all prompts" aria-label="Copy all prompts"', "", true)}</header><section class="h3ps-sequence-copy-format" data-seq-copy-format hidden aria-label="Copy format">
-    <div class="h3ps-sequence-copy-options"><span>Copy format</span>${formatChoiceMarkup("Copy format",[["copy-default","Default"],["copy-custom","Custom"]],"copy-default")}<small data-seq-copy-default>Prompts only</small></div>
-    <div class="h3ps-sequence-copy-editor" data-seq-copy-custom hidden><div class="h3ps-sequence-copy-heading"><span>Shape your copied text</span>${button("copy-reset","Reset")}</div>
-      <div class="h3ps-sequence-copy-examples" aria-label="Format examples">${button("copy-divider","Divider")}${button("copy-times","Time ranges")}${button("copy-numbered","Numbered")}${button("copy-chapters","Chapters")}</div>
-      <label class="h3ps-field"><span>For each chunk</span><textarea spellcheck="false" data-seq-copy-template maxlength="8000" rows="2" spellcheck="false" aria-label="Chunk template"></textarea></label>
-      <label class="h3ps-field"><span>Between chunks <small>Use \\n for a line break</small></span><input type="text" data-seq-copy-separator maxlength="2000" spellcheck="false" aria-label="Between chunks" placeholder="Nothing added"></label>
-      <small class="h3ps-sequence-copy-tokens">{prompt} <span>text</span> · {index} <span>number</span> · {start} / {end} / {duration} <span>seconds</span></small>
+  bindAspectRatio(left.querySelector(".ps-choice"), state.aspectRatio, value => { state.aspectRatio = value; persist(); });
+  const right = document.createElement("section"); right.className = "ps-sequence-output"; right.setAttribute("aria-label","Generated sequence");
+  right.innerHTML = `<header><strong>Generated sequence</strong><span data-seq-count></span>${iconButton("reader","Reader","reader",'aria-pressed="false"')}${copyButtonMarkup(host.icon,'data-seq-action="copy-all" title="Copy all prompts" aria-label="Copy all prompts"', "", true)}</header><section class="ps-sequence-copy-format" data-seq-copy-format hidden aria-label="Copy format">
+    <div class="ps-sequence-copy-options"><span>Copy format</span>${formatChoiceMarkup("Copy format",[["copy-default","Default"],["copy-custom","Custom"]],"copy-default")}<small data-seq-copy-default>Prompts only</small></div>
+    <div class="ps-sequence-copy-editor" data-seq-copy-custom hidden><div class="ps-sequence-copy-heading"><span>Shape your copied text</span>${button("copy-reset","Reset")}</div>
+      <div class="ps-sequence-copy-examples" aria-label="Format examples">${button("copy-divider","Divider")}${button("copy-times","Time ranges")}${button("copy-numbered","Numbered")}${button("copy-chapters","Chapters")}</div>
+      <label class="ps-field"><span>For each chunk</span><textarea spellcheck="false" data-seq-copy-template maxlength="8000" rows="2" spellcheck="false" aria-label="Chunk template"></textarea></label>
+      <label class="ps-field"><span>Between chunks <small>Use \\n for a line break</small></span><input type="text" data-seq-copy-separator maxlength="2000" spellcheck="false" aria-label="Between chunks" placeholder="Nothing added"></label>
+      <small class="ps-sequence-copy-tokens">{prompt} <span>text</span> · {index} <span>number</span> · {start} / {end} / {duration} <span>seconds</span></small>
     </div>
-    </section><pre class="h3ps-sequence-reader-text" data-seq-copy-preview hidden></pre><small class="h3ps-sequence-progress" data-seq-progress role="status"></small><div class="h3ps-sequence-chunks"></div><div class="h3ps-sequence-add" data-seq-chrome><button type="button" class="h3ps-secondary-button" data-seq-action="add">${svg("plus")} Add chunk</button></div>`;
-  root.querySelector(".h3ps-workspace").append(right);
+    </section><pre class="ps-sequence-reader-text" data-seq-copy-preview hidden></pre><small class="ps-sequence-progress" data-seq-progress role="status"></small><div class="ps-sequence-chunks"></div><div class="ps-sequence-add" data-seq-chrome><button type="button" class="ps-secondary-button" data-seq-action="add">${svg("plus")} Add chunk</button></div>`;
+  root.querySelector(".ps-workspace").append(right);
   right.querySelector("[data-seq-copy-template]").value=state.copyFormat.template;
   right.querySelector("[data-seq-copy-separator]").value=displaySeparator(state.copyFormat.separator);
   const persist = () => { try { saveSequence(host.storage,state); } catch(e) { host.error(e); } };
@@ -69,7 +69,7 @@ export function createSequenceWorkspace(host) {
     generateButton.classList.toggle("is-cancel",controller.busy);
     generateButton.disabled=false;
     left.querySelector("[data-seq-default-label]").textContent=`${state.defaultDuration}s`;
-    left.querySelector("[data-seq-default]").style.setProperty("--h3ps-range",`${(state.defaultDuration-1)/(MAX_CHUNK_DURATION-1)*100}%`);
+    left.querySelector("[data-seq-default]").style.setProperty("--ps-range",`${(state.defaultDuration-1)/(MAX_CHUNK_DURATION-1)*100}%`);
     left.querySelectorAll('[data-seq-action^="format-"]').forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.seqAction==="format-"+state.outputFormat)));
     left.querySelector('[data-seq-contract]').textContent=(state.outputFormat==="compact"
       ? "Compact writes standalone natural-language video descriptions followed by overall_soundscape and non_diegetic_music. Media roles and local timing still apply. "
@@ -83,7 +83,7 @@ export function createSequenceWorkspace(host) {
     right.querySelector("[data-seq-copy-default]").hidden=custom;
     right.querySelector("[data-seq-copy-preview]").hidden=!preview;
     right.querySelector("[data-seq-copy-preview]").textContent=reader && custom ? aggregate(state) : "";
-    right.querySelector(".h3ps-sequence-chunks").hidden=preview;
+    right.querySelector(".ps-sequence-chunks").hidden=preview;
     right.querySelector('[data-seq-action="copy-default"]').setAttribute("aria-pressed",String(!custom));
     right.querySelector('[data-seq-action="copy-custom"]').setAttribute("aria-pressed",String(custom));
     right.querySelector('[data-seq-action="reader"]').setAttribute("aria-pressed",String(reader));
@@ -103,7 +103,7 @@ export function createSequenceWorkspace(host) {
     });
     if(!found) selection=null;
     root.classList.toggle("is-sequence-selecting",!!selection);
-    root.querySelectorAll('[data-h3ps-media] [data-asset-id]').forEach(card=>{
+    root.querySelectorAll('[data-ps-media] [data-asset-id]').forEach(card=>{
       const asset=host.assets().find(a=>a.id===card.dataset.assetId);
       card.classList.toggle("is-sequence-selectable",!!selection && !!asset && asset.status!=="needs_edit" && (selection.key==="references" || asset.type==="image"));
     });
@@ -121,25 +121,25 @@ export function createSequenceWorkspace(host) {
     const insertable=!!asset && !!chunkId;
     const element=asset && !insertable ? "span" : "button";
     const identity=`data-key="${key}" data-asset="${escape(assetId)}" data-slot-chunk="${escape(chunkId)}"`;
-    return `<span class="h3ps-sequence-slot" ${editable ? "data-seq-slot" : "data-seq-anchor"} ${identity}><${element} ${insertable ? 'type="button" data-seq-action="insert-media"' : asset ? "" : 'type="button" data-seq-action="select-media" aria-pressed="false"'} class="h3ps-add-asset" title="${escape(asset ? asset.filename || label : 'Choose from Media Store or drop media here')}" ${asset ? "" : `aria-label="Add ${key === 'references' ? 'reference' : key + ' frame'}"`}>${asset ? src ? `<img src="${escape(src)}" alt="">` : svg(asset.type === "audio" ? "audio" : "image") : svg("plus")}<span>${escape(label)}</span></${element}>${asset && editable ? iconButton("remove-media","Remove media from here","close") : !asset ? button("selection-cancel","Cancel","hidden") : ""}</span>`;
+    return `<span class="ps-sequence-slot" ${editable ? "data-seq-slot" : "data-seq-anchor"} ${identity}><${element} ${insertable ? 'type="button" data-seq-action="insert-media"' : asset ? "" : 'type="button" data-seq-action="select-media" aria-pressed="false"'} class="ps-add-asset" title="${escape(asset ? asset.filename || label : 'Choose from Media Store or drop media here')}" ${asset ? "" : `aria-label="Add ${key === 'references' ? 'reference' : key + ' frame'}"`}>${asset ? src ? `<img src="${escape(src)}" alt="">` : svg(asset.type === "audio" ? "audio" : "image") : svg("plus")}<span>${escape(label)}</span></${element}>${asset && editable ? iconButton("remove-media","Remove media from here","close") : !asset ? button("selection-cancel","Cancel","hidden") : ""}</span>`;
   }
   function setMarkup(el, markup) { if(el._sequenceMarkup!==markup) { el.innerHTML=markup; el._sequenceMarkup=markup; } }
   function chunkElement(c) {
-    const section=document.createElement("section"); section.className="h3ps-sequence-chunk"; section.dataset.chunk=c.id;
-    section.innerHTML=`<header><strong data-seq-heading></strong><small class="h3ps-sequence-progress" data-seq-status role="status"></small><details class="h3ps-sequence-attention" data-seq-attention hidden><summary aria-label="Prompt needs attention" aria-describedby="h3ps-seq-help-${escape(c.id)}" title="Model output needs review"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 3 2 21h20L12 3Z"/><path d="M12 9v5m0 3v1"/></svg></summary><div><strong>The model could not finish formatting this prompt</strong><p data-seq-help id="h3ps-seq-help-${escape(c.id)}"></p></div></details><div class="h3ps-sequence-duration" data-seq-chrome>${iconButton("decrease","Shorten chunk by one second","minus")}<span data-seq-duration></span>${iconButton("increase","Lengthen chunk by one second","plus")}</div>${iconButton("delete","Delete chunk","close",'data-seq-chrome')}</header>
-      <input spellcheck="false" class="h3ps-sequence-instruction" data-seq-instruction data-seq-chrome placeholder="Optional direction for this chunk…" title="Used whenever AI writes or refines this chunk.">
-      <div class="h3ps-sequence-conditioning" data-seq-chrome aria-label="Chunk conditioning"></div>
-      <div class="h3ps-sequence-editor" data-seq-chrome><div class="h3ps-editor-highlight h3ps-sequence-highlights" data-seq-highlights aria-hidden="true"></div><textarea spellcheck="false" class="h3ps-sequence-prompt" data-seq-prompt data-seq-chrome placeholder="The generated H3 prompt will appear here"></textarea></div><pre class="h3ps-sequence-reader-text h3ps-editor-highlight" data-seq-reader-text hidden></pre>
-      <div class="h3ps-sequence-chunk-actions" data-seq-chrome>${button("refine-open","Refine")}${button("generate","Regenerate")}${copyButtonMarkup(host.icon,'data-seq-action="copy" title="Copy prompt" aria-label="Copy prompt"')}${iconButton("undo","Undo AI replacement","undo")}${iconButton("redo","Redo AI replacement","redo")}</div>
-      <div class="h3ps-refine" data-seq-refine data-seq-chrome hidden><div class="h3ps-refine-heading"><span><strong data-seq-refine-title></strong><small>Describe only what should change</small></span></div><textarea spellcheck="false" data-seq-refine-instruction placeholder="Describe only what should change"></textarea><div class="h3ps-refine-actions">${button("refine-close","Cancel")}<button type="button" class="h3ps-refine-submit" data-seq-action="refine">${host.icon("spark",13)} Refine</button></div></div>`;
+    const section=document.createElement("section"); section.className="ps-sequence-chunk"; section.dataset.chunk=c.id;
+    section.innerHTML=`<header><strong data-seq-heading></strong><small class="ps-sequence-progress" data-seq-status role="status"></small><details class="ps-sequence-attention" data-seq-attention hidden><summary aria-label="Prompt needs attention" aria-describedby="ps-seq-help-${escape(c.id)}" title="Model output needs review"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 3 2 21h20L12 3Z"/><path d="M12 9v5m0 3v1"/></svg></summary><div><strong>The model could not finish formatting this prompt</strong><p data-seq-help id="ps-seq-help-${escape(c.id)}"></p></div></details><div class="ps-sequence-duration" data-seq-chrome>${iconButton("decrease","Shorten chunk by one second","minus")}<span data-seq-duration></span>${iconButton("increase","Lengthen chunk by one second","plus")}</div>${iconButton("delete","Delete chunk","close",'data-seq-chrome')}</header>
+      <input spellcheck="false" class="ps-sequence-instruction" data-seq-instruction data-seq-chrome placeholder="Optional direction for this chunk…" title="Used whenever AI writes or refines this chunk.">
+      <div class="ps-sequence-conditioning" data-seq-chrome aria-label="Chunk conditioning"></div>
+      <div class="ps-sequence-editor" data-seq-chrome><div class="ps-editor-highlight ps-sequence-highlights" data-seq-highlights aria-hidden="true"></div><textarea spellcheck="false" class="ps-sequence-prompt" data-seq-prompt data-seq-chrome placeholder="The generated H3 prompt will appear here"></textarea></div><pre class="ps-sequence-reader-text ps-editor-highlight" data-seq-reader-text hidden></pre>
+      <div class="ps-sequence-chunk-actions" data-seq-chrome>${button("refine-open","Refine")}${button("generate","Regenerate")}${copyButtonMarkup(host.icon,'data-seq-action="copy" title="Copy prompt" aria-label="Copy prompt"')}${iconButton("undo","Undo AI replacement","undo")}${iconButton("redo","Redo AI replacement","redo")}</div>
+      <div class="ps-refine" data-seq-refine data-seq-chrome hidden><div class="ps-refine-heading"><span><strong data-seq-refine-title></strong><small>Describe only what should change</small></span></div><textarea spellcheck="false" data-seq-refine-instruction placeholder="Describe only what should change"></textarea><div class="ps-refine-actions">${button("refine-close","Cancel")}<button type="button" class="ps-refine-submit" data-seq-action="refine">${host.icon("spark",13)} Refine</button></div></div>`;
     return section;
   }
   function render() {
     highlights.clear();
-    const scroll=right.scrollTop, rows=timeline(state), list=right.querySelector(".h3ps-sequence-chunks");
+    const scroll=right.scrollTop, rows=timeline(state), list=right.querySelector(".ps-sequence-chunks");
     const ids=new Set(rows.map(c=>c.id));
     for(const [id,el] of chunks) if(!ids.has(id)) { el.remove(); chunks.delete(id); refineDrafts.delete(id); }
-    setMarkup(left.querySelector("[data-seq-global-media]"), ["first","last","references"].map(key=>`<div class="h3ps-sequence-media-row" data-media-role="${key}"><span>${{first:"First frame",references:"References",last:"Last frame"}[key]}</span><div>${(key==="references" ? state.references : state[key] ? [state[key]] : []).map(id=>slot(key,id)).join("")}${key==="references" || !state[key] ? slot(key) : ""}</div></div>`).join(""));
+    setMarkup(left.querySelector("[data-seq-global-media]"), ["first","last","references"].map(key=>`<div class="ps-sequence-media-row" data-media-role="${key}"><span>${{first:"First frame",references:"References",last:"Last frame"}[key]}</span><div>${(key==="references" ? state.references : state[key] ? [state[key]] : []).map(id=>slot(key,id)).join("")}${key==="references" || !state[key] ? slot(key) : ""}</div></div>`).join(""));
     right.querySelector("[data-seq-count]").textContent=`${rows.length} chunk${rows.length===1?"":"s"} · ${rows.at(-1).end}s`;
     right.querySelector("[data-seq-progress]").textContent=controller.phase;
     rows.forEach(c=>{
@@ -157,7 +157,7 @@ export function createSequenceWorkspace(host) {
       highlights.paint(el.querySelector("[data-seq-highlights]"),promptHighlightMarkup(el.querySelector("[data-seq-prompt]").value,state.outputFormat) + "\n");
       setMarkup(el.querySelector("[data-seq-reader-text]"),promptHighlightMarkup(c.prompt,state.outputFormat));
       el.querySelector("[data-seq-reader-text]").hidden=!reader;
-      setMarkup(el.querySelector(".h3ps-sequence-conditioning"), effectiveMedia(state,c.id,host.assets()).map(m=>m.role==="Reference" ? slot("references",m.assetId,m.tag,c.id) : slot(m.role==="First frame"?"first":"last",m.assetId,m.tag===m.role ? m.role : `${m.role} · ${m.tag}`,c.id,false)).join("")+slot("references","","",c.id));
+      setMarkup(el.querySelector(".ps-sequence-conditioning"), effectiveMedia(state,c.id,host.assets()).map(m=>m.role==="Reference" ? slot("references",m.assetId,m.tag,c.id) : slot(m.role==="First frame"?"first":"last",m.assetId,m.tag===m.role ? m.role : `${m.role} · ${m.tag}`,c.id,false)).join("")+slot("references","","",c.id));
       el.querySelector("[data-seq-refine-title]").textContent=`Refine chunk ${String(c.index).padStart(2,"0")}`;
       el.querySelector("[data-seq-refine]").hidden=!refineDrafts.get(c.id)?.open;
       el.querySelectorAll("button,input,textarea").forEach(b=>b.disabled=controller.busy && !b.matches('[data-seq-action="copy"]'));
@@ -196,7 +196,7 @@ export function createSequenceWorkspace(host) {
         if(name==="format-official" || name==="format-compact") { setSequenceFormat(state,name.slice(7));left.querySelector('[data-seq-instructions]').value=state.instructions;persist();render();fit(left.querySelector('[data-seq-instructions]'));return; }
         if(name==="reader") { setReader(!reader); return; }
         if(name==="instructions") { const panel=left.querySelector("[data-seq-instructions-panel]"); panel.hidden=!panel.hidden; el.setAttribute("aria-expanded",String(!panel.hidden)); el.classList.toggle("is-open",!panel.hidden); fit(left.querySelector("[data-seq-instructions]")); return; }
-        if(name==="select-media") { selection=slotTarget(el.closest("[data-seq-slot]")); sync(); root.querySelector('[data-h3ps-media] .is-sequence-selectable')?.focus({preventScroll:true}); return; }
+        if(name==="select-media") { selection=slotTarget(el.closest("[data-seq-slot]")); sync(); root.querySelector('[data-ps-media] .is-sequence-selectable')?.focus({preventScroll:true}); return; }
         if(name==="selection-cancel") { selection=null; sync(); return; }
         if(name==="copy-default" || name==="copy-custom") { state.copyFormat.format=name==="copy-custom"?"custom":"prompts"; persist(); sync(); fit(right.querySelector("[data-seq-copy-template]")); return; }
         if(["copy-reset","copy-divider","copy-times","copy-numbered","copy-chapters"].includes(name)) {
@@ -248,9 +248,9 @@ export function createSequenceWorkspace(host) {
     if(!enabled) return;
     const el=event.target;
     if(selection && !controller.busy) {
-      const card=el.closest('[data-h3ps-media] [data-asset-id]');
+      const card=el.closest('[data-ps-media] [data-asset-id]');
       if(card) { event.preventDefault(); event.stopImmediatePropagation(); assign(selection,card.dataset.assetId); return; }
-      if(!el.closest('[data-h3ps-media]') && !el.closest('[data-seq-slot].is-selecting')) { selection=null; sync(); }
+      if(!el.closest('[data-ps-media]') && !el.closest('[data-seq-slot].is-selecting')) { selection=null; sync(); }
     }
     if(el.closest("[data-seq-generate]")) { event.stopImmediatePropagation(); controller.busy ? controller.cancel() : controller.start(primaryAction()); }
     if(el.closest("[data-workspace]")) setEnabled(false);
@@ -259,7 +259,7 @@ export function createSequenceWorkspace(host) {
       state.brief=""; state.chunks.forEach(c=>{c.prompt="";delete c.attention;c.undo=[];c.redo=[];}); left.querySelector("[data-seq-brief]").value=""; changed();
       if(el.closest("[data-clear-all]")) host.clearMedia();
     }
-    if(controller.busy && el.closest("[data-open-settings], [data-open-settings-header], .h3ps-generation-options, [data-model-picker]")) event.stopImmediatePropagation();
+    if(controller.busy && el.closest("[data-open-settings], [data-open-settings-header], .ps-generation-options, [data-model-picker]")) event.stopImmediatePropagation();
   },true);
   function rememberTarget(event) {
     if(!enabled || reader) return;
@@ -303,7 +303,7 @@ export function createSequenceWorkspace(host) {
     const slot=event.target.closest("[data-seq-slot]"); if(!enabled || !slot) return;
     event.preventDefault(); event.stopImmediatePropagation(); if(controller.busy) return;
     if(type==="dragover") event.dataTransfer.dropEffect="move";
-    else { const id=event.dataTransfer.getData("application/x-h3ps-asset"); if(id) assign(slotTarget(slot),id); }
+    else { const id=event.dataTransfer.getData("application/x-ps-asset"); if(id) assign(slotTarget(slot),id); }
   },true);
   // Resize only measures existing editors; it never reconstructs the document.
   if(typeof ResizeObserver!=="undefined") { const observer=new ResizeObserver(()=>{if(enabled && !reader) right.querySelectorAll("[data-seq-prompt]").forEach(fit);}); observer.observe(right); }

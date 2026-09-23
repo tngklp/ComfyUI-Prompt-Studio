@@ -174,7 +174,7 @@ def _model_candidate(
     setup_message = None
     if metadata is None:
         missing_dependencies.append("readable GGUF metadata")
-        setup_message = f"Writer could not read this GGUF header: {metadata_error}"
+        setup_message = f"Prompt Studio could not read this GGUF header: {metadata_error}"
     elif not architecture_recognized:
         missing_dependencies.append("supported GGUF architecture")
         setup_message = f"Architecture {architecture or 'unknown'} is discoverable but not supported by Direct GGUF."

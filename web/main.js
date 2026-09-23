@@ -1,13 +1,15 @@
 import { createDesktopNotifications } from "./desktop_notifications.js";
 import { promptHighlightMarkup } from "./prompt_highlights.js";
+import { MODE_DEFAULT_DRAFTS, defaultModeDraftFor } from "./mode_defaults.js";
 import { generationButtonMarkup, sequenceNotificationOptions, aspectRatioMarkup, bindAspectRatio, splitMenuMarkup, setSplitMenuOpen, copyButtonMarkup } from "./writer_controls.js";
 import { mediaVisualDescriptor } from "./media_visual.js";
 import { createSequenceWorkspace } from "./sequence_workspace.js";
 import { generateSequence, cancelSequence } from "./api/sequence.js";
 import { app } from "/scripts/app.js";
-import { cancel, clearMedia, diagnoseGGUFRuntime, disconnectApiProvider, freeComfyVram, generate, getApiProviderModels, getApiProviderPresets, getGuides, getModels, getOllamaStatus, getStatus, getSystemPrompt, probeApiProvider, probeExternalServer, refine, removeMedia, reorderMedia, unloadModel, uploadMedia } from "./api/h3studio.js";
-import { comfyVramIsAlreadyEmpty, createSessionId, fileCountFromDataTransfer, insertReferenceAtCaret, isChoiceMenuInteraction, isGuideMenuInteraction, isRuntimeMenuInteraction, moveOntoTarget, replacementTargetForFileDrop, replaceEventListener, vramReleaseReachedTarget } from "./compat.js";
+import { cancel, clearMedia, diagnoseGGUFRuntime, disconnectApiProvider, freeComfyVram, generate, getApiProviderModels, getApiProviderPresets, getModels, getOllamaStatus, getStatus, getTargets, probeApiProvider, probeExternalServer, refine, removeMedia, reorderMedia, unloadModel, uploadMedia } from "./api/prompt_studio.js";
+import { comfyVramIsAlreadyEmpty, createSessionId, fileCountFromDataTransfer, insertReferenceAtCaret, isChoiceMenuInteraction, isRuntimeMenuInteraction, moveOntoTarget, replacementTargetForFileDrop, replaceEventListener, vramReleaseReachedTarget } from "./compat.js";
 import { generateModelSummaryMarkup, settingsMarkup } from "./settings.js";
+import { targetSelectionMarkup } from "./target_selection.js";
 import {
   buildGeneratePayload,
   buildLyricsRefinePayload,
@@ -25,7 +27,6 @@ import {
   loadUserPreferences,
   normalizeOllamaHost,
   saveApiProviderConfig,
-  saveCustomSystemPrompts,
   saveExternalServerConfig,
   saveOllamaHost,
   saveOllamaModel,
@@ -37,149 +38,328 @@ import {
 import { autoVramControlMarkup, createVramHandoffCoordinator, installVramHandoff, isLocalOllamaHost, releaseComfyVramWhenIdle, unloadWriterModels } from "./vram_handoff.js";
 import { createLazyMediaTool } from "./media_tools.js";
 
-import { editMedia } from "./api/h3studio.js";
+import { editMedia } from "./api/prompt_studio.js";
+import {
+  adoptTargetCatalog,
+  allModeIds,
+  defaultModeForTarget,
+  defaultModeForWorkspace,
+  describesAudio,
+  modeBriefLimit,
+  modeDescriptor,
+  modeLyricsLimit,
+  panelForCategory,
+  selectableModes,
+  targetForMode,
+  targetList,
+} from "./target_registry.js";
 
-const EXTENSION_NAME = "minimax.h3.prompt.studio";
+const EXTENSION_NAME = "prompt.studio";
 const LAUNCHER_SCHEMA_VERSION = "2";
 const VRAM_HANDOFF_SUPPORTED = typeof app?.queuePrompt === "function";
-const HOST_CAPABILITIES = { windowed: true, comfyMemory: VRAM_HANDOFF_SUPPORTED, workflowMedia: true, ...app.h3psHost };
+const HOST_CAPABILITIES = { windowed: true, comfyMemory: VRAM_HANDOFF_SUPPORTED, workflowMedia: true, ...app.psHost };
 const vramHandoffCoordinator = createVramHandoffCoordinator();
-const INSTALLATION_GUIDE_URL = "https://github.com/duckyshell/ComfyUI-MiniMaxH3-Prompt-Writer/blob/main/docs/INSTALLATION.md";
-const TROUBLESHOOTING_GUIDE_URL = "https://github.com/duckyshell/ComfyUI-MiniMaxH3-Prompt-Writer/blob/main/docs/TROUBLESHOOTING.md";
-const MUSIC3_GUIDE_URL = "https://github.com/MiniMax-AI/MiniMax-Music3/tree/main/skills/music-caption-rewriter";
+const INSTALLATION_GUIDE_URL = "https://github.com/tngklp/ComfyUI-Prompt-Studio/blob/main/docs/INSTALLATION.md";
+const TROUBLESHOOTING_GUIDE_URL = "https://github.com/tngklp/ComfyUI-Prompt-Studio/blob/main/docs/TROUBLESHOOTING.md";
 
-const MODES = {
-  T2VA: {
-    title: "Text to video",
-    hint: "Describe the scene. No reference media is required.",
-    assets: [],
-  },
-  I2VA: {
-    title: "Image to video",
-    hint: "The opening image anchors subject, framing and visual style.",
-    assets: [],
-    limit: 1,
-  },
-  FL2VA: {
-    title: "First & last frame",
-    hint: "Define the visual transition between the opening and closing frames.",
-    assets: [],
-    limit: 2,
-  },
-  L2VA: {
-    title: "Last frame",
-    hint: "The final image defines where the generated shot must arrive.",
-    assets: [],
-    limit: 1,
-  },
-  Reference: {
-    title: "Images, video & audio",
-    tabTitle: "",
-    hint: "Add up to 9 images, 3 videos and 3 audio files.",
-    assets: [],
-  },
-};
+// Mode presentation for the video workspace, derived from the generation-target
+// registry. `limit` is the image-slot count the media panel enforces.
+const MODES = Object.fromEntries(
+  selectableModes(targetList().find((target) => target.workspace === "video"))
+    .map((mode) => [mode.id, {
+      title: mode.title,
+      hint: mode.hint,
+      assets: [],
+      ...(mode.limits?.image != null ? { limit: mode.limits.image } : {}),
+    }]),
+);
 
-const MODE_DEFAULT_DRAFTS = {
-  T2VA: {
-    brief: "At blue hour, a bicycle courier arrives at a quiet rooftop greenhouse, sets down a softly glowing parcel and watches the city lights switch on below. Use one continuous tracking shot, realistic motion and restrained sound.",
-    prompt: `integrated_multimodal_description: [Shot 1] Live-action, cinematic, a wide tracking shot follows a bicycle courier across a rain-dark rooftop toward a glass greenhouse at blue hour. The courier brakes beside the doorway, steps down and places a softly glowing parcel on a wooden bench. The camera arcs with small amplitude at slow speed as the courier turns toward the skyline and rows of city lights switch on across the distance. Reflections travel over the greenhouse glass while the courier remains still beside the parcel.
+/** Image-slot limit for a mode, or null when the mode is unlimited. */
+function modeImageLimit(mode) {
+  return modeDescriptor(mode)?.limits?.image ?? null;
+}
 
-overall_soundscape: Bicycle tires hiss across wet concrete, the chain clicks as the rider stops, and low rooftop wind moves through the greenhouse frame. Distant traffic continues below.
+/** Labels of the modes a text-only prompt model can still run. */
+function textOnlyModeLabels() {
+  const labels = selectableModes()
+    .filter((mode) => !mode.requires_media)
+    .map((mode) => mode.label || mode.id);
+  return labels.length ? labels.join(" and ") : "text modes";
+}
 
-non_diegetic_music: Sparse electronic pulses at a slow tempo with a low sustained synth tone, fading during the final skyline view.`,
-  },
-  I2VA: {
-    brief: "Preserve the person, wardrobe, setting and framing from the uploaded first frame. A small paper bird drifts into view; the person notices it, follows it with their eyes and slowly reaches toward it while the camera gently pushes in.",
-    prompt: `For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.
+/** The workspace of the currently selected mode. */
+function currentWorkspace() {
+  if (!studio) return "video";
+  return targetForMode(studio.mode)?.workspace
+    || targetList()[0]?.workspace
+    || "video";
+}
 
-integrated_multimodal_description: [Shot 1] Live-action, cinematic, the person shown in <Picture 1> remains in the same setting, preserving identity, wardrobe, lighting, spatial relationships and opening composition. A small folded paper bird drifts into the frame on a light current of air. The subject notices it, follows its path with their eyes and slowly raises one hand as the camera pushes in with small amplitude at slow speed. The paper bird settles just above the open palm while the original background remains stable.
+/** The target backing a workspace. */
+function targetForWorkspace(workspace) {
+  return targetList().find((target) => target.workspace === workspace) || targetList()[0] || null;
+}
 
-overall_soundscape: Soft room ambience continues beneath a faint rustle of paper and fabric movement.
+/**
+ * The target the studio opens on when no target is chosen yet.
+ *
+ * Prefers the video target, matching the historical default mode, then falls back
+ * to whatever the registry lists first so an empty or video-less registry still
+ * renders a mode row.
+ */
+function defaultTarget() {
+  return targetForWorkspace("video") || targetList()[0] || null;
+}
 
-non_diegetic_music: A restrained pattern of widely spaced piano notes, ending on a sustained note as the paper bird reaches the hand.`,
-  },
-  FL2VA: {
-    brief: "Create one continuous, physically believable transition from the uploaded opening frame to the uploaded ending frame. A cyclist releases the handlebar, raises and opens an umbrella, then settles precisely into the final pose and composition.",
-    prompt: `How the reference pictures align with the target video: Picture 1 (from Shot 1) aligns with the 0.00-second mark of the target video; Picture 2 (from Shot 1) aligns with the final moment of the target video.
+/** The target the current mode belongs to. */
+function activeTarget() {
+  return targetForMode(studio?.mode) || targetForWorkspace(currentWorkspace());
+}
 
-integrated_multimodal_description: [Shot 1] Live-action, cinematic, the cyclist begins in the identity, clothing, pose, setting and framing established by <Picture 1>, holding a closed umbrella beside the bicycle. The camera pulls out with small amplitude at slow speed as the cyclist releases the handlebar, raises the umbrella and presses the runner upward until the canopy opens. Water rolls from the expanding fabric while the cyclist steps beneath it, rotates the handle and gradually settles into the exact pose, spacing, object positions, camera angle and final composition established by <Picture 2>.
+/** Icon name for a target category. */
+function targetIconName(target) {
+  if (target?.category === "audio") return "audio";
+  if (target?.category === "image" || target?.category === "image-edit") return "image";
+  return "video";
+}
 
-overall_soundscape: Steady rain falls on the pavement, followed by the metallic click of the umbrella runner and the soft snap of the canopy opening. Water drips from the bicycle as distant traffic passes.
+/**
+ * Compact indicator in the toolbar row, showing which generation target is
+ * active. Clicking it reopens the picker with the current target preselected,
+ * so switching stays one click even though the picker is the only selector.
+ */
+function targetIndicatorMarkup() {
+  const target = activeTarget();
+  if (!target) return "";
+  return `<button class="ps-target-indicator-button" type="button" data-open-target-select title="Change generation target">
+    ${icon(targetIconName(target), 15)}
+    <strong>${escapeHtml(target.label || target.id)}</strong>
+    <em>Change</em>
+  </button>`;
+}
 
-non_diegetic_music: N/A`,
-  },
-  L2VA: {
-    brief: "Build a plausible action that lands exactly on the uploaded final frame. Begin with an intact ceramic cup near the table edge; a hand knocks it down, it breaks on the floor, and every fragment settles into the final arrangement.",
-    prompt: `How the reference picture aligns with the target video: <Picture 1> (from [Shot 1]) aligns with the final moment of the target video.
+/**
+ * Re-render the indicator in place.
+ *
+ * Replaces only the inner markup so the button element itself survives. Swapping
+ * the element would drop the click listener bound during setup and leave a dead
+ * button, which is exactly what happened when this used insertAdjacentHTML.
+ */
+function syncTargetIndicator() {
+  if (!studio?.root) return;
+  const slot = studio.root.querySelector("[data-target-indicator]");
+  if (!slot) return;
+  const button = slot.querySelector(".ps-target-indicator-button");
+  if (!button) return;
+  const target = activeTarget();
+  if (!target) return;
+  const label = button.querySelector("strong");
+  if (label) label.textContent = target.label || target.id;
+  button.title = `Generation target: ${target.label || target.id}. Click to change.`;
+  const glyph = button.querySelector("svg");
+  if (glyph && targetIconName(target) !== glyph.dataset.targetIcon) {
+    glyph.outerHTML = icon(targetIconName(target), 15);
+  }
+  const next = button.querySelector("svg");
+  if (next) next.dataset.targetIcon = targetIconName(target);
+}
 
-integrated_multimodal_description: [Shot 1] Live-action, cinematic, a close shot begins with an intact ceramic cup near the edge of a dark wooden table. The same hand and sleeve visible in <Picture 1> approach from the right. The camera pushes in with small amplitude at slow speed as the fingertips strike the cup. It tips, falls and breaks against the floor; fragments slide outward and gradually lose momentum. The hand lowers into view while every piece settles into the exact arrangement, lighting, focus, camera angle and final composition established by <Picture 1>.
+/** True when the target has at least one selectable mode. */
+function targetIsAvailable(target) {
+  return selectableModes(target).length > 0;
+}
 
-overall_soundscape: Fingertips tap the ceramic before it scrapes across the tabletop, falls and breaks with a sharp impact. Small fragments scatter and then stop sliding across the floor.
+/**
+ * Render the generation target picker. Targets come from the registry, so a
+ * target added to targets.json appears here without any code change.
+ */
+function syncTargetSelection() {
+  if (!studio?.root) return;
+  const view = studio.root.querySelector("[data-target-select-view]");
+  if (!view) return;
 
-non_diegetic_music: A low electronic pulse at a slow tempo stops immediately when the cup breaks.`,
-  },
-};
-const REFERENCE_DEFAULT_BRIEF = "Use identity and wardrobe from Picture 1 and the slow lateral camera movement from Video 1. A solitary character waits at a rain-soaked tram stop at blue hour, notices an approaching light and turns into the wind. End on a quiet, unresolved look; keep the shot cinematic, realistic and restrained.";
-const MUSIC3_DEFAULT_DRAFT = {
-  brief: "A reflective indie pop song that grows from close, fragile verses into a bright final chorus. Use warm piano, clean electric guitar, restrained drums, subtle analog texture, an intimate lead vocal and natural modern production.",
-  lyrics: `[Verse]
-Streetlights soften before dawn
-I breathe in and carry on
+  const targets = targetList();
+  const list = view.querySelector("[data-target-select-list]");
+  // Grouped under Image, Video and Audio. Any category the registry introduces
+  // that is not one of these is appended rather than dropped, so a new target is
+  // never invisible just because the headings have not been updated.
+  list.innerHTML = targetCategoryGroups(targets).map((group) => `
+    <section class="ps-target-select-group" aria-label="${escapeHtml(group.label)}">
+      <header class="ps-target-select-group-heading">
+        ${icon(group.icon, 15)}
+        <strong>${escapeHtml(group.label)}</strong>
+        <small>${group.targets.length} target${group.targets.length === 1 ? "" : "s"}</small>
+      </header>
+      <div class="ps-target-select-group-items">
+        ${group.targets.map((target) => targetSelectItemMarkup(target)).join("")}
+      </div>
+    </section>`).join("");
 
-[Chorus]
-A quiet spark becomes a flame
-I step ahead and speak my name`,
-  prompt: `### Global Metadata
+  const chosen = targets.find((target) => target.id === studio.targetSelectChoice) || null;
+  const confirm = view.querySelector("[data-target-select-confirm]");
+  confirm.disabled = !chosen || !targetIsAvailable(chosen);
 
-A reflective indie pop song at a steady mid-tempo pace, moving from tender uncertainty toward clear-eyed optimism. The production is modern and natural, led by warm piano, clean electric guitar, restrained live-feeling drums, rounded bass, and subtle analog texture. Dynamics should remain open and human rather than heavily compressed, with the final chorus providing the widest and brightest moment.
+  const status = view.querySelector("[data-target-select-status]");
+  status.textContent = `${targets.length} target(s) available`;
+}
 
-### Vocal Details
+/**
+ * Targets grouped for display, in a fixed Image / Video / Audio order.
+ *
+ * Categories outside that list are appended in registry order so nothing is
+ * silently hidden.
+ */
+function targetCategoryGroups(targets) {
+  const known = [
+    { id: "image", label: "Image", icon: "image" },
+    { id: "video", label: "Video", icon: "video" },
+    { id: "audio", label: "Audio", icon: "audio" },
+  ];
+  const byLabel = (a, b) => String(a.label || a.id).localeCompare(String(b.label || b.id));
+  const groups = [];
+  for (const entry of known) {
+    const members = targets
+      .filter((target) => target.category === entry.id
+        || (entry.id === "image" && target.category === "image-edit"))
+      .sort(byLabel);
+    if (members.length) groups.push({ ...entry, targets: members });
+  }
+  const grouped = new Set(known.map((entry) => entry.id));
+  const rest = targets
+    .filter((target) => !grouped.has(target.category) && !(target.category === "image-edit"))
+    .sort(byLabel);
+  if (rest.length) groups.push({ id: "__other", label: "Other", icon: "grid", targets: rest });
+  return groups;
+}
 
-An intimate lead vocal begins close and lightly breathy in the verses, with precise phrasing and a vulnerable tone. The delivery gains confidence as the song develops without becoming theatrical. Soft doubles may reinforce selected phrases, while compact harmony layers open around the chorus and expand modestly in the final repeat. Reverb stays warm and controlled so the words remain present.
+/** One selectable target card. */
+function targetSelectItemMarkup(target) {
+  const selected = target.id === studio.targetSelectChoice;
+  const available = targetIsAvailable(target);
+  const modes = selectableModes(target).map((mode) => escapeHtml(mode.label || mode.id));
+  return `<button type="button" role="radio" aria-checked="${selected}" class="ps-target-select-item ${selected ? "is-selected" : ""} ${available ? "" : "is-unavailable"}" ${available ? "" : "disabled"} data-target-select-id="${escapeHtml(target.id)}">
+    <span class="ps-target-select-item-head">
+      ${icon(targetIconName(target), 16)}
+      <strong>${escapeHtml(target.label || target.id)}</strong>
+      ${selected ? icon("check", 14) : ""}
+    </span>
+    <span class="ps-target-select-modes">${modes.map((mode) => `<span>${mode}</span>`).join("")}</span>
+  </button>`;
+}
 
-### Arrangement
+/**
+ * Show or hide the target picker. It covers the whole studio, so the workspace
+ * behind it is hidden rather than merely inert.
+ */
+function setTargetSelectionOpen(open) {
+  if (!studio?.root) return;
+  const view = studio.root.querySelector("[data-target-select-view]");
+  if (!view) return;
+  studio.targetSelectionOpen = open;
+  view.hidden = !open;
+  studio.root.querySelectorAll("[data-generate-view]").forEach((element) => { element.hidden = open; });
+  // Settings is a sibling row, so it wins on paint order; close it on open so the
+  // picker is what the user actually sees. The picker's own Settings button
+  // closes the picker before opening Settings, so the two never fight.
+  if (open) setSettingsOpen(false);
+  studio.root.classList.toggle("is-target-select-open", open);
+  if (open) {
+    // Preselect whatever is already active so reopening is not disorienting.
+    studio.targetSelectChoice = activeTarget()?.id || targetList()[0]?.id || null;
+    syncTargetSelection();
+  }
+}
 
-[Intro] Warm piano establishes the harmony alone before a faint analog pad and clean guitar harmonics enter at the edges.
+/** Apply the chosen target: switch to its workspace and enter the studio. */
+function confirmTargetSelection() {
+  if (!studio) return;
+  const target = targetList().find((candidate) => candidate.id === studio.targetSelectChoice);
+  if (!target || !targetIsAvailable(target)) return;
+  // The chosen TARGET's own default mode, not its workspace's: Qwen Image 2.1 and
+  // Krea 2 both live in the "image" workspace, so a workspace lookup would return
+  // whichever of the two is listed first and select the wrong target's mode.
+  const nextMode = defaultModeForTarget(target.id) || defaultModeForWorkspace(target.workspace);
+  if (nextMode && nextMode !== studio.mode) {
+    stashCurrentModeDraft();
+    studio.mode = nextMode;
+    if (!describesAudio(nextMode)) studio.lastVideoMode = nextMode;
+  }
+  setTargetSelectionOpen(false);
+  syncWorkspace();
+  syncTargetIndicator();
+  restoreModeDraft(studio.mode);
+  renderMedia(studio.mode);
+  syncRuntimeSummary();
+  saveUserPreferences(localStorage, studio);
+}
 
-[Verse] The lead vocal arrives over piano and sparse guitar arpeggios. Bass enters gradually, while percussion is limited to quiet pulse and texture.
+/**
+ * Mode tabs for one target, excluding output-only companion modes.
+ *
+ * Takes a target, not a workspace: two targets can share a workspace (Qwen Image
+ * 2.1 and Krea 2 are both "image"), so a workspace lookup returns whichever is
+ * listed first and renders the wrong target's modes.
+ */
+function modeButtonsMarkup(target) {
+  const modes = target ? selectableModes(target) : [];
+  return modes
+    .map((mode) => `<button type="button" role="tab" data-mode="${escapeHtml(mode.id)}">${escapeHtml(mode.label || mode.id)}</button>`)
+    .join("");
+}
 
-[Chorus] Restrained drums settle into a complete groove as bass, wider guitar voicings, and vocal harmonies lift the arrangement. The transition should feel earned rather than abrupt.
+/** Rebind clicks after the mode row is re-rendered for a new workspace. */
+function bindModeButtons() {
+  if (!studio?.root) return;
+  studio.root.querySelectorAll("[data-mode]").forEach((button) => {
+    if (button.dataset.modeBound === "true") return;
+    button.dataset.modeBound = "true";
+    button.addEventListener("click", () => selectMode(button.dataset.mode));
+  });
+}
 
-[Final Chorus] The same core palette reaches its fullest scale with brighter piano octaves, broader harmonies, and a subtle sustained texture behind the band. End by letting the drums and bass fall away, leaving the opening piano color to resolve naturally.`,
-};
+/** Switch the active mode, keeping drafts and the workspace panel in sync. */
+function selectMode(mode) {
+  if (!studio || !mode) return;
+  if (!isGenerationModeAvailable(studio.selectedModel, mode)) return;
+  if (mode === studio.mode) return;
+  stashCurrentModeDraft();
+  studio.mode = mode;
+  if (!describesAudio(mode)) studio.lastVideoMode = mode;
+  syncWorkspace();
+  restoreModeDraft(studio.mode);
+  renderMedia(studio.mode);
+  syncRuntimeSummary();
+  saveUserPreferences(localStorage, studio);
+}
 
-const SAMPLE_PROMPT = `subject_definitions:
-<Subject 1> is the coffee shop in <Picture 1>, with a brick wall, orange sofa, neon sign, and wooden table.
-<Subject 2> is the white Samoyed in <Picture 2> and <Picture 3>, with pointed ears and a curved tail.
-<Subject 3> is the blonde woman in <Video 1>, wearing a pink shirt.
-<Subject 4> is the brown-haired man in a grey hoodie from <Video 2>.
-<Audio 1> is the voice-timbre reference for <Subject 3> (S1), containing a spoken English vocal layer.
+/**
+ * Mode descriptor for the current registry. Falls back to the built-in MODES
+ * table so a mode the server does not know still renders.
+ */
+function modeData(mode) {
+  const descriptor = modeDescriptor(mode);
+  if (descriptor) {
+    return {
+      title: descriptor.title,
+      hint: descriptor.hint,
+      limit: descriptor.limits?.image ?? undefined,
+      tabTitle: descriptor.tabTitle,
+    };
+  }
+  return MODES[mode] || { title: mode, hint: "", assets: [] };
+}
 
-summary:
-[reference generation + audio reference] In a three-shot sitcom scene, <Subject 3> eats a cookie inside <Subject 1>. <Subject 4> enters with <Subject 2>, which lunges toward the cookie. <Audio 1> guides <Subject 3>'s voice timbre, and a canned audience laugh ends the exchange.
+/** True when the mode belongs to an audio target. */
+function isAudioMode(mode) {
+  return describesAudio(mode);
+}
 
-retention_analysis:
-<Subject 1> (appears in all shots): fully_preserved - its layout and key furniture are retained.
-<Subject 2> (appears in [Shot 1], [Shot 2]): fully_preserved - its white fur and silhouette are retained.
-<Subject 3> (appears in all shots): fully_preserved - her identity and wardrobe are retained.
-<Subject 4> (appears in [Shot 1], [Shot 2]): fully_preserved - his identity and wardrobe are retained.
-<Audio 1>: reference - its vocal timbre guides <Subject 3> without copying the signal.
-
-detailed_description:
-The target video uses a realistic multi-camera sitcom style with warm indoor lighting.
-[Shot 1] A medium shot establishes <Subject 1>. <Subject 3> (S1) sits on the sofa holding a cookie. <Subject 4> enters holding <Subject 2>'s leash. The Samoyed lunges toward the cookie. <Subject 3> jerks it back and, using the voice timbre from <Audio 1>, exclaims, <d>[English] Hey! Watch your dog!</d> She guards the cookie while <Subject 4> pulls the dog back.
-[Shot 2] At 00:03.000, cut to <Subject 4> (S2) holding <Subject 2> securely. In a playful tone he says, <d>[English] He just likes cookies more than me.</d> He smiles apologetically and strokes the dog's fur.
-[Shot 3] At 00:05.000, cut to <Subject 3> (S1). Her annoyance softens. Using <Audio 1>'s timbre, she replies, <d>[English] Well, he has good taste at least.</d> She raises the cookie as a canned audience laugh continues to the final frame.
-
-overall_soundscape:
-Soft indoor coffee-shop room tone continues throughout the scene.
-
-non_diegetic_music:
-N/A`;
-
+const SAMPLE_PROMPT = MODE_DEFAULT_DRAFTS.Reference.prompt;
 let studio;
 let workflowRevision = 0;
+// One entry per rendered aspect-ratio control (video panel and image panel).
+// Each exposes { close, update } from bindAspectRatio().
+let aspectRatioControls = [];
 let mediaPanelRequest = 0;
 let ggufRuntimeDiagnosticsPromise = null;
 let referenceInsertTarget = null;
@@ -227,91 +407,13 @@ function formatGenerationMeta(result) {
 function syncOutputLengthMeta() {
   if (!studio) return;
   const output = studio.root.querySelector("[data-output]");
-  const meta = studio.root.querySelector(".h3ps-editor-meta span:last-child");
+  const meta = studio.root.querySelector(".ps-editor-meta span:last-child");
   const suffix = meta.textContent.replace(/^[\d,.]+ (?:chars|characters)(?: · [\d,.]+ words)?(?: · )?/i, "");
   meta.textContent = `${promptLengthMeta(output.value)}${suffix ? ` · ${suffix}` : ""}`;
 }
 
 function newGenerationSeed() {
   return crypto.getRandomValues(new Uint32Array(1))[0] & 0x7fffffff;
-}
-
-function resizeSystemPromptEditor(textarea) {
-  if (!textarea) return;
-  textarea.style.height = "";
-  textarea.style.overflowY = "auto";
-}
-
-function syncMusicSystemPromptSummary() {
-  if (!studio) return;
-  const summary = studio.root.querySelector("[data-music-system-prompt-summary]");
-  if (!summary) return;
-  summary.textContent = Object.hasOwn(studio.customSystemPrompts, "music3")
-    || Object.hasOwn(studio.customSystemPrompts, "music3_lyrics")
-    ? "Custom"
-    : "Default";
-}
-
-async function syncSystemPromptEditor(profile) {
-  if (!studio) return;
-  const textarea = studio.root.querySelector(`[data-system-prompt="${profile}"]`);
-  if (!textarea) return;
-  const status = studio.root.querySelector(`[data-system-prompt-status="${profile}"]`);
-  const summaryStatus = studio.root.querySelector(`[data-system-prompt-summary-status="${profile}"]`);
-  const reset = studio.root.querySelector(`[data-system-prompt-reset="${profile}"]`);
-  const count = studio.root.querySelector(`[data-system-prompt-count="${profile}"]`);
-  const requestMode = profile === "music3_lyrics" ? "Music3Lyrics" : profile === "music3" ? "Music3" : profile === "reference" ? "Reference" : "T2VA";
-  textarea.disabled = true;
-  if (!studio.systemPromptDefaults[profile]) {
-    try {
-      const result = await getSystemPrompt(requestMode);
-      studio.systemPromptDefaults[result.profile] = result.system_prompt;
-    } catch (error) {
-      textarea.value = "";
-      if (status) status.textContent = "Unavailable";
-      if (summaryStatus) summaryStatus.textContent = "Unavailable";
-      showToast(error.code || "System Prompt unavailable", error.message, error.details);
-      return;
-    }
-  }
-  const custom = Object.hasOwn(studio.customSystemPrompts, profile);
-  textarea.value = custom ? studio.customSystemPrompts[profile] : studio.systemPromptDefaults[profile];
-  textarea.disabled = false;
-  if (status) status.textContent = custom ? "Custom" : "Default";
-  if (summaryStatus) summaryStatus.textContent = custom ? "Custom" : "Default";
-  reset.hidden = !custom;
-  count.textContent = `${textarea.value.length.toLocaleString()} / 8,000`;
-  resizeSystemPromptEditor(textarea);
-  syncMusicSystemPromptSummary();
-}
-
-function syncSystemPromptEditors() {
-  return Promise.all([
-    syncSystemPromptEditor("standard"),
-    syncSystemPromptEditor("reference"),
-    syncSystemPromptEditor("music3"),
-    syncSystemPromptEditor("music3_lyrics"),
-  ]);
-}
-
-function setSystemPromptProfile(profile) {
-  if (!studio) return;
-  studio.settingsPromptProfile = profile === "reference" ? "reference" : "standard";
-  studio.root.querySelectorAll("[data-system-prompt-profile]").forEach((button) => {
-    const selected = button.dataset.systemPromptProfile === studio.settingsPromptProfile;
-    button.classList.toggle("is-selected", selected);
-    button.setAttribute("aria-pressed", String(selected));
-  });
-  studio.root.querySelectorAll("[data-system-prompt-panel]").forEach((panel) => {
-    panel.hidden = panel.dataset.systemPromptPanel !== studio.settingsPromptProfile;
-  });
-  syncSystemPromptEditor(studio.settingsPromptProfile);
-}
-
-function setSystemPromptEditorOpen(open) {
-  if (!studio) return;
-  studio.root.querySelector("[data-system-prompt-overview]").hidden = open;
-  studio.root.querySelector("[data-system-prompt-editor]").hidden = !open;
 }
 
 function renderPromptHighlights() {
@@ -350,17 +452,18 @@ const STYLE_MODULES = [
   "prompts",
   "overlays",
   "music",
+  "target_select",
   "responsive",
   "sequence",
 ];
 
 function injectStyles() {
   for (const name of STYLE_MODULES) {
-    if (document.querySelector(`link[data-h3ps-style="${name}"]`)) continue;
+    if (document.querySelector(`link[data-ps-style="${name}"]`)) continue;
     const link = document.createElement("link");
     link.rel = "stylesheet";
     link.href = new URL(`./styles/${name}.css`, import.meta.url).href;
-    link.dataset.h3psStyle = name;
+    link.dataset.psStyle = name;
     document.head.appendChild(link);
   }
 }
@@ -389,7 +492,7 @@ function icon(name, size = 16) {
     download: '<path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M5 19h14"/>',
     crop: '<path d="M6 2v14a2 2 0 0 0 2 2h14M18 22V8a2 2 0 0 0-2-2H2"/>',
   };
-  return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" style="--h3ps-icon-size:${size}px" aria-hidden="true">${paths[name] || paths.info}</svg>`;
+  return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" style="--ps-icon-size:${size}px" aria-hidden="true">${paths[name] || paths.info}</svg>`;
 }
 
 function renderAsset(asset, index) {
@@ -397,22 +500,22 @@ function renderAsset(asset, index) {
   const tagDisabled = studio.requestBusy ? "disabled" : "";
   const draggable = studio.requestBusy ? "false" : "true";
   const visual = asset.type === "audio"
-    ? `<div class="h3ps-wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>`
+    ? `<div class="ps-wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>`
     : asset.preview_url
-      ? `<span class="h3ps-thumb-backdrop" style="background-image:url('${asset.preview_url}')"></span><img class="h3ps-real-thumb" src="${asset.preview_url}" alt="">`
-      : `<div class="h3ps-thumb-art h3ps-tone-${asset.tone || "blue"}"><span></span></div>`;
-  const overlay = asset.type === "video" ? `<span class="h3ps-play">${icon("play", 18)}</span>` : "";
+      ? `<span class="ps-thumb-backdrop" style="background-image:url('${asset.preview_url}')"></span><img class="ps-real-thumb" src="${asset.preview_url}" alt="">`
+      : `<div class="ps-thumb-art ps-tone-${asset.tone || "blue"}"><span></span></div>`;
+  const overlay = asset.type === "video" ? `<span class="ps-play">${icon("play", 18)}</span>` : "";
   const duration = formatDuration(asset.duration);
   return `
-    <div class="h3ps-asset" tabindex="0" role="group" aria-label="Media inspector" draggable="${draggable}" data-asset-index="${index}" data-asset-id="${asset.id}" data-replace-label="Replace ${escapeHtml(asset.reference || asset.filename)}">
-      <span class="h3ps-asset-preview h3ps-${asset.type}">${visual}${overlay}</span>
-      <span class="h3ps-asset-copy">
-        <strong>${asset.reference ? `<button type="button" class="h3ps-media-tag is-${asset.type}" data-media-tag="${escapeHtml(asset.reference)}" ${tagDisabled} title="Insert reference at text cursor">${escapeHtml(asset.reference || asset.filename)}</button>` : "Trim required"}</strong>
+    <div class="ps-asset" tabindex="0" role="group" aria-label="Media inspector" draggable="${draggable}" data-asset-index="${index}" data-asset-id="${asset.id}" data-replace-label="Replace ${escapeHtml(asset.reference || asset.filename)}">
+      <span class="ps-asset-preview ps-${asset.type}">${visual}${overlay}</span>
+      <span class="ps-asset-copy">
+        <strong>${asset.reference ? `<button type="button" class="ps-media-tag is-${asset.type}" data-media-tag="${escapeHtml(asset.reference)}" ${tagDisabled} title="Insert reference at text cursor">${escapeHtml(asset.reference || asset.filename)}</button>` : (asset.status === "needs_edit" ? "Trim required" : escapeHtml(asset.type))}</strong>
         <small>${escapeHtml(asset.filename)}</small>
       </span>
-      ${duration ? `<span class="h3ps-duration">${duration}</span>` : ""}
-      <button class="h3ps-replace-asset" type="button" data-replace-asset="${asset.id}" title="Replace ${escapeHtml(asset.reference || asset.filename)}" aria-label="Replace ${escapeHtml(asset.reference || asset.filename)}" ${destructiveDisabled}>${icon("refresh", 12)}</button>
-      <button class="h3ps-remove-asset" type="button" data-remove-asset="${asset.id}" title="Remove ${escapeHtml(asset.reference || asset.filename)}" aria-label="Remove ${escapeHtml(asset.reference || asset.filename)}" ${destructiveDisabled}>${icon("close", 12)}</button>
+      ${duration ? `<span class="ps-duration">${duration}</span>` : ""}
+      <button class="ps-replace-asset" type="button" data-replace-asset="${asset.id}" title="Replace ${escapeHtml(asset.reference || asset.filename)}" aria-label="Replace ${escapeHtml(asset.reference || asset.filename)}" ${destructiveDisabled}>${icon("refresh", 12)}</button>
+      <button class="ps-remove-asset" type="button" data-remove-asset="${asset.id}" title="Remove ${escapeHtml(asset.reference || asset.filename)}" aria-label="Remove ${escapeHtml(asset.reference || asset.filename)}" ${destructiveDisabled}>${icon("close", 12)}</button>
     </div>`;
 }
 
@@ -423,7 +526,7 @@ function referenceComposerAssets() {
 function composerAddState() {
   const assets = studio.assets.filter((asset) => asset.mode === "Reference");
   const pictureCount = assets.filter((asset) => asset.type === "image").length;
-  if (studio.requestBusy) return { allowed: false, message: "Wait for the current Writer request to finish." };
+  if (studio.requestBusy) return { allowed: false, message: "Wait for the current Prompt Studio request to finish." };
   if (pictureCount >= 9) return { allowed: false, message: "Remove a Picture before adding the composition." };
   if (assets.length >= 12) return { allowed: false, message: "Remove a reference before adding the composition." };
   return { allowed: true, reference: `<Picture ${pictureCount + 1}>` };
@@ -482,37 +585,48 @@ function notifyMediaCompatibility() {
 function renderMedia(mode) {
   mode = studio.sequence?.mediaMode(mode) ?? mode;
   studio.floatingMedia?.refresh();
-  if (mode === "Music3") {
+  if (isAudioMode(mode)) {
     studio.root.querySelectorAll("[data-mode]").forEach((button) => button.classList.remove("is-active"));
     syncComposerControl(mode);
     syncModeAvailability();
     return;
   }
-  const data = MODES[mode];
+  const data = modeData(mode);
   const assets = studio.assets.filter((asset) => asset.mode === mode);
-  const media = studio.root.querySelector("[data-h3ps-media]");
-  studio.root.querySelector("[data-h3ps-mode-title]").textContent = data.title;
-  studio.root.querySelector("[data-h3ps-mode-hint]").textContent = data.hint;
+  // Each workspace panel owns its own media container and title slots.
+  const target = targetForMode(mode);
+  const panel = target ? panelForCategory(target.category) : "video";
+  const mediaSelector = panel === "image" ? "[data-ps-image-media]" : "[data-ps-media]";
+  const titleSelector = panel === "image" ? "[data-ps-image-mode-title]" : "[data-ps-mode-title]";
+  const media = studio.root.querySelector(mediaSelector);
+  if (!media) return;
+  studio.root.querySelector(titleSelector).textContent = data.title;
   studio.root.querySelectorAll("[data-mode]").forEach((button) => {
     const active = button.dataset.mode === mode;
     button.classList.toggle("is-active", active);
     button.setAttribute("aria-selected", String(active));
   });
 
-  if (mode === "T2VA") {
-    media.innerHTML = `
-      <div class="h3ps-empty-drop is-static">
-        <span class="h3ps-empty-icon">${icon("spark", 20)}</span>
-        <strong>Start from a text description</strong>
-        <small>T2VA does not use reference media</small>
-      </div>`;
+  // A mode that does not use media renders no drop box at all, and the "Media"
+  // label under the mode title is hidden with it, since there is no media.
+  const usesMedia = Boolean(modeDescriptor(mode)?.requires_media);
+  // Resolve the label inside the panel this mode renders into, not the first on
+  // the page: both panels declare one, and only the active panel is visible.
+  const panelSelector = panel === "image" ? "[data-image-inputs]" : "[data-video-inputs]";
+  const mediaLabel = studio.root.querySelector(`${panelSelector} [data-media-label]`);
+  if (!usesMedia) {
+    media.innerHTML = "";
+    media.hidden = true;
+    if (mediaLabel) mediaLabel.hidden = true;
   } else {
+    media.hidden = false;
+    if (mediaLabel) mediaLabel.hidden = false;
     const isReference = mode === "Reference";
     const filter = isReference ? studio.mediaFilter : "all";
     const visibleAssets = filter === "all" ? assets : assets.filter((asset) => asset.type === filter);
     const counts = assets.reduce((result, asset) => ({ ...result, [asset.type]: (result[asset.type] || 0) + 1 }), {});
     const filters = isReference ? `
-      <div class="h3ps-media-filters" aria-label="Reference type">
+      <div class="ps-media-filters" aria-label="Reference type">
         <button type="button" data-media-filter="all" class="${filter === "all" ? "is-active" : ""}">All <b>${assets.length}/12</b></button>
         <button type="button" data-media-filter="image" class="${filter === "image" ? "is-active" : ""}">${icon("image", 13)} Images <b>${counts.image || 0}/9</b></button>
         <button type="button" data-media-filter="video" class="${filter === "video" ? "is-active" : ""}">${icon("video", 13)} Video <b>${counts.video || 0}/3</b></button>
@@ -522,8 +636,8 @@ function renderMedia(mode) {
     const canAdd = isReference || assets.length < data.limit;
     media.innerHTML = `
       ${filters}
-      <div class="h3ps-assets ${isReference ? "is-reference" : ""}">${visibleAssets.map((asset) => renderAsset(asset, assets.indexOf(asset))).join("")}
-        ${canAdd ? `<button class="${assets.length ? "h3ps-add-asset" : "h3ps-empty-drop"}" type="button" data-add-media ${studio.requestBusy ? "disabled" : ""}>${icon("plus", 18)}<span>${addLabel}</span><small>Drop files here</small></button>` : ""}
+      <div class="ps-assets ${isReference ? "is-reference" : ""}">${visibleAssets.map((asset) => renderAsset(asset, assets.indexOf(asset))).join("")}
+        ${canAdd ? `<button class="${assets.length ? "ps-add-asset" : "ps-empty-drop"}" type="button" data-add-media ${studio.requestBusy ? "disabled" : ""}>${icon("plus", 18)}<span>${addLabel}</span><small>Drop files here</small></button>` : ""}
       </div>`;
   }
   notifyMediaCompatibility();
@@ -534,44 +648,14 @@ function renderMedia(mode) {
   studio.sequence?.refresh();
 }
 
-function setMusicSystemPromptProfile(profile) {
-  if (!studio) return;
-  studio.musicSystemPromptProfile = profile === "music3_lyrics" ? "music3_lyrics" : "music3";
-  studio.root.querySelectorAll("[data-music-system-prompt-profile]").forEach((button) => {
-    const selected = button.dataset.musicSystemPromptProfile === studio.musicSystemPromptProfile;
-    button.classList.toggle("is-selected", selected);
-    button.setAttribute("aria-pressed", String(selected));
-  });
-  studio.root.querySelectorAll("[data-music-system-prompt-panel]").forEach((panel) => {
-    panel.hidden = panel.dataset.musicSystemPromptPanel !== studio.musicSystemPromptProfile;
-  });
-  syncSystemPromptEditor(studio.musicSystemPromptProfile);
-}
-
-function setMusicSystemPromptEditorOpen(open) {
-  if (!studio) return;
-  studio.root.querySelector("[data-music-system-prompt-overview]").hidden = open;
-  studio.root.querySelector("[data-music-system-prompt-editor]").hidden = !open;
-}
-
-function setMusicSystemPromptExpanded(open) {
-  if (!studio) return;
-  studio.musicSystemPromptExpanded = open;
-  const toggle = studio.root.querySelector("[data-music-system-prompt-toggle]");
-  toggle.setAttribute("aria-expanded", String(open));
-  toggle.classList.toggle("is-open", open);
-  studio.root.querySelector("[data-music-system-prompt-details]").hidden = !open;
-  if (!open) setMusicSystemPromptEditorOpen(false);
-}
-
 function rememberReferenceInsertTarget(editor) {
-  if (!studio || studio.mode === "Music3" || !editor) return;
+  if (!studio || isAudioMode(studio.mode) || !editor) return;
   referenceInsertTarget = { editor, caret: editor.selectionStart ?? editor.value.length };
 }
 
 function insertSelectedReference(reference, assetId) {
   if (studio.sequence?.insert(assetId)) return;
-  if (studio.mode === "Music3") return;
+  if (isAudioMode(studio.mode)) return;
   const fallback = studio.root.querySelector("[data-output]");
   const target = referenceInsertTarget?.editor?.isConnected ? referenceInsertTarget : { editor: fallback, caret: fallback.selectionStart };
   target.editor.setSelectionRange(target.caret, target.caret);
@@ -581,7 +665,14 @@ function insertSelectedReference(reference, assetId) {
 }
 
 function bindMediaActions(mode) {
-  const media = studio.root.querySelector("[data-h3ps-media]");
+  // Bind the container for the panel this mode renders into. Using a bare
+  // [data-ps-media] lookup always returned the video panel, so the image panel
+  // never received a drop handler and drag-and-drop silently did nothing there.
+  const target = targetForMode(mode);
+  const panel = target ? panelForCategory(target.category) : "video";
+  const mediaSelector = panel === "image" ? "[data-ps-image-media]" : "[data-ps-media]";
+  const media = studio.root.querySelector(mediaSelector) || studio.root.querySelector("[data-ps-media]");
+  if (!media) return;
   studio.root.querySelectorAll("[data-media-filter]").forEach((button) => {
     button.addEventListener("click", () => {
       studio.mediaFilter = button.dataset.mediaFilter;
@@ -634,7 +725,7 @@ function bindMediaActions(mode) {
       studio.draggedAssetId = card.dataset.assetId;
       media.classList.add("is-reordering");
       event.dataTransfer.effectAllowed = "move";
-      event.dataTransfer.setData("application/x-h3ps-asset", card.dataset.assetId);
+      event.dataTransfer.setData("application/x-ps-asset", card.dataset.assetId);
       const ghost = document.createElement("canvas");
       ghost.width = ghost.height = 1;
       ghost.style.cssText = "position:fixed;left:-10px;top:-10px;width:1px;height:1px;pointer-events:none";
@@ -679,7 +770,7 @@ function bindMediaActions(mode) {
   replaceEventListener(media, "drop", "media", async (event) => {
     event.preventDefault();
     if (studio.requestBusy) return;
-    const sourceId = event.dataTransfer.getData("application/x-h3ps-asset") || studio.draggedAssetId;
+    const sourceId = event.dataTransfer.getData("application/x-ps-asset") || studio.draggedAssetId;
     const targetId = event.target.closest("[data-asset-id]")?.dataset.assetId;
     studio.root.querySelectorAll(".is-file-replace-target").forEach((item) => item.classList.remove("is-file-replace-target"));
     if (sourceId) {
@@ -717,7 +808,10 @@ function chooseMedia(mode, replaceAssetId = null) {
 async function uploadFiles(mode, files, replaceAssetId = null) {
   if (!files.length || studio.requestBusy) return;
   const existing = studio.assets.filter((asset) => asset.mode === mode);
-  if (mode !== "Reference" && !replaceAssetId && existing.length + files.length > MODES[mode].limit) {
+  // studio.modeLimits is supplied by the caller; the media panel fills it from
+  // the registry. Leave it absent to skip the slot check.
+  const modeAssetLimit = studio.modeLimits?.[mode]?.image ?? null;
+  if (modeAssetLimit != null && !replaceAssetId && existing.length + files.length > modeAssetLimit) {
     showToast("Reference slot is full", "Use Replace on the existing image.");
     return;
   }
@@ -745,7 +839,7 @@ async function uploadFiles(mode, files, replaceAssetId = null) {
 }
 
 function showToast(title, message, details = null, action = null, options = {}) {
-  const toast = studio.root.querySelector("[data-h3ps-toast]");
+  const toast = studio.root.querySelector("[data-ps-toast]");
   const durationMs = Number.isFinite(options.durationMs) ? options.durationMs : null;
   const dismissOnWorkspaceClick = options.dismissOnWorkspaceClick === true
     || (details != null && durationMs == null);
@@ -783,24 +877,56 @@ function showToast(title, message, details = null, action = null, options = {}) 
   }
 }
 
+/**
+ * Starter draft for a mode, resolved by mode id.
+ *
+ * The per-mode map lives in ./mode_defaults.js. There is deliberately no
+ * "first entry" fallback: an unmapped mode gets empty fields rather than
+ * another target's example, because a video-shaped prompt in an image or audio
+ * mode is actively misleading.
+ */
 function defaultModeDraft(mode) {
-  if (mode === "Music3") return MUSIC3_DEFAULT_DRAFT;
-  if (mode === "Reference") {
-    return { brief: REFERENCE_DEFAULT_BRIEF, prompt: SAMPLE_PROMPT };
-  }
-  return MODE_DEFAULT_DRAFTS[mode] || MODE_DEFAULT_DRAFTS.T2VA;
+  return defaultModeDraftFor(mode);
 }
 
 function currentDraftFields() {
   return {
     brief: currentBriefTextarea().value,
-    lyrics: studio.mode === "Music3" ? studio.root.querySelector("[data-music-lyrics]").value : "",
+    lyrics: studio.root.querySelector("[data-music-lyrics]")?.value ?? "",
     prompt: studio.root.querySelector("[data-output]").value,
   };
 }
 
+/**
+ * Current Lyrics field value for a mode, or "" when the mode has no lyrics or
+ * the field is not mounted yet. Deliberately self-contained: the isolated
+ * function-level tests evaluate this alongside its callers.
+ */
+function lyricsFieldValue(mode) {
+  const field = studio?.root?.querySelector?.("[data-music-lyrics]");
+  if (!field) return "";
+  return typeof field.value === "string" ? field.value : "";
+}
+
+/**
+ * The textarea that supplies `creative_brief` for the active mode.
+ *
+ * Image Edit is instruction-driven and hides the descriptive Image brief, so the
+ * edit instruction is the brief in that mode. Returning the hidden brief here
+ * would submit its stale text, which is a real bug: the field is not rendered and
+ * the user cannot see or clear what is being sent.
+ */
 function currentBriefTextarea() {
-  return studio.root.querySelector(studio.mode === "Music3" ? "[data-music-brief]" : "[data-video-brief]");
+  const target = targetForMode(studio.mode);
+  const panel = target ? panelForCategory(target.category) : "video";
+  if (panel === "image" && modeDescriptor(studio.mode)?.instruction_field) {
+    const instruction = studio.root.querySelector("[data-edit-instruction]");
+    if (instruction) return instruction;
+  }
+  const selector = panel === "music" ? "[data-music-brief]"
+    : panel === "image" ? "[data-image-brief]"
+    : "[data-video-brief]";
+  return studio.root.querySelector(selector) || studio.root.querySelector("[data-video-brief]");
 }
 
 async function copyPromptText(text, music = false) {
@@ -829,14 +955,14 @@ function clearCurrentPrompts({ notify = true } = {}) {
   studio.root.querySelector("[data-refine-restore]").hidden = true;
   toggleRefine(false);
 
-  studio.root.querySelector(".h3ps-editor-meta span:last-child").textContent = promptLengthMeta(output.value);
+  studio.root.querySelector(".ps-editor-meta span:last-child").textContent = promptLengthMeta(output.value);
   updateBriefLayout();
   renderPromptHighlights();
   syncModifiedState();
 
   saveCurrentModeDraft();
   if (notify) {
-    const detail = studio.mode === "Music3"
+    const detail = isAudioMode(studio.mode)
       ? "The Music Brief and generated caption were cleared. Lyrics and media were kept."
       : "The Creative Brief and generated prompt were cleared. Media was kept.";
     showToast("Prompts cleared", detail);
@@ -870,7 +996,7 @@ async function clearEverything() {
     return;
   }
   clearCurrentPrompts({ notify: false });
-  const detail = studio.mode === "Music3"
+  const detail = isAudioMode(studio.mode)
     ? "Media, Music Brief and generated caption were removed. Lyrics were kept."
     : "Media, Creative Brief and generated prompt were removed.";
   showToast("Everything cleared", detail);
@@ -895,8 +1021,8 @@ function updateBriefLayout() {
   const largeCanvas = window.innerWidth >= 3000 && window.innerHeight >= 1600;
   const minimumHeight = compactHeight ? 80 : largeCanvas ? 125 : 105;
   const maximumHeight = compactHeight ? 130 : largeCanvas ? 230 : 190;
-  const briefLimit = studio.mode === "Music3" ? 2000 : 8000;
-  brief.closest(".h3ps-brief").querySelector(".h3ps-char-count").textContent = `${brief.value.length.toLocaleString()} / ${briefLimit.toLocaleString()}`;
+  const briefLimit = modeBriefLimit(studio.mode);
+  brief.closest(".ps-brief").querySelector(".ps-char-count").textContent = `${brief.value.length.toLocaleString()} / ${briefLimit.toLocaleString()}`;
   brief.style.height = "auto";
   brief.style.height = `${fullscreen ? Math.max(minimumHeight, brief.scrollHeight) : Math.min(maximumHeight, Math.max(minimumHeight, brief.scrollHeight))}px`;
   brief.style.overflowY = !fullscreen && brief.scrollHeight > maximumHeight ? "auto" : "hidden";
@@ -905,7 +1031,15 @@ function updateBriefLayout() {
 function updateMusicLyricsCount() {
   if (!studio) return;
   const lyrics = studio.root.querySelector("[data-music-lyrics]");
-  lyrics.closest(".h3ps-brief").querySelector(".h3ps-char-count").textContent = `${lyrics.value.length.toLocaleString()} / 4,000`;
+  if (lyrics) {
+    lyrics.closest(".ps-brief").querySelector(".ps-char-count").textContent =
+      `${lyrics.value.length.toLocaleString()} / ${modeLyricsLimit(studio.mode).toLocaleString()}`;
+  }
+  const instruction = studio.root.querySelector("[data-edit-instruction]");
+  if (instruction) {
+    const limit = studio.root.querySelector(".ps-edit-instruction .ps-char-count");
+    if (limit) limit.textContent = `${instruction.value.length.toLocaleString()} / 4,000`;
+  }
 }
 
 function restoreModeDraft(mode) {
@@ -913,7 +1047,7 @@ function restoreModeDraft(mode) {
   const draft = studio.modeDrafts[mode] || defaultModeDraft(mode);
   const output = studio.root.querySelector("[data-output]");
   currentBriefTextarea().value = draft.brief;
-  if (mode === "Music3") studio.root.querySelector("[data-music-lyrics]").value = draft.lyrics || "";
+  if (isAudioMode(mode)) studio.root.querySelector("[data-music-lyrics]").value = draft.lyrics || "";
   output.value = draft.prompt;
   studio.lastModelPrompt = draft.prompt;
   studio.lastModelMeta = promptLengthMeta(draft.prompt);
@@ -921,7 +1055,7 @@ function restoreModeDraft(mode) {
   studio.root.querySelector("[data-refine-restore]").hidden = true;
   studio.lyricsRestore = null;
   studio.root.querySelector("[data-lyrics-refine-restore]").hidden = true;
-  studio.root.querySelector(".h3ps-editor-meta span:last-child").textContent = promptLengthMeta(output.value);
+  studio.root.querySelector(".ps-editor-meta span:last-child").textContent = promptLengthMeta(output.value);
   updateBriefLayout();
   updateMusicLyricsCount();
   renderPromptHighlights();
@@ -930,19 +1064,59 @@ function restoreModeDraft(mode) {
 
 function syncWorkspace() {
   if (!studio) return;
-  const music = studio.mode === "Music3";
+  // Resolve the target locally so this function stays evaluable in isolation:
+  // the isolated function-level tests mount a partial DOM without the registry.
+  const registryTarget = typeof targetForMode === "function" ? targetForMode(studio.mode) : null;
+  const workspace = registryTarget?.workspace
+    || (studio.mode === "Music3" ? "music" : "video");
+  const category = registryTarget?.category
+    || (workspace === "music" ? "audio" : workspace === "image" ? "image" : "video");
+  const panel = category === "audio" ? "music" : category === "image" || category === "image-edit" ? "image" : "video";
+  const music = panel === "music";
+  const image = panel === "image";
+
   studio.root.classList.toggle("is-music", music);
-  studio.root.querySelectorAll("[data-workspace]").forEach((button) => {
-    const selected = button.dataset.workspace === (music ? "music" : "video");
-    button.classList.toggle("is-active", selected);
-    button.setAttribute("aria-pressed", String(selected));
+  studio.root.classList.toggle("is-image", image);
+
+  // Mode tabs follow the workspace, so switching workspace re-labels the row.
+  const modeRow = studio.root.querySelector("[data-workspace-modes]") || studio.root.querySelector("[data-video-modes]");
+  if (modeRow) {
+    // Key the row on the resolved target, not the workspace: two targets could
+    // share a workspace category, and the row must show the active one's modes.
+    const targetKey = registryTarget?.id || workspace;
+    const desired = typeof modeButtonsMarkup === "function"
+      ? selectableModes(registryTarget || targetForWorkspace(workspace))
+          .map((mode) => `<button type="button" role="tab" data-mode="${escapeHtml(mode.id)}">${escapeHtml(mode.label || mode.id)}</button>`)
+          .join("")
+      : null;
+    if (desired && modeRow.dataset.rendered !== `${targetKey}:${desired}`) {
+      modeRow.innerHTML = desired;
+      modeRow.dataset.rendered = `${targetKey}:${desired}`;
+      bindModeButtons();
+    }
+    modeRow.hidden = music;
+  }
+
+  // The indicator names the active target, so it follows every workspace change.
+  // Optional guard: isolated tests mount a partial DOM without this hook.
+  if (typeof syncTargetIndicator === "function" && studio.root.querySelector?.("[data-target-indicator]")) {
+    syncTargetIndicator();
+  }
+
+  // Show exactly the panel this target category uses. Panels are optional so a
+  // partial test DOM does not throw here.
+  studio.root.querySelectorAll("[data-workspace-panel]").forEach((section) => {
+    section.hidden = section.dataset.workspacePanel !== panel;
   });
-  studio.root.querySelector("[data-video-modes]").hidden = music;
-  studio.root.querySelector("[data-video-inputs]").hidden = music;
-  studio.root.querySelector("[data-music-inputs]").hidden = !music;
-  const outputLabel = music ? "Generated caption" : "Generated prompt";
+  const videoPanel = studio.root.querySelector("[data-video-inputs]");
+  if (videoPanel && !videoPanel.dataset.workspacePanel) videoPanel.hidden = music || image;
+  const musicPanel = studio.root.querySelector("[data-music-inputs]");
+  if (musicPanel) musicPanel.hidden = !music;
+
+  const outputLabel = music ? "Generated caption" : image ? "Generated image prompt" : "Generated prompt";
   studio.root.querySelector("[data-output-label]").textContent = outputLabel;
-  studio.root.querySelector("[data-output-mobile-label]").textContent = outputLabel;
+  const mobileLabel = studio.root.querySelector("[data-output-mobile-label]");
+  if (mobileLabel) mobileLabel.textContent = outputLabel;
   studio.root.querySelector("[data-output]").setAttribute("aria-label", outputLabel);
   studio.root.querySelector("[data-copy-label]").textContent = music ? "Copy caption" : "Copy prompt";
   studio.root.querySelector("[data-generate-label]").textContent = music ? "Generate caption" : "Generate prompt";
@@ -952,17 +1126,29 @@ function syncWorkspace() {
   studio.root.querySelector("[data-refine-instruction]").placeholder = music
     ? "For example: keep the verses sparse and let the final chorus open wider."
     : "For example: make the camera movement slower and keep the ending more ambiguous.";
-  if (studio.mode !== "Music3") rememberReferenceInsertTarget(studio.root.querySelector("[data-output]"));
+  if (!music) rememberReferenceInsertTarget(studio.root.querySelector("[data-output]"));
   else referenceInsertTarget = null;
 
-  if (music) {
-    syncSystemPromptEditor("music3");
-    syncSystemPromptEditor("music3_lyrics");
-  } else {
-    toggleLyricsRefine(false);
-    setMusicSystemPromptExpanded(false);
-  }
+  // Lyrics refinement only applies to the audio workspace.
+  if (!music) toggleLyricsRefine(false);
+
+  if (image) syncImagePanel();
   syncModeAvailability();
+}
+
+/** Title, brief, and edit fields for the image panel, from the mode descriptor. */
+function syncImagePanel() {
+  if (!studio?.root) return;
+  const descriptor = modeDescriptor(studio.mode);
+  const title = studio.root.querySelector("[data-ps-image-mode-title]");
+  if (title) title.textContent = descriptor?.title || "";
+  // Edit mode is instruction-driven: it takes the source images and the change to
+  // make, so the descriptive Image brief is hidden rather than duplicated.
+  const edits = Boolean(descriptor?.instruction_field);
+  const instruction = studio.root.querySelector(".ps-edit-instruction");
+  if (instruction) instruction.hidden = !edits;
+  const imageBrief = studio.root.querySelector(".ps-image-brief");
+  if (imageBrief) imageBrief.hidden = edits;
 }
 
 function syncModeAvailability() {
@@ -976,51 +1162,29 @@ function syncModeAvailability() {
       ? "This Direct GGUF is text-only. Add its matching mmproj to enable visual modes."
       : "";
   });
-  studio.root.querySelectorAll("[data-workspace]").forEach((control) => {
-    control.disabled = studio.requestBusy;
-    control.setAttribute("aria-disabled", String(control.disabled));
-    control.title = "";
-  });
+  // The target indicator is the only way to switch target, so it must stay usable
+  // while a request runs; only the mode chips are gated on the busy flag.
+  const indicator = studio.root.querySelector("[data-open-target-select]");
+  if (indicator) {
+    indicator.disabled = false;
+    indicator.setAttribute("aria-disabled", "false");
+  }
 }
 
 function generationModeIsAvailable() {
   if (isGenerationModeAvailable(studio.selectedModel, studio.mode)) return true;
   showToast(
     "Text-only Direct GGUF",
-    "Use T2VA or Music3, or add the matching mmproj to enable visual modes.",
+    `Use ${textOnlyModeLabels()}, or add the matching mmproj to enable visual modes.`,
   );
   return false;
-}
-
-function disarmDraftDefaults() {
-  if (!studio) return;
-  clearTimeout(studio.draftDefaultsTimer);
-  studio.draftDefaultsArmed = false;
-  const label = studio.root.querySelector("[data-restore-default-drafts-label]");
-  if (label) label.textContent = "Restore default drafts";
-}
-
-function restoreDefaultDrafts(event) {
-  event.stopPropagation();
-  if (!studio.draftDefaultsArmed) {
-    studio.draftDefaultsArmed = true;
-    studio.root.querySelector("[data-restore-default-drafts-label]").textContent = "Click again to confirm";
-    clearTimeout(studio.draftDefaultsTimer);
-    studio.draftDefaultsTimer = setTimeout(disarmDraftDefaults, 5000);
-    return;
-  }
-  disarmDraftDefaults();
-  studio.modeDrafts = {};
-  saveModeDrafts(localStorage, studio.modeDrafts);
-  restoreModeDraft(studio.mode);
-  showToast("Default drafts restored", "Saved mode drafts were removed.");
 }
 
 function hideToast() {
   if (!studio) return;
   clearTimeout(studio.toastTimer);
   studio.toastDismissOnWorkspaceClick = false;
-  const toast = studio.root.querySelector("[data-h3ps-toast]");
+  const toast = studio.root.querySelector("[data-ps-toast]");
   const actionButton = toast.querySelector("[data-toast-action]");
   actionButton.onclick = null;
   actionButton.textContent = "";
@@ -1053,10 +1217,14 @@ function setGenerationState(state, label, detail) {
   const comfyMemory = studio.root.querySelector("[data-comfy-memory-action]");
   comfyMemory.disabled = busy || !HOST_CAPABILITIES.comfyMemory;
   comfyMemory.title = busy
-    ? "Available after the active Writer request finishes"
+    ? "Available after the active Prompt Studio request finishes"
     : "Unload models held by ComfyUI without clearing cached workflow results";
   button.classList.toggle("is-cancel", busy);
-  if (!busy || !wasBusy) button.innerHTML = generationButtonMarkup(icon, busy, studio.mode === "Music3" ? "Generate caption" : "Generate prompt");
+  // Resolve the label locally so this function stays evaluable in isolation
+  // (the regression tests evaluate it without the registry in scope).
+  const audioMode = studio.mode === "Music3"
+    || (typeof describesAudio === "function" && describesAudio(studio.mode));
+  if (!busy || !wasBusy) button.innerHTML = generationButtonMarkup(icon, busy, audioMode ? "Generate caption" : "Generate prompt");
   renderMedia(studio.mode);
   syncLifecycleActions();
   status.hidden = !busy;
@@ -1174,7 +1342,7 @@ async function unloadWriterModelsBeforeQueue(signal) {
     };
     if(activeFamily === "external") requiredTargets.push(target);
     const result = await unloadModel(target);
-    if (result?.unload_requested === false) throw new Error("Prompt Writer could not stop and unload its local model.");
+    if (result?.unload_requested === false) throw new Error("Prompt Studio could not stop and unload its local model.");
     try { await activeRequest; } catch {}
   }
   signal?.throwIfAborted();
@@ -1190,7 +1358,7 @@ async function unloadWriterModelsBeforeQueue(signal) {
 }
 
 function showVramHandoffQueueError(error) {
-  const message = error.message || "Prompt Writer could not release its local model.";
+  const message = error.message || "Prompt Studio could not release its local model.";
   if (studio?.root.classList.contains("is-open")) {
     showToast("Queue continuing without VRAM release", message, error.details);
   } else {
@@ -1218,7 +1386,7 @@ function lifecycleButtonMarkup(target, { stop = false } = {}) {
   const title = stop
     ? "Cancel the active request and unload its prompt model"
     : `Unload ${target.modelId || (target.family === "ollama" ? "the Ollama model" : "the Direct model")}`;
-  return `<button class="h3ps-memory-action h3ps-prompt-lifecycle-action" type="button" data-lifecycle-family="${target.family}" ${disabled ? "disabled" : ""} ${target.modelId ? `data-lifecycle-model="${escapeHtml(target.modelId)}"` : ""} data-lifecycle-stop="${stop}" title="${escapeHtml(title)}"><span class="h3ps-provider-icon" data-provider-icon="${provider}" aria-hidden="true"></span>${label}</button>`;
+  return `<button class="ps-memory-action ps-prompt-lifecycle-action" type="button" data-lifecycle-family="${target.family}" ${disabled ? "disabled" : ""} ${target.modelId ? `data-lifecycle-model="${escapeHtml(target.modelId)}"` : ""} data-lifecycle-stop="${stop}" title="${escapeHtml(title)}"><span class="ps-provider-icon" data-provider-icon="${provider}" aria-hidden="true"></span>${label}</button>`;
 }
 
 function syncLifecycleActions() {
@@ -1234,7 +1402,7 @@ function syncLifecycleActions() {
     return target.family !== activeTarget.family || target.modelId !== activeTarget.modelId;
   });
   const backgroundMarkup = background.length > 1
-    ? `<details class="h3ps-prompt-models-menu"><summary class="h3ps-memory-action">${icon("memory", 15)}Prompt models · ${background.length}</summary><span>${background.map((target) => lifecycleButtonMarkup(target)).join("")}</span></details>`
+    ? `<details class="ps-prompt-models-menu"><summary class="ps-memory-action">${icon("memory", 15)}Prompt models · ${background.length}</summary><span>${background.map((target) => lifecycleButtonMarkup(target)).join("")}</span></details>`
     : background.map((target) => lifecycleButtonMarkup(target)).join("");
   slot.innerHTML = `${activeTarget ? lifecycleButtonMarkup(activeTarget, { stop: true }) : ""}${backgroundMarkup}`;
   slot.querySelectorAll("[data-lifecycle-family]").forEach((button) => button.addEventListener("click", runLifecycleAction));
@@ -1247,14 +1415,14 @@ async function releaseComfyVram({ retry = null, requiredFreeMb = null } = {}) {
   let shouldRetry = false;
   studio.comfyVramReleaseInFlight = true;
   button.disabled = true;
-  button.innerHTML = `<span class="h3ps-spinner"></span>Releasing…`;
+  button.innerHTML = `<span class="ps-spinner"></span>Releasing…`;
   try {
     const before = await getStatus(studio.ollamaHost);
     const beforeFree = Number(before.gpu_memory?.free_mb);
     const requiredFree = requiredFreeMb == null ? null : Number(requiredFreeMb);
     if (typeof retry !== "function" && requiredFree == null && comfyVramIsAlreadyEmpty(before)) {
       studio.gpuMemory = before.gpu_memory || studio.gpuMemory;
-      showToast("No ComfyUI models loaded", "VRAM is already free for Prompt Writer.");
+      showToast("No ComfyUI models loaded", "VRAM is already free for Prompt Studio.");
       return;
     }
     await freeComfyVram();
@@ -1375,7 +1543,7 @@ async function startGenerationPreview() {
   try {
     const result = await vramHandoffCoordinator.trackWriterRequest(generate(buildGeneratePayload(studio, {
       creativeBrief: currentBriefTextarea().value,
-      lyrics: studio.mode === "Music3" ? studio.root.querySelector("[data-music-lyrics]").value : "",
+      lyrics: studio.root.querySelector("[data-music-lyrics]")?.value ?? "",
       seed: newGenerationSeed(),
     })));
     const output = studio.root.querySelector("[data-output]");
@@ -1384,7 +1552,7 @@ async function startGenerationPreview() {
     renderPromptHighlights();
     studio.lastModelMeta = formatGenerationMeta(result);
     syncRuntimeSummary(result);
-    studio.root.querySelector(".h3ps-editor-meta span:last-child").textContent = studio.lastModelMeta;
+    studio.root.querySelector(".ps-editor-meta span:last-child").textContent = studio.lastModelMeta;
     syncModifiedState();
     saveCurrentModeDraft();
     studio.refineRestore = null;
@@ -1404,12 +1572,12 @@ async function startGenerationPreview() {
         `${result.tokens_per_second.toFixed(1)} tok/s`,
         result.api_provider ? "Reasoning provider managed" : external ? null : `Thinking ${result.thinking ? "on" : "off"}`,
       ];
-      showToast(studio.mode === "Music3" ? "Caption generated" : "Prompt generated", details.filter(Boolean).join(" · "));
+      showToast(isAudioMode(studio.mode) ? "Caption generated" : "Prompt generated", details.filter(Boolean).join(" · "));
     }
     studio.desktopNotifications.notify("Generation finished. Your prompt is ready.");
     if (result.lifecycle_warning) showToast("Model cleanup", result.lifecycle_warning, null, null, {dismissOnWorkspaceClick:true});
   } catch (error) {
-    if (error.code !== "GENERATION_CANCELLED") studio.desktopNotifications.notify("Generation failed. Open Writer for details.");
+    if (error.code !== "GENERATION_CANCELLED") studio.desktopNotifications.notify("Generation failed. Open Prompt Studio for details.");
     if (error.code === "GENERATION_CANCELLED") {
       showToast("Generation cancelled", "The active request stopped.");
     } else if (error.code === "INSUFFICIENT_FREE_VRAM") {
@@ -1477,9 +1645,9 @@ function renderModelSetupRows() {
     const contextLabel = ({ low: "8K", standard: "16K", extended: "24K", large: "32K", maximum: "48K" })[model.recommended_context] || "Auto";
     const runtimeLabel = model.minimum_runtime ? ` · llama-cpp-python ${model.minimum_runtime}+` : "";
     return `
-    <div class="h3ps-model-setup-row ${model.vram_gb === tier ? "fits-detected-vram" : ""}" ${model.vram_gb === tier ? 'title="Fits the detected total VRAM tier"' : ""}>
-      <span><strong>${escapeHtml(model.name)}</strong><small>${modelSize} · ${contextLabel}${runtimeLabel}${model.vram_gb === tier ? " · Fits detected VRAM" : ""}</small><small class="h3ps-model-source">${escapeHtml(model.source_label)}</small></span>
-      <span class="h3ps-model-files"><button type="button" data-model-files-toggle="${index}">Files ↗</button><span data-model-files-menu="${index}" hidden><a href="${model.model_url}" target="_blank" rel="noopener noreferrer">Model file ↗</a><a href="${model.projector_url}" target="_blank" rel="noopener noreferrer">Projector file ↗</a></span></span>
+    <div class="ps-model-setup-row ${model.vram_gb === tier ? "fits-detected-vram" : ""}" ${model.vram_gb === tier ? 'title="Fits the detected total VRAM tier"' : ""}>
+      <span><strong>${escapeHtml(model.name)}</strong><small>${modelSize} · ${contextLabel}${runtimeLabel}${model.vram_gb === tier ? " · Fits detected VRAM" : ""}</small><small class="ps-model-source">${escapeHtml(model.source_label)}</small></span>
+      <span class="ps-model-files"><button type="button" data-model-files-toggle="${index}">Files ↗</button><span data-model-files-menu="${index}" hidden><a href="${model.model_url}" target="_blank" rel="noopener noreferrer">Model file ↗</a><a href="${model.projector_url}" target="_blank" rel="noopener noreferrer">Projector file ↗</a></span></span>
     </div>`;
   }).join("");
 }
@@ -1501,16 +1669,16 @@ function modelDiscoveryDetails() {
 
 function renderModelScanDetails() {
   const discovery = modelDiscoveryDetails();
-  return discovery ? `<details class="h3ps-model-scan"><summary>Scan details</summary><pre>${escapeHtml(discovery)}</pre></details>` : "";
+  return discovery ? `<details class="ps-model-scan"><summary>Scan details</summary><pre>${escapeHtml(discovery)}</pre></details>` : "";
 }
 
 function renderModelSetup() {
   const directory = studio.modelDirectory || "ComfyUI/models/LLM/";
   return `
-    <div class="h3ps-model-setup h3ps-direct-model-empty">
+    <div class="ps-model-setup ps-direct-model-empty">
       <strong>No compatible local model found</strong>
       <p>Open the two verified Hugging Face pages, download both files, then place them in:</p>
-      <button type="button" class="h3ps-model-path" data-copy-model-path><code>${escapeHtml(directory)}</code>${icon("copy", 13)}</button>
+      <button type="button" class="ps-model-path" data-copy-model-path><code>${escapeHtml(directory)}</code>${icon("copy", 13)}</button>
       <p>Keep compatible model GGUFs and their vision projector together. One projector can serve several quant files from the same model family.</p>
     </div>`;
 }
@@ -1527,29 +1695,29 @@ function directRuntimeActionCommand() {
 
 function renderDirectRuntimeCommand(command, action = "installation") {
   if (!command) return "";
-  return `<div class="h3ps-direct-runtime-command"><code>${escapeHtml(command)}</code><button type="button" data-copy-direct-runtime-command="${escapeHtml(command)}" title="Copy ${escapeHtml(action)} command" aria-label="Copy ${escapeHtml(action)} command">${icon("copy", 13)}</button></div><small>Close ComfyUI, run this from your ComfyUI Portable folder containing <code>python_embeded</code>, then restart ComfyUI.</small>`;
+  return `<div class="ps-direct-runtime-command"><code>${escapeHtml(command)}</code><button type="button" data-copy-direct-runtime-command="${escapeHtml(command)}" title="Copy ${escapeHtml(action)} command" aria-label="Copy ${escapeHtml(action)} command">${icon("copy", 13)}</button></div><small>Close ComfyUI, run this from your ComfyUI Portable folder containing <code>python_embeded</code>, then restart ComfyUI.</small>`;
 }
 
 function renderDirectRuntimeStatus() {
   const diagnostics = studio.ggufRuntimeDiagnostics;
   if (!diagnostics) {
     return studio.ggufRuntimeDiagnosticsLoading
-      ? `<section class="h3ps-direct-runtime-state is-checking"><header><span><small>Runtime</small><strong>Checking llama-cpp-python…</strong></span></header></section>`
+      ? `<section class="ps-direct-runtime-state is-checking"><header><span><small>Runtime</small><strong>Checking llama-cpp-python…</strong></span></header></section>`
       : "";
   }
   const onboarding = diagnostics.onboarding || {};
   if (onboarding.state === "ready") return "";
   if (onboarding.state === "missing") {
     const command = directRuntimeActionCommand();
-    return `<section class="h3ps-direct-runtime-state is-missing">
+    return `<section class="ps-direct-runtime-state is-missing">
       <header><span><small>Runtime</small><strong>llama-cpp-python is not installed.</strong></span></header>
       <p>Direct GGUF needs an additional native runtime. Ollama and API providers work without it.</p>
       ${renderDirectRuntimeCommand(command)}
-      <div class="h3ps-direct-runtime-links"><a href="${INSTALLATION_GUIDE_URL}" target="_blank" rel="noopener noreferrer">Installation guide ↗</a><a href="${TROUBLESHOOTING_GUIDE_URL}" target="_blank" rel="noopener noreferrer">Troubleshooting guide ↗</a></div>
+      <div class="ps-direct-runtime-links"><a href="${INSTALLATION_GUIDE_URL}" target="_blank" rel="noopener noreferrer">Installation guide ↗</a><a href="${TROUBLESHOOTING_GUIDE_URL}" target="_blank" rel="noopener noreferrer">Troubleshooting guide ↗</a></div>
     </section>`;
   }
   const version = diagnostics.package_version ? ` Version ${escapeHtml(diagnostics.package_version)} was detected.` : "";
-  return `<section class="h3ps-direct-runtime-state is-broken">
+  return `<section class="ps-direct-runtime-state is-broken">
     <header><span><small>Runtime</small><strong>llama-cpp-python is installed, but the runtime is not usable.</strong></span></header>
     <p>The installed package does not match the Direct GGUF runtime requirements.${version}</p>
     <a href="${TROUBLESHOOTING_GUIDE_URL}" target="_blank" rel="noopener noreferrer">Troubleshooting ↗</a>
@@ -1645,7 +1813,7 @@ async function inspectDirectRuntime() {
 
 function renderOtherModelsTrigger() {
   return `
-    <button class="h3ps-other-models-trigger" type="button" data-other-models-toggle aria-expanded="false">
+    <button class="ps-other-models-trigger" type="button" data-other-models-toggle aria-expanded="false">
       <span><strong>Browse verified models</strong><small>Model and projector download pairs</small></span>${icon("chevron", 14)}
     </button>`;
 }
@@ -1663,9 +1831,9 @@ function renderExternalServerControl() {
       ? "Saved server is offline"
       : "Connect to a model already running in llama-server";
   return `
-    <div class="h3ps-external-connection ${connected ? "is-connected" : ""}">
-      <div class="h3ps-external-connection-status">
-        <span class="h3ps-provider-icon" data-provider-icon="external" aria-hidden="true"></span>
+    <div class="ps-external-connection ${connected ? "is-connected" : ""}">
+      <div class="ps-external-connection-status">
+        <span class="ps-provider-icon" data-provider-icon="external" aria-hidden="true"></span>
         <span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(state)}</small></span>
         <em>${connected ? "Connected" : studio.externalServerError ? "Offline" : "Not connected"}</em>
       </div>
@@ -1693,7 +1861,7 @@ function ollamaModelForSettings() {
 
 function ollamaHostControlMarkup(hostValue = studio.ollamaHost) {
   const custom = studio.ollamaHost !== DEFAULT_OLLAMA_HOST;
-  return `<details class="h3ps-ollama-host-settings" data-ollama-host-settings ${studio.ollamaHostSettingsOpen ? "open" : ""}>
+  return `<details class="ps-ollama-host-settings" data-ollama-host-settings ${studio.ollamaHostSettingsOpen ? "open" : ""}>
     <summary>${custom ? `Remote host · ${escapeHtml(studio.ollamaHost)}` : "Use Ollama on another computer"}</summary>
     <form data-ollama-host-form>
       <label><span>Host URL</span><input name="host" type="url" value="${escapeHtml(hostValue)}" placeholder="${DEFAULT_OLLAMA_HOST}" required></label>
@@ -1706,7 +1874,7 @@ function ollamaHostControlMarkup(hostValue = studio.ollamaHost) {
 function ollamaJourneyMarkup(step) {
   const steps = [["service", "Ollama"], ["model", "Prompt model"], ["ready", "Ready"]];
   const current = steps.findIndex(([name]) => name === step);
-  return `<ol class="h3ps-ollama-journey">${steps.map(([name, label], index) => `
+  return `<ol class="ps-ollama-journey">${steps.map(([name, label], index) => `
     <li class="${index < current ? "is-complete" : index === current ? "is-current" : ""}"><span>${index + 1}</span><em>${label}</em></li>`).join("")}</ol>`;
 }
 
@@ -1719,12 +1887,12 @@ function ollamaDetectedTier() {
 function renderOllamaModelTiers(status) {
   const tiers = Array.isArray(status.model_tiers) ? status.model_tiers : [];
   const detected = ollamaDetectedTier();
-  return `<div class="h3ps-ollama-tier-list">${tiers.map((tier) => {
+  return `<div class="ps-ollama-tier-list">${tiers.map((tier) => {
     const vramTiers = Array.isArray(tier.vram_tiers) ? tier.vram_tiers : [];
     const isDetected = detected === "under-8" ? vramTiers.length === 0 : vramTiers.includes(detected);
     const command = `ollama pull ${tier.model}`;
-    return `<div class="h3ps-ollama-tier-row ${isDetected ? "is-detected" : ""}">
-      <span class="h3ps-ollama-tier-vram">${escapeHtml(tier.label)}</span>
+    return `<div class="ps-ollama-tier-row ${isDetected ? "is-detected" : ""}">
+      <span class="ps-ollama-tier-vram">${escapeHtml(tier.label)}</span>
       <code>${escapeHtml(command)}</code>
       ${isDetected ? "<em>Detected</em>" : "<span></span>"}
       <button type="button" data-copy-ollama-command="${escapeHtml(command)}" title="Copy ${escapeHtml(command)}" aria-label="Copy ${escapeHtml(command)}">${icon("copy", 13)}</button>
@@ -1738,53 +1906,53 @@ function renderOllamaProviderControl(hostValue) {
   const remoteHost = studio.ollamaHost !== DEFAULT_OLLAMA_HOST;
   const serviceLabel = remoteHost ? "Remote service" : "Local service";
   if (!status) {
-    return `<header class="h3ps-settings-section-heading"><span><small>${serviceLabel}</small><strong>Ollama</strong></span></header>
-      ${ollamaJourneyMarkup("service")}<div class="h3ps-ollama-state"><span class="h3ps-spinner"></span><span class="h3ps-ollama-state-copy"><strong>Checking Ollama…</strong><p>${remoteHost ? "Looking for the selected service and installed models." : "Looking for the local service and installed models."}</p></span></div>${hostControl}`;
+    return `<header class="ps-settings-section-heading"><span><small>${serviceLabel}</small><strong>Ollama</strong></span></header>
+      ${ollamaJourneyMarkup("service")}<div class="ps-ollama-state"><span class="ps-spinner"></span><span class="ps-ollama-state-copy"><strong>Checking Ollama…</strong><p>${remoteHost ? "Looking for the selected service and installed models." : "Looking for the local service and installed models."}</p></span></div>${hostControl}`;
   }
   const ready = status.state === "ready";
   const refresh = ready ? `<button type="button" data-ollama-refresh>${icon("refresh", 13)} Refresh</button>` : "";
-  const header = `<header class="h3ps-settings-section-heading"><span><small>${serviceLabel}</small><strong>Ollama</strong></span>${refresh}</header>`;
+  const header = `<header class="ps-settings-section-heading"><span><small>${serviceLabel}</small><strong>Ollama</strong></span>${refresh}</header>`;
   if (status.state === "not_installed") {
-    return `${header}${ollamaJourneyMarkup("service")}<div class="h3ps-ollama-state">
-      <span class="h3ps-ollama-state-icon">1</span><span class="h3ps-ollama-state-copy"><strong>Get Ollama</strong>
+    return `${header}${ollamaJourneyMarkup("service")}<div class="ps-ollama-state">
+      <span class="ps-ollama-state-icon">1</span><span class="ps-ollama-state-copy"><strong>Get Ollama</strong>
       <p>Install the official Ollama app, open it once, then return here. This page will detect it automatically.</p></span>
-      <a class="h3ps-ollama-primary" href="https://ollama.com/download" target="_blank" rel="noopener noreferrer">Official download ↗</a>
+      <a class="ps-ollama-primary" href="https://ollama.com/download" target="_blank" rel="noopener noreferrer">Official download ↗</a>
     </div>${hostControl}`;
   }
   if (status.state === "not_running") {
-    return `${header}${ollamaJourneyMarkup("service")}<div class="h3ps-ollama-state">
-      <span class="h3ps-ollama-state-icon">1</span><span class="h3ps-ollama-state-copy"><strong>Start Ollama</strong>
+    return `${header}${ollamaJourneyMarkup("service")}<div class="ps-ollama-state">
+      <span class="ps-ollama-state-icon">1</span><span class="ps-ollama-state-copy"><strong>Start Ollama</strong>
       <p>${remoteHost ? `The Ollama service at ${escapeHtml(studio.ollamaHost)} is not responding.` : "Ollama is installed, but its local service is not responding. Open the Ollama app; this page checks automatically."}</p></span>
-      <button class="h3ps-ollama-primary" type="button" data-ollama-refresh>Check now</button>
+      <button class="ps-ollama-primary" type="button" data-ollama-refresh>Check now</button>
     </div>${hostControl}`;
   }
   if (status.state === "error") {
-    return `${header}${ollamaJourneyMarkup("service")}<div class="h3ps-ollama-state is-error">
-      <span class="h3ps-ollama-state-icon">!</span><span class="h3ps-ollama-state-copy"><strong>Ollama could not be inspected</strong>
+    return `${header}${ollamaJourneyMarkup("service")}<div class="ps-ollama-state is-error">
+      <span class="ps-ollama-state-icon">!</span><span class="ps-ollama-state-copy"><strong>Ollama could not be inspected</strong>
       <p>${escapeHtml(status.error?.message || "The service returned an unexpected response.")}</p></span>
-      <button class="h3ps-ollama-primary" type="button" data-ollama-refresh>Try again</button>
+      <button class="ps-ollama-primary" type="button" data-ollama-refresh>Try again</button>
     </div>${hostControl}`;
   }
   const models = ollamaModels();
   if (!models.length) {
-    return `${header}${ollamaJourneyMarkup("model")}<div class="h3ps-ollama-state h3ps-ollama-model-state">
-      <span class="h3ps-ollama-state-copy"><strong>Add a compatible prompt model</strong>
+    return `${header}${ollamaJourneyMarkup("model")}<div class="ps-ollama-state ps-ollama-model-state">
+      <span class="ps-ollama-state-copy"><strong>Add a compatible prompt model</strong>
       <p>Ollama is running, but no installed model reports both vision and text generation support.</p>
-      <div class="h3ps-ollama-tier-heading">Choose a model for your GPU</div>
+      <div class="ps-ollama-tier-heading">Choose a model for your GPU</div>
       ${renderOllamaModelTiers(status)}
       <small>Copy a command and run it in Terminal or PowerShell. This page detects the model automatically.</small>
-      <details class="h3ps-ollama-storage-help" data-ollama-storage-help ${studio.ollamaStorageHelpOpen ? "open" : ""}><summary>Need models on another drive?</summary><p>Ollama manages one global model store. Set <code>OLLAMA_MODELS</code> before pulling a model, then restart Ollama. <a href="https://docs.ollama.com/windows#changing-model-location" target="_blank" rel="noopener noreferrer">Official instructions ↗</a></p></details></span>
+      <details class="ps-ollama-storage-help" data-ollama-storage-help ${studio.ollamaStorageHelpOpen ? "open" : ""}><summary>Need models on another drive?</summary><p>Ollama manages one global model store. Set <code>OLLAMA_MODELS</code> before pulling a model, then restart Ollama. <a href="https://docs.ollama.com/windows#changing-model-location" target="_blank" rel="noopener noreferrer">Official instructions ↗</a></p></details></span>
     </div>${hostControl}`;
   }
   const selected = ollamaModelForSettings();
   const tested = selected?.tested_for_h3 === true;
   const addModelOpen = studio.ollamaAddModelOpen === true;
-  return `${header}${ollamaJourneyMarkup("ready")}<div class="h3ps-ollama-ready">
-    <div class="h3ps-ollama-ready-heading"><span class="h3ps-provider-icon" data-provider-icon="ollama" aria-hidden="true"></span><span><strong>Ollama is ready</strong><small>Version ${escapeHtml(status.version || "unknown")} · ${remoteHost ? escapeHtml(studio.ollamaHost) : "local service"}</small></span><em>Running</em></div>
-    <div class="h3ps-ollama-model-heading"><span>Prompt model</span><button class="h3ps-ollama-add-model-toggle" type="button" data-ollama-add-model aria-expanded="${String(addModelOpen)}">${addModelOpen ? "− Hide models" : "+ Add model"}</button></div>
-    <label class="h3ps-ollama-model-select"><select data-ollama-model>${models.map((model) => `<option value="${escapeHtml(model.remote_model)}" ${model.remote_model === selected?.remote_model ? "selected" : ""}>${escapeHtml(model.name)}${model.parameter_size ? ` · ${escapeHtml(model.parameter_size)}` : ""}${model.quantization_level ? ` · ${escapeHtml(model.quantization_level)}` : ""}</option>`).join("")}</select></label>
-    ${addModelOpen ? `<div class="h3ps-ollama-add-model"><strong>Choose another tested model</strong>${renderOllamaModelTiers(status)}<small>Copy a command and run it in Terminal or PowerShell. Select Refresh after the pull completes.</small></div>` : ""}
-    <div class="h3ps-ollama-badges"><span>Vision</span><span>${selected?.thinking_detected ? "Thinking detected" : "Standard generation"}</span><span class="${tested ? "is-tested" : ""}">${tested ? "Tested for H3" : "Compatible · not yet H3-tested"}</span></div>
+  return `${header}${ollamaJourneyMarkup("ready")}<div class="ps-ollama-ready">
+    <div class="ps-ollama-ready-heading"><span class="ps-provider-icon" data-provider-icon="ollama" aria-hidden="true"></span><span><strong>Ollama is ready</strong><small>Version ${escapeHtml(status.version || "unknown")} · ${remoteHost ? escapeHtml(studio.ollamaHost) : "local service"}</small></span><em>Running</em></div>
+    <div class="ps-ollama-model-heading"><span>Prompt model</span><button class="ps-ollama-add-model-toggle" type="button" data-ollama-add-model aria-expanded="${String(addModelOpen)}">${addModelOpen ? "− Hide models" : "+ Add model"}</button></div>
+    <label class="ps-ollama-model-select"><select data-ollama-model>${models.map((model) => `<option value="${escapeHtml(model.remote_model)}" ${model.remote_model === selected?.remote_model ? "selected" : ""}>${escapeHtml(model.name)}${model.parameter_size ? ` · ${escapeHtml(model.parameter_size)}` : ""}${model.quantization_level ? ` · ${escapeHtml(model.quantization_level)}` : ""}</option>`).join("")}</select></label>
+    ${addModelOpen ? `<div class="ps-ollama-add-model"><strong>Choose another tested model</strong>${renderOllamaModelTiers(status)}<small>Copy a command and run it in Terminal or PowerShell. Select Refresh after the pull completes.</small></div>` : ""}
+    <div class="ps-ollama-badges"><span>Vision</span><span>${selected?.thinking_detected ? "Thinking detected" : "Standard generation"}</span><span class="${tested ? "is-tested" : ""}">${tested ? "Tested for H3" : "Compatible · not yet H3-tested"}</span></div>
     <p>${tested ? "This exact Ollama tag passed the focused H3 Generate and Refine smoke test." : "Compatibility comes from Ollama model metadata. It is not a quality guarantee for H3 prompts."}</p>
     <small>Use “Keep model loaded” on the Generate page to control whether Ollama retains this model after each request.</small>
   </div>${hostControl}`;
@@ -1815,45 +1983,45 @@ function renderApiProviderControl() {
   const connection = studio.apiProviderConnection;
   const model = apiProviderModelForSettings();
   const providerChoices = Object.entries(API_PROVIDER_UI).map(([id, provider]) => `
-    <button type="button" class="h3ps-api-preset ${id === config.preset ? "is-selected" : ""}" data-api-preset="${id}">
-      <span class="h3ps-provider-icon" data-provider-icon="${provider.icon}" aria-hidden="true"></span><span><strong>${provider.name}</strong><small>${provider.note}</small></span>${icon("check", 13)}
+    <button type="button" class="ps-api-preset ${id === config.preset ? "is-selected" : ""}" data-api-preset="${id}">
+      <span class="ps-provider-icon" data-provider-icon="${provider.icon}" aria-hidden="true"></span><span><strong>${provider.name}</strong><small>${provider.note}</small></span>${icon("check", 13)}
     </button>`).join("");
-  const header = `<header class="h3ps-settings-section-heading"><span><small>OpenAI-compatible</small><strong>API providers</strong></span></header>`;
-  const disclosure = `<div class="h3ps-api-disclosure"><strong>What leaves this computer</strong><p>The provider receives your brief, H3 instructions, prepared images and one derived contact sheet per video in the current manifest. Original videos and audio bytes are not uploaded.</p>${config.preset === "openrouter" ? "<small>OpenRouter forwards the request to an upstream model provider with its own data policy.</small>" : ""}</div>`;
+  const header = `<header class="ps-settings-section-heading"><span><small>OpenAI-compatible</small><strong>API providers</strong></span></header>`;
+  const disclosure = `<div class="ps-api-disclosure"><strong>What leaves this computer</strong><p>The provider receives your brief, H3 instructions, prepared images and one derived contact sheet per video in the current manifest. Original videos and audio bytes are not uploaded.</p>${config.preset === "openrouter" ? "<small>OpenRouter forwards the request to an upstream model provider with its own data policy.</small>" : ""}</div>`;
   const policyLinks = [
     providerMetadata.pricing_url ? `<a href="${escapeHtml(providerMetadata.pricing_url)}" target="_blank" rel="noopener noreferrer">Pricing ↗</a>` : "",
     providerMetadata.privacy_url ? `<a href="${escapeHtml(providerMetadata.privacy_url)}" target="_blank" rel="noopener noreferrer">Data policy ↗</a>` : "",
   ].filter(Boolean).join("");
   if (connection) {
     const models = studio.apiProviderModels.length ? studio.apiProviderModels : model ? [model] : [];
-    return `${header}<div class="h3ps-api-layout">
-      <div class="h3ps-api-preset-list">${providerChoices}</div>
-      <div class="h3ps-api-setup">
-        <div class="h3ps-api-connected">
-          <span class="h3ps-provider-icon" data-provider-icon="${selectedPreset.icon}" aria-hidden="true"></span>
+    return `${header}<div class="ps-api-layout">
+      <div class="ps-api-preset-list">${providerChoices}</div>
+      <div class="ps-api-setup">
+        <div class="ps-api-connected">
+          <span class="ps-provider-icon" data-provider-icon="${selectedPreset.icon}" aria-hidden="true"></span>
           <span><strong>${escapeHtml(connection.provider_name)}</strong><small>${escapeHtml(connection.base_url)} · ${escapeHtml(connection.key_hint || "no key")}${connection.compatibility_profile === "lm_studio" ? " · LM Studio detected" : ""}</small></span>
           <em>${connection.connection_verified ? "Connected" : "Configured"}</em>
         </div>
-        <label class="h3ps-api-model-select"><span>Model</span><select data-api-model>${models.map((item) => `<option value="${escapeHtml(item.remote_model)}" ${item.remote_model === model?.remote_model ? "selected" : ""}>${escapeHtml(item.name)}${item.model_context_limit ? ` · ${Math.round(item.model_context_limit / 1024)}K` : ""}</option>`).join("")}</select></label>
-        <div class="h3ps-api-badges"><span class="${model?.capabilities?.images ? "is-ready" : ""}">${model?.capabilities?.images ? "Vision" : "Text only / unknown"}</span><span>${config.preset === "gemini" ? `Thinking ${escapeHtml(connection.reasoning_effort || "minimal")}` : "Reasoning provider managed"}</span><span>Provider managed</span></div>
-        <div class="h3ps-api-actions"><span>${policyLinks}</span><button type="button" data-api-model-refresh>${icon("refresh", 13)} Refresh models</button><button type="button" data-api-disconnect>Disconnect</button></div>
+        <label class="ps-api-model-select"><span>Model</span><select data-api-model>${models.map((item) => `<option value="${escapeHtml(item.remote_model)}" ${item.remote_model === model?.remote_model ? "selected" : ""}>${escapeHtml(item.name)}${item.model_context_limit ? ` · ${Math.round(item.model_context_limit / 1024)}K` : ""}</option>`).join("")}</select></label>
+        <div class="ps-api-badges"><span class="${model?.capabilities?.images ? "is-ready" : ""}">${model?.capabilities?.images ? "Vision" : "Text only / unknown"}</span><span>${config.preset === "gemini" ? `Thinking ${escapeHtml(connection.reasoning_effort || "minimal")}` : "Reasoning provider managed"}</span><span>Provider managed</span></div>
+        <div class="ps-api-actions"><span>${policyLinks}</span><button type="button" data-api-model-refresh>${icon("refresh", 13)} Refresh models</button><button type="button" data-api-disconnect>Disconnect</button></div>
         ${disclosure}
-        <p class="h3ps-api-cancel-note">Stop aborts H3's connection. The remote provider may continue processing or billing.</p>
+        <p class="ps-api-cancel-note">Stop aborts H3's connection. The remote provider may continue processing or billing.</p>
       </div>
     </div>`;
   }
-  return `${header}<div class="h3ps-api-layout">
-    <div class="h3ps-api-preset-list">${providerChoices}</div>
-    <form class="h3ps-api-setup" data-api-provider-form>
-      <div class="h3ps-api-intro"><strong>Connect ${selectedPreset.name}</strong><p>One shared Chat Completions backend. Provider-specific fields are applied by the selected preset.</p></div>
+  return `${header}<div class="ps-api-layout">
+    <div class="ps-api-preset-list">${providerChoices}</div>
+    <form class="ps-api-setup" data-api-provider-form>
+      <div class="ps-api-intro"><strong>Connect ${selectedPreset.name}</strong><p>One shared Chat Completions backend. Provider-specific fields are applied by the selected preset.</p></div>
       ${config.preset === "custom" ? `<label><span>API base URL</span><input name="base_url" type="url" value="${escapeHtml(config.base_url)}" placeholder="https://host.example/v1 or http://localhost:8000/v1" required><small>Public endpoints require HTTPS; loopback and private LAN addresses may use HTTP.</small></label>` : ""}
       <label><span>API key ${config.preset === "custom" ? "<em>optional</em>" : ""}</span><input name="api_key" type="password" value="" placeholder="Paste key for this session" autocomplete="off" spellcheck="false" ${config.preset === "custom" ? "" : "required"}><small>The key is sent once to the local H3 backend, kept only in memory, and never saved in localStorage.</small></label>
       <label><span>Model ID <em>optional before connect</em></span><input name="model_id" type="text" value="${escapeHtml(config.model_id)}" placeholder="Choose from provider list or enter an exact ID" spellcheck="false"></label>
       ${config.preset === "gemini" ? `<label><span>Thinking level</span><select name="gemini_reasoning_effort"><option value="minimal" ${config.gemini_reasoning_effort === "minimal" ? "selected" : ""}>Minimal</option><option value="low" ${config.gemini_reasoning_effort === "low" ? "selected" : ""}>Low</option><option value="medium" ${config.gemini_reasoning_effort === "medium" ? "selected" : ""}>Medium</option><option value="high" ${config.gemini_reasoning_effort === "high" ? "selected" : ""}>High</option></select><small>Gemini manages the reasoning and output budget. Higher levels can use more tokens and take longer.</small></label>` : ""}
-      ${config.preset === "custom" ? `<div class="h3ps-api-custom-options"><label><input name="custom_images" type="checkbox" ${config.custom_images ? "checked" : ""}><span>Endpoint accepts image_url inputs</span></label><label><span>Known context <em>optional</em></span><input name="custom_context_tokens" type="number" min="4096" step="1024" value="${config.custom_context_tokens || ""}" placeholder="32768"></label></div>` : ""}
-      ${studio.apiProviderError ? `<div class="h3ps-api-error"><strong>${escapeHtml(studio.apiProviderError.code || "Connection failed")}</strong><span>${escapeHtml(studio.apiProviderError.message)}</span></div>` : ""}
+      ${config.preset === "custom" ? `<div class="ps-api-custom-options"><label><input name="custom_images" type="checkbox" ${config.custom_images ? "checked" : ""}><span>Endpoint accepts image_url inputs</span></label><label><span>Known context <em>optional</em></span><input name="custom_context_tokens" type="number" min="4096" step="1024" value="${config.custom_context_tokens || ""}" placeholder="32768"></label></div>` : ""}
+      ${studio.apiProviderError ? `<div class="ps-api-error"><strong>${escapeHtml(studio.apiProviderError.code || "Connection failed")}</strong><span>${escapeHtml(studio.apiProviderError.message)}</span></div>` : ""}
       ${disclosure}
-      <div class="h3ps-api-actions"><span>${selectedPreset.keyUrl ? `<a href="${selectedPreset.keyUrl}" target="_blank" rel="noopener noreferrer">Create or manage key ↗</a>` : ""}${policyLinks}</span><button class="h3ps-api-primary" type="submit">Connect &amp; test</button></div>
+      <div class="ps-api-actions"><span>${selectedPreset.keyUrl ? `<a href="${selectedPreset.keyUrl}" target="_blank" rel="noopener noreferrer">Create or manage key ↗</a>` : ""}${policyLinks}</span><button class="ps-api-primary" type="submit">Connect &amp; test</button></div>
     </form>
   </div>`;
 }
@@ -1880,6 +2048,11 @@ function localModels() {
   return studio.models.filter((model) => model.family === "gguf");
 }
 
+/** Reflect one aspect ratio across every rendered control. */
+function syncAspectRatioControls(value) {
+  for (const control of aspectRatioControls) control?.update?.(value);
+}
+
 function directModelForSettings() {
   const models = localModels();
   if (studio.selectedModel?.family === "gguf") {
@@ -1898,7 +2071,7 @@ function syncProviderSettings() {
   studio.root.querySelectorAll("[data-provider-panel]").forEach((panel) => {
     panel.hidden = panel.dataset.providerPanel !== provider;
   });
-  const runtimeSettings = studio.root.querySelector(".h3ps-runtime-settings");
+  const runtimeSettings = studio.root.querySelector(".ps-runtime-settings");
   runtimeSettings.hidden = provider !== "direct";
 }
 
@@ -1917,11 +2090,11 @@ function renderDirectModelRuntimeUpdate(model) {
   const installed = requirement.installed_version || studio.ggufRuntimeDiagnostics?.package_version || "unknown";
   const minimum = requirement.minimum_version || "a newer version";
   const command = directRuntimeActionCommand();
-  return `<section class="h3ps-direct-runtime-state is-missing">
+  return `<section class="ps-direct-runtime-state is-missing">
     <header><span><small>Runtime</small><strong>Runtime update required</strong></span></header>
     <p>Installed llama-cpp-python ${escapeHtml(installed)}. ${escapeHtml(model.name)} requires ${escapeHtml(minimum)} or newer.</p>
     ${renderDirectRuntimeCommand(command, "update")}
-    ${command ? "" : `<div class="h3ps-direct-runtime-links"><a href="${INSTALLATION_GUIDE_URL}" target="_blank" rel="noopener noreferrer">Installation guide ↗</a><a href="${TROUBLESHOOTING_GUIDE_URL}" target="_blank" rel="noopener noreferrer">Troubleshooting guide ↗</a></div>`}
+    ${command ? "" : `<div class="ps-direct-runtime-links"><a href="${INSTALLATION_GUIDE_URL}" target="_blank" rel="noopener noreferrer">Installation guide ↗</a><a href="${TROUBLESHOOTING_GUIDE_URL}" target="_blank" rel="noopener noreferrer">Troubleshooting guide ↗</a></div>`}
   </section>`;
 }
 
@@ -1951,11 +2124,11 @@ function renderInferenceSettings() {
   } else if (directModel) {
     const runtimeRequirement = directModel.runtime_requirement || {};
     directStatus.innerHTML = directModel.model_ready === false
-      ? `<div class="h3ps-direct-model-warning"><strong>Model needs attention</strong><span>${escapeHtml(directModel.setup_message || "The GGUF metadata or architecture is not supported.")}</span></div>`
+      ? `<div class="ps-direct-model-warning"><strong>Model needs attention</strong><span>${escapeHtml(directModel.setup_message || "The GGUF metadata or architecture is not supported.")}</span></div>`
       : runtimeRequirement.state === "update_required"
         ? renderDirectModelRuntimeUpdate(directModel)
         : isTextOnlyDirectModel(directModel)
-          ? `<div class="h3ps-direct-model-note"><strong>Text-only model · T2VA and Music3 available</strong><span>${escapeHtml(directModel.capability_message || "No compatible vision projector is active.")}</span></div>`
+          ? `<div class="ps-direct-model-note"><strong>Text-only model · ${escapeHtml(textOnlyModeLabels())} available</strong><span>${escapeHtml(directModel.capability_message || "No compatible vision projector is active.")}</span></div>`
           : "";
   } else {
     directStatus.innerHTML = "";
@@ -1966,7 +2139,7 @@ function renderInferenceSettings() {
   studio.root.querySelector("[data-ollama-provider-control]").innerHTML = renderOllamaProviderControl(ollamaHostDraft);
   studio.root.querySelector("[data-api-provider-control]").innerHTML = renderApiProviderControl();
   const catalog = studio.root.querySelector("[data-other-models-catalog]");
-  catalog.innerHTML = `<div class="h3ps-model-setup-list">${renderModelSetupRows()}</div>`;
+  catalog.innerHTML = `<div class="ps-model-setup-list">${renderModelSetupRows()}</div>`;
   syncSelectedModelSourceLabel();
   syncProviderSettings();
 }
@@ -2047,11 +2220,15 @@ function selectModel(model, { preserveSettingsProvider = false } = {}) {
   studio.modelSelectionRevision = (studio.modelSelectionRevision || 0) + 1;
   rememberRuntimePreferences();
   selectModelState(studio, model, { preserveSettingsProvider });
-  const switchedToT2VA = !isGenerationModeAvailable(model, studio.mode);
-  if (switchedToT2VA) {
+  // A text-only model cannot run the mode the user is on. Switch to the video
+  // workspace's default mode and remember that we did, so the caller can explain
+  // the fallback. The flag was lost in an earlier refactor while this use of it
+  // survived, which threw "switchedToT2VA is not defined" on every model select.
+  const switchedToTextOnlyMode = !isGenerationModeAvailable(model, studio.mode);
+  if (switchedToTextOnlyMode) {
     stashCurrentModeDraft();
-    studio.mode = "T2VA";
-    studio.lastVideoMode = "T2VA";
+    studio.mode = defaultModeForWorkspace("video") || allModeIds()[0];
+    studio.lastVideoMode = studio.mode;
     syncWorkspace();
     restoreModeDraft(studio.mode);
   }
@@ -2096,10 +2273,11 @@ function selectModel(model, { preserveSettingsProvider = false } = {}) {
   syncRuntimeSummary();
   syncThinkingAvailability();
   saveUserPreferences(localStorage, studio);
-  if (switchedToT2VA && !studio.preferencesRestoring) {
+  if (switchedToTextOnlyMode && !studio.preferencesRestoring) {
     showToast(
-      "Switched to T2VA",
-      model?.capability_message || "The selected Direct GGUF has no compatible vision projector.",
+      "Switched mode",
+      model?.capability_message
+        || `The selected model cannot run the previous mode, so ${modeData(studio.mode).title || studio.mode} was selected.`,
     );
   }
 }
@@ -2290,16 +2468,16 @@ function setSettingsOpen(open) {
   const selectedProvider = studio.selectedModel?.family === "external" ? "external" : studio.selectedModel?.family === "ollama" ? "ollama" : studio.selectedModel?.family === "api" ? "api" : studio.selectedModel?.family === "gguf" ? "direct" : null;
   if (!open && selectedProvider) studio.settingsProvider = selectedProvider;
   studio.root.querySelector("[data-settings-view]").hidden = !open;
-  studio.root.querySelectorAll("[data-generate-view]").forEach((element) => { element.hidden = open; });
+  // Closing Settings must not reveal the workspace while the target picker is
+  // still up, or the picker would stop covering the studio.
+  const workspaceHidden = open || Boolean(studio.targetSelectionOpen);
+  studio.root.querySelectorAll("[data-generate-view]").forEach((element) => { element.hidden = workspaceHidden; });
   studio.root.querySelector("[data-open-settings-header]").hidden = open;
   studio.root.classList.toggle("is-settings-open", open);
   if (open) {
     if (selectedProvider) studio.settingsProvider = selectedProvider;
     renderInferenceSettings();
     syncRuntimeSummary();
-    syncSystemPromptEditors();
-    setSystemPromptProfile(studio.settingsPromptProfile);
-    setSystemPromptEditorOpen(false);
   }
   syncOllamaAutoDetection();
 }
@@ -2510,6 +2688,12 @@ async function refreshModels() {
   const selectionRevision = studio.modelSelectionRevision || 0;
   const externalAttempt = studio.externalConnectionAttempt || 0;
   try {
+    // The target catalog is optional: a caller may not provide the client, and a
+    // failed request must not block model discovery. The built-in snapshot keeps
+    // the UI rendering either way.
+    const targetCatalog = typeof getTargets === "function"
+      ? await getTargets().catch(() => null)
+      : null;
     const [result, status, ollamaStatus, apiPresets] = await Promise.all([
       getModels(),
       getStatus(studio.ollamaHost),
@@ -2517,6 +2701,7 @@ async function refreshModels() {
       getApiProviderPresets().catch(() => ({ presets: [] })),
     ]);
     if (studio.modelDiscoveryAttempt !== attempt || (studio.modelSelectionRevision || 0) !== selectionRevision) return;
+    if (targetCatalog) adoptTargetCatalog(targetCatalog);
     const selectedId = studio.selectedModel?.id;
     const selectedBeforeRefresh = studio.selectedModel;
     const models = [...result.models, ...(ollamaStatus.compatible_models || []), ...studio.apiProviderModels];
@@ -2659,8 +2844,8 @@ async function refreshOllama({ automatic = false } = {}) {
 
 function toggleRefine(open) {
   const panel = studio.root.querySelector("[data-refine-panel]");
-  const outputPanel = studio.root.querySelector(".h3ps-output-panel");
-  if (open && studio.mode === "Music3") toggleLyricsRefine(false);
+  const outputPanel = studio.root.querySelector(".ps-output-panel");
+  if (open && isAudioMode(studio.mode)) toggleLyricsRefine(false);
   panel.hidden = !open;
   outputPanel.classList.toggle("is-refining", open);
   if (open) requestAnimationFrame(() => panel.querySelector("textarea").focus({ preventScroll: true }));
@@ -2680,7 +2865,7 @@ async function cancelLyricsRefinement() {
     return;
   }
   const submit = studio.root.querySelector("[data-lyrics-refine-submit]");
-  submit.innerHTML = `<span class="h3ps-spinner"></span>Cancelling…`;
+  submit.innerHTML = `<span class="ps-spinner"></span>Cancelling…`;
   try {
     await cancel();
   } catch (error) {
@@ -2719,7 +2904,7 @@ async function submitLyricsRefinement() {
   markActiveWriterRequest();
   studio.lyricsRequestBusy = true;
   submit.disabled = true;
-  submit.innerHTML = `<span class="h3ps-spinner"></span>${currentLyrics.trim() ? "Refining…" : "Creating…"}`;
+  submit.innerHTML = `<span class="ps-spinner"></span>${currentLyrics.trim() ? "Refining…" : "Creating…"}`;
   setGenerationState("busy", currentLyrics.trim() ? "Refining lyrics" : "Creating lyrics", studio.selectedModel.name.split("/").pop());
   try {
     const result = await vramHandoffCoordinator.trackWriterRequest(refine(buildLyricsRefinePayload(studio, {
@@ -2746,7 +2931,7 @@ async function submitLyricsRefinement() {
       `${result.total_seconds.toFixed(1)}s · ${result.tokens_per_second.toFixed(1)} tok/s`,
     );
   } catch (error) {
-    if (error.code !== "GENERATION_CANCELLED") studio.desktopNotifications.notify("Lyrics request failed. Open Writer for details.");
+    if (error.code !== "GENERATION_CANCELLED") studio.desktopNotifications.notify("Lyrics request failed. Open Prompt Studio for details.");
     if (error.code === "GENERATION_CANCELLED") showToast("Lyrics request cancelled", "The previous Lyrics were kept.");
     else if (error.code === "INSUFFICIENT_FREE_VRAM") showVramRetry(error, submitLyricsRefinement);
     else showToast(error.code || "Lyrics request failed", error.message, error.details);
@@ -2785,17 +2970,17 @@ async function submitRefinement() {
   if (!await prepareWriterRequest()) return;
 
   const previousPrompt = output.value;
-  const previousMeta = studio.root.querySelector(".h3ps-editor-meta span:last-child").textContent;
+  const previousMeta = studio.root.querySelector(".ps-editor-meta span:last-child").textContent;
   markActiveWriterRequest();
   submit.disabled = true;
-  submit.innerHTML = `<span class="h3ps-spinner"></span>Refining…`;
+  submit.innerHTML = `<span class="ps-spinner"></span>Refining…`;
   setGenerationState("busy", "Refining prompt", studio.selectedModel.name.split("/").pop());
   try {
     const result = await vramHandoffCoordinator.trackWriterRequest(refine(buildRefinePayload(studio, {
       currentPrompt: previousPrompt,
       instruction,
       creativeBrief: currentBriefTextarea().value.trim(),
-      lyrics: studio.mode === "Music3" ? studio.root.querySelector("[data-music-lyrics]").value : "",
+      lyrics: studio.root.querySelector("[data-music-lyrics]")?.value ?? "",
       seed: newGenerationSeed(),
     })));
     if (output.value !== previousPrompt) {
@@ -2817,7 +3002,7 @@ async function submitRefinement() {
     panel.querySelector("[data-refine-restore]").hidden = false;
     studio.lastModelMeta = formatGenerationMeta(result);
     syncRuntimeSummary(result);
-    studio.root.querySelector(".h3ps-editor-meta span:last-child").textContent = studio.lastModelMeta;
+    studio.root.querySelector(".ps-editor-meta span:last-child").textContent = studio.lastModelMeta;
     syncModifiedState();
     saveCurrentModeDraft();
     studio.desktopNotifications.notify("Refinement finished. Your prompt is ready.");
@@ -2834,7 +3019,7 @@ async function submitRefinement() {
         : `${result.total_seconds.toFixed(1)}s · ${result.tokens_per_second.toFixed(1)} tok/s · no media re-upload`,
     );
   } catch (error) {
-    if (error.code !== "GENERATION_CANCELLED") studio.desktopNotifications.notify("Refinement failed. Open Writer for details.");
+    if (error.code !== "GENERATION_CANCELLED") studio.desktopNotifications.notify("Refinement failed. Open Prompt Studio for details.");
     if (error.code === "INSUFFICIENT_FREE_VRAM") showVramRetry(error, submitRefinement);
     else showToast(error.code || "Refinement failed", error.message, error.details);
   } finally {
@@ -2847,20 +3032,6 @@ async function submitRefinement() {
     clearActiveWriterRequest();
     setGenerationState("idle", "", "");
   }
-}
-
-function musicSystemPromptPanelMarkup(profile, label, description, hidden = false) {
-  return `
-    <div class="h3ps-system-prompt-panel" data-music-system-prompt-panel="${profile}" ${hidden ? "hidden" : ""}>
-      <header class="h3ps-system-prompt-editor-heading">
-        <button type="button" data-music-system-prompt-back>${icon("chevron", 12)} Back</button>
-        <span><small>System prompt</small><strong>${label}</strong></span>
-        <span class="h3ps-system-prompt-panel-status"><em data-system-prompt-status="${profile}">Default</em>${icon("check", 13)}</span>
-      </header>
-      <p>${description}</p>
-      <textarea data-system-prompt="${profile}" maxlength="8000" spellcheck="true" disabled></textarea>
-      <footer><small data-system-prompt-count="${profile}">0 / 8,000</small><button type="button" data-system-prompt-reset="${profile}" hidden>Restore default</button></footer>
-    </div>`;
 }
 
 function syncFullscreenState() {
@@ -2906,7 +3077,7 @@ function syncInterfaceSize() {
   if (slider) {
     slider.value = String(index);
     slider.setAttribute("aria-valuetext", `${size}%`);
-    slider.style.setProperty("--h3ps-range", `${index / (INTERFACE_SIZES.length - 1) * 100}%`);
+    slider.style.setProperty("--ps-range", `${index / (INTERFACE_SIZES.length - 1) * 100}%`);
   }
   if (output) output.textContent = `${size}%`;
   if (button) {
@@ -2943,63 +3114,60 @@ function setFullscreen(fullscreen) {
 function createStudio() {
   if (studio) return studio;
   injectStyles();
-  const studioBrandIcon = new URL("./assets/h3-prompt-writer-launcher.svg", import.meta.url).href;
+  const studioBrandIcon = new URL("./assets/prompt-studio-launcher.svg", import.meta.url).href;
   const root = document.createElement("div");
-  root.className = "h3ps-root";
+  root.className = "ps-root";
   root.setAttribute("aria-hidden", "true");
   root.innerHTML = `
-    <div class="h3ps-backdrop" data-close-studio></div>
-    <section class="h3ps-modal" role="dialog" aria-label="H3 Prompt Writer" hidden>
-      <header class="h3ps-header">
-        <div class="h3ps-brand">
-          <img class="h3ps-brandmark" src="${studioBrandIcon}" alt="H3 Prompt Writer">
-          <span><strong>H3 Prompt Writer</strong></span>
+    <div class="ps-backdrop" data-close-studio></div>
+    <section class="ps-modal" role="dialog" aria-label="Prompt Studio" hidden>
+      <header class="ps-header">
+        <div class="ps-brand">
+          <img class="ps-brandmark" src="${studioBrandIcon}" alt="Prompt Studio">
+          <span><strong>Prompt Studio</strong></span>
         </div>
-        <nav class="h3ps-workspaces" aria-label="Writer workspace">
-          <button type="button" data-workspace="video">H3 Video</button>
-          <button type="button" data-workspace="music">Music 3</button>
-        </nav>
-        <div class="h3ps-header-meta">
-          <div class="h3ps-guide-picker">
-            <button class="h3ps-guide-button" type="button" aria-expanded="false" data-guide-toggle>Official guides ${icon("chevron", 13)}</button>
-            <div class="h3ps-guide-menu" data-guide-menu hidden><span>Loading guides…</span></div>
-          </div>
-          <button class="h3ps-guide-button" type="button" data-open-settings-header>Settings</button>
-          ${supportsWorkflowMedia() ? `<button class="h3ps-icon-button" type="button" data-open-floating-media title="Media panel" aria-label="Media panel">${icon("grid", 17)}</button>` : ""}
-          <button class="h3ps-icon-button" type="button" title="Switch to light theme" aria-label="Switch to light theme" aria-pressed="false" data-theme-toggle>${icon("sun", 17)}</button>
-          <div class="h3ps-interface-size-picker" data-interface-size-picker>
-            <button class="h3ps-icon-button h3ps-interface-size-button" type="button" title="Interface size 100%" aria-label="Interface size 100%" aria-haspopup="true" aria-expanded="false" data-interface-size-toggle>Aa</button>
-            <div class="h3ps-interface-size-menu" data-interface-size-menu hidden>
+        <div class="ps-target-indicator" data-target-indicator>
+          ${targetIndicatorMarkup()}
+        </div>
+        <div class="ps-header-meta">
+          <button class="ps-guide-button" type="button" data-open-settings-header>Settings</button>
+          ${supportsWorkflowMedia() ? `<button class="ps-icon-button" type="button" data-open-floating-media title="Media panel" aria-label="Media panel">${icon("grid", 17)}</button>` : ""}
+          <button class="ps-icon-button" type="button" title="Switch to light theme" aria-label="Switch to light theme" aria-pressed="false" data-theme-toggle>${icon("sun", 17)}</button>
+          <div class="ps-interface-size-picker" data-interface-size-picker>
+            <button class="ps-icon-button ps-interface-size-button" type="button" title="Interface size 100%" aria-label="Interface size 100%" aria-haspopup="true" aria-expanded="false" data-interface-size-toggle>Aa</button>
+            <div class="ps-interface-size-menu" data-interface-size-menu hidden>
               <header><strong>Interface Size</strong><output data-interface-size-value>100%</output></header>
               <input type="range" min="0" max="3" step="1" value="0" aria-label="Interface size" data-interface-size-range>
-              <div class="h3ps-interface-size-marks" aria-hidden="true"><span>100%</span><span>110%</span><span>120%</span><span>125%</span></div>
+              <div class="ps-interface-size-marks" aria-hidden="true"><span>100%</span><span>110%</span><span>120%</span><span>125%</span></div>
             </div>
           </div>
-          <button class="h3ps-icon-button" type="button" title="Enter fullscreen" aria-label="Enter fullscreen" aria-pressed="false" data-fullscreen-toggle>${icon("expand", 17)}</button>
-          <button class="h3ps-icon-button" type="button" title="Close" data-close-studio>${icon("close", 18)}</button>
+          <button class="ps-icon-button" type="button" title="Enter fullscreen" aria-label="Enter fullscreen" aria-pressed="false" data-fullscreen-toggle>${icon("expand", 17)}</button>
+          <button class="ps-icon-button" type="button" title="Close" data-close-studio>${icon("close", 18)}</button>
         </div>
       </header>
 
+      ${targetSelectionMarkup()}
+
       ${settingsMarkup(icon)}
 
-      <div class="h3ps-workspace-toolbar" data-generate-view>
-        <nav class="h3ps-modes" role="tablist" aria-label="Generation mode" data-video-modes>
-          ${Object.keys(MODES).map((mode) => `<button type="button" role="tab" data-mode="${mode}">${mode}</button>`).join("")}
-        </nav>
-        <div class="h3ps-output-toolbar">
+      <div class="ps-workspace-toolbar" data-generate-view>
+        <nav class="ps-modes" role="tablist" aria-label="Generation mode" data-workspace-modes>
+          ${modeButtonsMarkup(defaultTarget())}
+        </nav>        <div class="ps-output-toolbar">
           <span data-output-label>Generated prompt</span>
-          <div class="h3ps-output-badges"><button type="button" data-undo-edits hidden>Undo</button></div>
+          <div class="ps-output-badges"><button type="button" data-undo-edits hidden>Undo</button></div>
         </div>
       </div>
 
-      <div class="h3ps-workspace" data-generate-view>
-        <section class="h3ps-input-panel">
-          <div data-video-inputs>
-          <div class="h3ps-section-heading">
-            <span><small>Media</small><strong data-h3ps-mode-title></strong></span>
-            <div class="h3ps-section-actions">
+      <div class="ps-workspace" data-generate-view>
+        <section class="ps-input-panel">
+          <div class="ps-input-scroll" data-input-scroll>
+          <div data-video-inputs data-workspace-panel="video">
+          <div class="ps-section-heading">
+            <span><strong data-ps-mode-title></strong><small data-media-label>Media</small></span>
+            <div class="ps-section-actions">
 
-              <div class="h3ps-clear-control" data-clear-control>
+              <div class="ps-clear-control" data-clear-control>
                 ${splitMenuMarkup(icon, {label: "Actions", primary: "data-actions-menu-toggle", toggle: "data-clear-menu-toggle", menu: "data-clear-menu", ariaLabel: "Media actions", contents: `
                   ${supportsWorkflowMedia() ? `<button type="button" data-open-floating-media data-media-panel-action disabled title="Add media first"><strong>Media panel</strong><small>ADD TO WORKFLOW</small></button>` : ""}
                   <button type="button" data-open-composer disabled><strong>Compose</strong><small>Create collage</small></button>
@@ -3011,137 +3179,142 @@ function createStudio() {
               </div>
             </div>
           </div>
-          <p class="h3ps-section-hint" data-h3ps-mode-hint></p>
-          <div class="h3ps-media" data-h3ps-media></div>
+          <div class="ps-media" data-ps-media></div>
 
-          <div class="h3ps-control-grid">
-            <label class="h3ps-field h3ps-duration-field"><span>Duration <b data-duration-label>10 seconds</b></span><div><input type="range" min="1" max="20" step="1" value="10" style="--h3ps-range:47.37%" data-duration-slider><i></i></div></label>
-            ${aspectRatioMarkup(icon)}
-          </div>
-
-          <label class="h3ps-brief">
+          <label class="ps-brief">
             <span><strong>Creative brief</strong><small>Describe what should happen in the video</small></span>
             <textarea spellcheck="true" maxlength="8000" data-video-brief>Use identity and wardrobe from Picture 1 and the slow lateral camera movement from Video 1. A solitary character waits at a rain-soaked tram stop at blue hour, notices an approaching light and turns into the wind. End on a quiet, unresolved look; keep the shot cinematic, realistic and restrained.</textarea>
-            <small class="h3ps-char-count">0 / 8,000</small>
+            <small class="ps-char-count">0 / 8,000</small>
           </label>
+
+          <div class="ps-control-grid">
+            <label class="ps-field ps-duration-field"><span>Duration <b data-duration-label>10 seconds</b></span><div><input type="range" min="1" max="20" step="1" value="10" style="--ps-range:47.37%" data-duration-slider><i></i></div></label>
+            ${aspectRatioMarkup(icon)}
+          </div>
           </div>
 
-          <div class="h3ps-music-inputs" data-music-inputs hidden>
-            <label class="h3ps-brief">
+          <div class="ps-music-inputs" data-music-inputs hidden>
+            <label class="ps-brief">
               <span><strong>Music brief</strong><small>Describe the sound, vocals, mood, arrangement or production</small></span>
-              <textarea spellcheck="true" maxlength="2000" data-music-brief>${MUSIC3_DEFAULT_DRAFT.brief}</textarea>
-              <small class="h3ps-char-count">0 / 2,000</small>
+              <textarea spellcheck="true" maxlength="2000" data-music-brief>${MODE_DEFAULT_DRAFTS.Music3.brief}</textarea>
+              <small class="ps-char-count">0 / 2,000</small>
             </label>
-            <label class="h3ps-brief h3ps-lyrics">
+            <label class="ps-brief ps-lyrics">
               <span><strong>Lyrics</strong><small>Optional</small></span>
               <textarea spellcheck="true" maxlength="4000" data-music-lyrics placeholder="[Verse 1]&#10;...&#10;&#10;[Chorus]&#10;..."></textarea>
-              <small class="h3ps-char-count">0 / 4,000</small>
+              <small class="ps-char-count">0 / 4,000</small>
             </label>
-            <div class="h3ps-lyrics-refine-tools">
-              <button class="h3ps-secondary-button" type="button" title="Refine Lyrics with the selected prompt model" data-lyrics-refine-toggle>${icon("spark", 15)} Refine</button>
+            <div class="ps-lyrics-refine-tools">
+              <button class="ps-secondary-button" type="button" title="Refine Lyrics with the selected prompt model" data-lyrics-refine-toggle>${icon("spark", 15)} Refine</button>
             </div>
-            <section class="h3ps-refine h3ps-lyrics-refine" data-lyrics-refine-panel hidden>
-              <div class="h3ps-refine-heading">
+            <section class="ps-refine ps-lyrics-refine" data-lyrics-refine-panel hidden>
+              <div class="ps-refine-heading">
                 <span><strong>Refine lyrics</strong><small>Create new Lyrics or rewrite the current text</small></span>
-                <label class="h3ps-lyrics-brief-option"><input type="checkbox" data-lyrics-use-brief checked>Use Music Brief</label>
+                <label class="ps-lyrics-brief-option"><input type="checkbox" data-lyrics-use-brief checked>Use Music Brief</label>
               </div>
               <textarea rows="2" data-lyrics-refine-instruction placeholder="Leave Lyrics empty to create new lyrics, or describe how to rewrite the existing lyrics."></textarea>
-              <div class="h3ps-refine-actions">
-                <button type="button" class="h3ps-text-button" data-lyrics-refine-restore hidden>Restore previous</button>
+              <div class="ps-refine-actions">
+                <button type="button" class="ps-text-button" data-lyrics-refine-restore hidden>Restore previous</button>
                 <span></span>
-                <button type="button" class="h3ps-text-button" data-lyrics-refine-cancel>Cancel</button>
-                <button type="button" class="h3ps-refine-submit" data-lyrics-refine-submit>${icon("spark", 13)} Refine</button>
+                <button type="button" class="ps-text-button" data-lyrics-refine-cancel>Cancel</button>
+                <button type="button" class="ps-refine-submit" data-lyrics-refine-submit>${icon("spark", 13)} Refine</button>
               </div>
             </section>
-            <section class="h3ps-music-system-prompt">
-              <button class="h3ps-music-system-prompt-toggle" type="button" data-music-system-prompt-toggle aria-expanded="false">
-                <strong>System prompt</strong>
-                <span><em data-music-system-prompt-summary>Default</em>${icon("chevron", 12)}</span>
-              </button>
-              <div data-music-system-prompt-details hidden>
-                <div class="h3ps-system-prompt-overview" data-music-system-prompt-overview>
-                  <button type="button" data-music-system-prompt-profile="music3">
-                    <span><strong>Caption</strong><small>Generated Caption</small></span>
-                    <span><em data-system-prompt-summary-status="music3">Default</em><b>Edit</b>${icon("chevron", 12)}</span>
-                  </button>
-                  <button type="button" data-music-system-prompt-profile="music3_lyrics">
-                    <span><strong>Lyrics</strong><small>Create and refine Lyrics</small></span>
-                    <span><em data-system-prompt-summary-status="music3_lyrics">Default</em><b>Edit</b>${icon("chevron", 12)}</span>
-                  </button>
-                </div>
-                <div class="h3ps-system-prompt-editor" data-music-system-prompt-editor hidden>
-                  ${musicSystemPromptPanelMarkup("music3", "Caption", "Instructions used to create and refine the structured Music 3 caption.")}
-                  ${musicSystemPromptPanelMarkup("music3_lyrics", "Lyrics", "Instructions used to create new Lyrics or rewrite the current Lyrics.", true)}
-                </div>
-              </div>
-            </section>
+          </div>
+
+          <div class="ps-image-inputs" data-image-inputs data-workspace-panel="image" hidden>
+            <div class="ps-section-heading">
+              <span><strong data-ps-image-mode-title></strong><small data-media-label>Media</small></span>
+            </div>
+            <div class="ps-media" data-ps-image-media></div>
+
+            <label class="ps-brief ps-image-brief">
+              <span><strong>Image brief</strong><small data-image-brief-label>Describe the image to generate</small></span>
+              <textarea spellcheck="true" maxlength="8000" data-image-brief></textarea>
+              <small class="ps-char-count">0 / 8,000</small>
+            </label>
+
+            <label class="ps-brief ps-edit-instruction" hidden>
+              <span><strong>Edit instruction</strong><small>What should change, and what must stay</small></span>
+              <textarea spellcheck="true" maxlength="4000" data-edit-instruction></textarea>
+              <small class="ps-char-count">0 / 4,000</small>
+            </label>
+
+            <div class="ps-control-grid ps-image-controls">
+              ${aspectRatioMarkup(icon, "image-aspect")}
+            </div>
+          </div>
           </div>
 
           ${generateModelSummaryMarkup(icon)}
         </section>
 
-        <section class="h3ps-output-panel" aria-label="Generated result">
-          <div class="h3ps-output-mobile-toolbar" aria-hidden="true"><span data-output-mobile-label>Generated prompt</span></div>
-          <div class="h3ps-editor-wrap">
-            <div class="h3ps-editor-highlight" data-prompt-highlights aria-hidden="true"></div>
-            <textarea class="h3ps-editor" aria-label="Generated prompt" spellcheck="false" data-output>${SAMPLE_PROMPT}</textarea>
-            <div class="h3ps-reference-peek" data-reference-peek hidden></div>
-            <div class="h3ps-editor-meta"><span>${promptLengthMeta(SAMPLE_PROMPT)}</span></div>
+        <section class="ps-output-panel" aria-label="Generated result">
+          <div class="ps-output-mobile-toolbar" aria-hidden="true"><span data-output-mobile-label>Generated prompt</span></div>
+          <div class="ps-editor-wrap">
+            <div class="ps-editor-highlight" data-prompt-highlights aria-hidden="true"></div>
+            <textarea class="ps-editor" aria-label="Generated prompt" spellcheck="false" data-output>${SAMPLE_PROMPT}</textarea>
+            <div class="ps-reference-peek" data-reference-peek hidden></div>
+            <div class="ps-editor-meta"><span>${promptLengthMeta(SAMPLE_PROMPT)}</span></div>
           </div>
-          <div class="h3ps-refine" data-refine-panel hidden>
-            <div class="h3ps-refine-heading">
+          <div class="ps-refine" data-refine-panel hidden>
+            <div class="ps-refine-heading">
               <span><strong data-refine-title>Refine prompt</strong><small><span data-refine-helper>Describe only what should change</span><em data-refine-media-note>No media re-upload</em></small></span>
-              <div class="h3ps-refine-heading-actions">
-                <button type="button" class="h3ps-text-button" data-refine-restore hidden>Restore original</button>
-                <button type="button" class="h3ps-text-button" data-refine-cancel>Cancel</button>
-                <button type="button" class="h3ps-refine-submit" data-refine-submit>${icon("spark", 13)} Refine</button>
+              <div class="ps-refine-heading-actions">
+                <button type="button" class="ps-text-button" data-refine-restore hidden>Restore original</button>
+                <button type="button" class="ps-text-button" data-refine-cancel>Cancel</button>
+                <button type="button" class="ps-refine-submit" data-refine-submit>${icon("spark", 13)} Refine</button>
               </div>
             </div>
             <textarea rows="2" data-refine-instruction placeholder="For example: make the camera movement slower and keep the ending more ambiguous."></textarea>
           </div>
-          <div class="h3ps-output-actions">
-            <span class="h3ps-output-primary-actions">
-              <button class="h3ps-secondary-button" type="button" title="Refine with local LLM" data-refine-toggle>${icon("spark", 15)} Refine</button>
+          <div class="ps-output-actions">
+            <span class="ps-output-primary-actions">
+              <button class="ps-secondary-button" type="button" title="Refine with local LLM" data-refine-toggle>${icon("spark", 15)} Refine</button>
             </span>
             ${copyButtonMarkup(icon, "data-copy", '<span data-copy-label>Copy prompt</span>')}
           </div>
         </section>
       </div>
 
-      <footer class="h3ps-footer" data-generate-view>
-        <div class="h3ps-footer-memory-actions">
-          <button class="h3ps-memory-action" type="button" data-comfy-memory-action title="Unload models held by ComfyUI without clearing cached workflow results">${icon("memory", 15)}Free ComfyUI VRAM</button>
-          <span class="h3ps-prompt-lifecycle-actions" data-prompt-lifecycle-actions></span>
+      <footer class="ps-footer" data-generate-view>
+        <div class="ps-footer-memory-actions">
+          <button class="ps-memory-action" type="button" data-comfy-memory-action title="Unload models held by ComfyUI without clearing cached workflow results">${icon("memory", 15)}Free ComfyUI VRAM</button>
+          <span class="ps-prompt-lifecycle-actions" data-prompt-lifecycle-actions></span>
         </div>
-        <div class="h3ps-status is-busy" role="status" aria-live="polite" aria-atomic="true" data-status hidden><span><strong></strong><small data-status-detail></small></span></div>
-        <div class="h3ps-footer-actions">
-          <span class="h3ps-generation-options">
-            <label class="h3ps-toggle-control"><input type="checkbox" data-thinking><span></span>Thinking</label>
-            <label class="h3ps-toggle-control" data-keep-loaded-control title="Keep the prompt model in VRAM for the next prompt"><input type="checkbox" data-keep-loaded><span></span>Keep model loaded</label>
+        <div class="ps-status is-busy" role="status" aria-live="polite" aria-atomic="true" data-status hidden><span><strong></strong><small data-status-detail></small></span></div>
+        <div class="ps-footer-actions">
+          <span class="ps-generation-options">
+            <label class="ps-toggle-control"><input type="checkbox" data-thinking><span></span>Thinking</label>
+            <label class="ps-toggle-control" data-keep-loaded-control title="Keep the prompt model in VRAM for the next prompt"><input type="checkbox" data-keep-loaded><span></span>Keep model loaded</label>
             ${autoVramControlMarkup(VRAM_HANDOFF_SUPPORTED)}
           </span>
-          <button class="h3ps-primary-button" type="button" data-generate>${icon("spark", 16)}<span data-generate-label>Generate prompt</span></button>
+          <button class="ps-primary-button" type="button" data-generate>${icon("spark", 16)}<span data-generate-label>Generate prompt</span></button>
         </div>
       </footer>
     </section>
 
-    <div class="h3ps-other-models-backdrop" aria-hidden="true" data-other-models-backdrop hidden></div>
-    <section class="h3ps-other-models-popover" role="dialog" aria-modal="true" aria-label="Other verified models" data-other-models-popover hidden>
-      <header><span><strong>Other verified models</strong><small>Recommended GGUF and projector pairs</small></span><button class="h3ps-icon-button" type="button" aria-label="Close verified models" data-other-models-close>${icon("close", 16)}</button></header>
-      <div class="h3ps-other-models-catalog" data-other-models-catalog></div>
+    <div class="ps-other-models-backdrop" aria-hidden="true" data-other-models-backdrop hidden></div>
+    <section class="ps-other-models-popover" role="dialog" aria-modal="true" aria-label="Other verified models" data-other-models-popover hidden>
+      <header><span><strong>Other verified models</strong><small>Recommended GGUF and projector pairs</small></span><button class="ps-icon-button" type="button" aria-label="Close verified models" data-other-models-close>${icon("close", 16)}</button></header>
+      <div class="ps-other-models-catalog" data-other-models-catalog></div>
     </section>
 
-    <div class="h3ps-toast" role="status" aria-live="polite" aria-atomic="true" data-h3ps-toast><span class="h3ps-toast-icon">${icon("info", 17)}</span><span><strong data-toast-title>Notice</strong><span data-toast-message></span><button type="button" class="h3ps-toast-action" data-toast-action hidden></button><details data-toast-details hidden><summary>Technical details</summary><pre></pre></details></span></div>`;
+    <div class="ps-toast" role="status" aria-live="polite" aria-atomic="true" data-ps-toast><span class="ps-toast-icon">${icon("info", 17)}</span><span><strong data-toast-title>Notice</strong><span data-toast-message></span><button type="button" class="ps-toast-action" data-toast-action hidden></button><details data-toast-details hidden><summary>Technical details</summary><pre></pre></details></span></div>`;
   document.body.appendChild(root);
 
   studio = { root, ...createStudioState({ sessionId: createSessionId(), storage: localStorage }) };
+  // Per-mode media limits, resolved once from the registry for the media panel.
+  studio.modeLimits = Object.fromEntries(
+    selectableModes().map((mode) => [mode.id, { ...(mode.limits || {}) }]),
+  );
   root.querySelector("[data-comfy-memory-action]").hidden = !HOST_CAPABILITIES.comfyMemory;
   if (!HOST_CAPABILITIES.windowed) {
     studio.fullscreen = true;
     root.querySelectorAll("[data-close-studio], [data-fullscreen-toggle]").forEach(control => { control.hidden = true; });
   }
   const onMediaToolOpenChange = (open) => {
-    const modal = root.querySelector(".h3ps-modal");
+    const modal = root.querySelector(".ps-modal");
     modal.inert = open;
     if (open) modal.removeAttribute("aria-modal");
     else if (root.classList.contains("is-open")) modal.setAttribute("aria-modal", "true");
@@ -3183,11 +3356,21 @@ function createStudio() {
   root.querySelector("[data-lyrics-use-brief]").checked = studio.musicLyricsUseBrief;
   const durationSlider = root.querySelector("[data-duration-slider]");
   durationSlider.value = String(studio.durationSeconds);
-  durationSlider.style.setProperty("--h3ps-range", `${(studio.durationSeconds - 1) / 19 * 100}%`);
+  durationSlider.style.setProperty("--ps-range", `${(studio.durationSeconds - 1) / 19 * 100}%`);
   root.querySelector("[data-duration-label]").textContent = `${studio.durationSeconds} seconds`;
-  bindAspectRatio(root.querySelector('[data-choice-toggle="aspect"]').closest(".h3ps-choice"), studio.aspectRatio, value => {
-    studio.aspectRatio = value;
-    saveUserPreferences(localStorage, studio);
+  // Both the video and image panels render an aspect-ratio control. Binding only
+  // the first match (the video one) left the image copy inert, so every control
+  // on the page is bound and they all drive the same shared state.
+  aspectRatioControls = [];
+  root.querySelectorAll('[data-choice-toggle$="-aspect"], [data-choice-toggle="aspect"]').forEach((toggle) => {
+    const field = toggle.closest(".ps-choice");
+    if (!field) return;
+    aspectRatioControls.push(bindAspectRatio(field, studio.aspectRatio, value => {
+      studio.aspectRatio = value;
+      saveUserPreferences(localStorage, studio);
+      // Keep the other copies showing the same value.
+      syncAspectRatioControls(value);
+    }));
   });
   syncTheme();
   syncInterfaceSize();
@@ -3205,17 +3388,12 @@ function createStudio() {
     setInterfaceSize(INTERFACE_SIZES[Number(event.target.value)] || "100");
   });
   root.addEventListener("click", (event) => {
-    if (studio.draftDefaultsArmed && !event.target.closest("[data-restore-default-drafts]")) disarmDraftDefaults();
-    if (studio.toastDismissOnWorkspaceClick && !event.target.closest("[data-h3ps-toast]")) hideToast();
+    if (studio.toastDismissOnWorkspaceClick && !event.target.closest("[data-ps-toast]")) hideToast();
     if (!event.target.closest("[data-other-models-toggle], [data-other-models-popover]")) setOtherModelsPopover(false);
     if (!isRuntimeMenuInteraction(event.target)) closeRuntimeMenus();
     if (!isChoiceMenuInteraction(event.target)) {
       root.querySelectorAll("[data-choice-menu]").forEach((menu) => { menu.hidden = true; });
       root.querySelectorAll("[data-choice-toggle]").forEach((button) => button.setAttribute("aria-expanded", "false"));
-    }
-    if (!isGuideMenuInteraction(event.target)) {
-      root.querySelectorAll("[data-guide-menu]").forEach((menu) => { menu.hidden = true; });
-      root.querySelector("[data-guide-toggle]")?.setAttribute("aria-expanded", "false");
     }
     if (!event.target.closest("[data-interface-size-picker]")) setInterfaceSizeMenuOpen(false);
     if (!event.target.closest("[data-model-files-toggle], [data-model-files-menu]")) {
@@ -3223,31 +3401,15 @@ function createStudio() {
     }
     if (!event.target.closest("[data-clear-control]")) setClearMenuOpen(false);
   });
-  root.querySelectorAll("[data-workspace]").forEach((button) => button.addEventListener("click", () => {
-    const nextMode = button.dataset.workspace === "music" ? "Music3" : studio.lastVideoMode;
-    if (!isGenerationModeAvailable(studio.selectedModel, nextMode)) return;
-    if (nextMode === studio.mode) return;
-    stashCurrentModeDraft();
-    if (studio.mode !== "Music3") studio.lastVideoMode = studio.mode;
-    studio.mode = nextMode;
-    syncWorkspace();
-    restoreModeDraft(studio.mode);
-    renderMedia(studio.mode);
-    syncRuntimeSummary();
-    saveUserPreferences(localStorage, studio);
-  }));
-  root.querySelectorAll("[data-mode]").forEach((button) => button.addEventListener("click", () => {
-    if (!isGenerationModeAvailable(studio.selectedModel, button.dataset.mode)) return;
-    if (button.dataset.mode === studio.mode) return;
-    stashCurrentModeDraft();
-    studio.mode = button.dataset.mode;
-    studio.lastVideoMode = studio.mode;
-    syncWorkspace();
-    restoreModeDraft(studio.mode);
-    renderMedia(studio.mode);
-    syncRuntimeSummary();
-    saveUserPreferences(localStorage, studio);
-  }));
+  bindModeButtons();
+  root.querySelector("[data-open-target-select]").addEventListener("click", () => setTargetSelectionOpen(true));
+  root.querySelector("[data-target-select-confirm]").addEventListener("click", confirmTargetSelection);
+  root.querySelector("[data-target-select-view]").addEventListener("click", (event) => {
+    const item = event.target.closest("[data-target-select-id]");
+    if (!item || item.disabled) return;
+    studio.targetSelectChoice = item.dataset.targetSelectId;
+    syncTargetSelection();
+  });
   root.querySelector("[data-open-settings-header]").addEventListener("click", () => setSettingsOpen(true));
   root.querySelector("[data-open-settings]").addEventListener("click", () => setSettingsOpen(true));
   root.querySelector("[data-close-settings]").addEventListener("click", () => setSettingsOpen(false));
@@ -3280,32 +3442,12 @@ function createStudio() {
     finally { notificationsToggle.disabled = false; syncNotifications(); }
   });
   syncNotifications();
-  root.querySelector("[data-restore-default-drafts]").addEventListener("click", restoreDefaultDrafts);
   root.querySelector("[data-comfy-memory-action]").addEventListener("click", () => releaseComfyVram());
-  root.querySelector("[data-guide-toggle]").addEventListener("click", async () => {
-    const menu = root.querySelector("[data-guide-menu]");
-    menu.hidden = !menu.hidden;
-    root.querySelector("[data-guide-toggle]").setAttribute("aria-expanded", String(!menu.hidden));
-    if (menu.hidden) return;
-    if (studio.mode === "Music3") {
-      menu.innerHTML = `<a href="${MUSIC3_GUIDE_URL}" target="_blank" rel="noopener noreferrer"><strong>Music Caption Rewriter</strong><small>Official MiniMax Music 3 guide</small></a>`;
-      return;
-    }
-    try {
-      if (!studio.guides.length) {
-        const result = await getGuides();
-        studio.guides = result.guides;
-      }
-      menu.innerHTML = studio.guides.map((guide) => `<a href="${escapeHtml(guide.source_url)}" target="_blank" rel="noopener noreferrer"><strong>${escapeHtml(guide.filename)}</strong><small>${escapeHtml(guide.modes.join(" · "))}</small></a>`).join("");
-    } catch (error) {
-      showToast(error.code || "Guide unavailable", error.message, error.details);
-    }
-  });
 
   root.querySelector("[data-duration-slider]").addEventListener("input", (event) => {
     studio.durationSeconds = Number(event.target.value);
     root.querySelector("[data-duration-label]").textContent = `${studio.durationSeconds} seconds`;
-    event.target.style.setProperty("--h3ps-range", `${(studio.durationSeconds - 1) / 19 * 100}%`);
+    event.target.style.setProperty("--ps-range", `${(studio.durationSeconds - 1) / 19 * 100}%`);
     saveUserPreferences(localStorage, studio);
   });
   root.querySelectorAll("[data-runtime-toggle]").forEach((button) => button.addEventListener("click", (event) => {
@@ -3333,50 +3475,6 @@ function createStudio() {
     saveUserPreferences(localStorage, studio);
   });
   syncRuntimeSummary();
-  root.querySelectorAll("[data-system-prompt-profile]").forEach((button) => button.addEventListener("click", () => {
-    setSystemPromptProfile(button.dataset.systemPromptProfile);
-    setSystemPromptEditorOpen(true);
-  }));
-  root.querySelectorAll("[data-system-prompt-back]").forEach((button) => button.addEventListener("click", () => {
-    setSystemPromptEditorOpen(false);
-  }));
-  root.querySelectorAll("[data-music-system-prompt-profile]").forEach((button) => button.addEventListener("click", () => {
-    setMusicSystemPromptProfile(button.dataset.musicSystemPromptProfile);
-    setMusicSystemPromptEditorOpen(true);
-  }));
-  root.querySelectorAll("[data-music-system-prompt-back]").forEach((button) => button.addEventListener("click", () => {
-    setMusicSystemPromptEditorOpen(false);
-  }));
-  root.querySelector("[data-music-system-prompt-toggle]").addEventListener("click", () => {
-    setMusicSystemPromptExpanded(!studio.musicSystemPromptExpanded);
-  });
-  root.querySelectorAll("[data-system-prompt]").forEach((textarea) => textarea.addEventListener("input", () => {
-    const profile = textarea.dataset.systemPrompt;
-    const defaultPrompt = studio.systemPromptDefaults[profile] || "";
-    if (textarea.value === defaultPrompt) delete studio.customSystemPrompts[profile];
-    else studio.customSystemPrompts[profile] = textarea.value;
-    saveCustomSystemPrompts(localStorage, studio.customSystemPrompts);
-    const custom = Object.hasOwn(studio.customSystemPrompts, profile);
-    const status = root.querySelector(`[data-system-prompt-status="${profile}"]`);
-    const summaryStatus = root.querySelector(`[data-system-prompt-summary-status="${profile}"]`);
-    if (status) status.textContent = custom ? "Custom" : "Default";
-    if (summaryStatus) summaryStatus.textContent = custom ? "Custom" : "Default";
-    root.querySelector(`[data-system-prompt-reset="${profile}"]`).hidden = !custom;
-    root.querySelector(`[data-system-prompt-count="${profile}"]`).textContent = `${textarea.value.length.toLocaleString()} / 8,000`;
-    resizeSystemPromptEditor(textarea);
-    syncMusicSystemPromptSummary();
-  }));
-  root.querySelectorAll("[data-system-prompt-reset]").forEach((button) => button.addEventListener("click", () => {
-    const profile = button.dataset.systemPromptReset;
-    delete studio.customSystemPrompts[profile];
-    saveCustomSystemPrompts(localStorage, studio.customSystemPrompts);
-    syncSystemPromptEditor(profile);
-    showToast("System Prompt reset", profile === "music3"
-      ? "Music 3 Caption is using its built-in system prompt."
-      : profile === "music3_lyrics"
-      ? "Music 3 Lyrics is using its built-in system prompt."
-      : `H3 Prompt Writer is using its default ${profile} instructions.`);
-  }));
   root.querySelector("[data-thinking]").addEventListener("change", (event) => {
     studio.thinking = event.target.checked;
     syncRuntimeSummary();
@@ -3392,7 +3490,7 @@ function createStudio() {
     updateBriefLayout();
     saveCurrentModeDraft();
   };
-  root.querySelectorAll("[data-video-brief], [data-music-brief]").forEach((brief) => brief.addEventListener("input", updateBriefCount));
+  root.querySelectorAll("[data-video-brief], [data-music-brief], [data-image-brief], [data-edit-instruction]").forEach((brief) => brief.addEventListener("input", updateBriefCount));
   root.querySelector("[data-music-lyrics]").addEventListener("input", () => {
     updateMusicLyricsCount();
     saveCurrentModeDraft();
@@ -3477,7 +3575,7 @@ function createStudio() {
     }
     const filesToggle = event.target.closest("[data-model-files-toggle]");
     if (filesToggle) {
-      const menu = filesToggle.closest(".h3ps-model-files").querySelector("[data-model-files-menu]");
+      const menu = filesToggle.closest(".ps-model-files").querySelector("[data-model-files-menu]");
       root.querySelectorAll("[data-model-files-menu]").forEach((item) => { if (item !== menu) item.hidden = true; });
       menu.hidden = !menu.hidden;
       return;
@@ -3524,11 +3622,11 @@ function createStudio() {
   root.querySelector("[data-other-models-popover]").addEventListener("click", (event) => {
     const filesToggle = event.target.closest("[data-model-files-toggle]");
     if (!filesToggle) return;
-    const menu = filesToggle.closest(".h3ps-model-files").querySelector("[data-model-files-menu]");
+    const menu = filesToggle.closest(".ps-model-files").querySelector("[data-model-files-menu]");
     root.querySelectorAll("[data-model-files-menu]").forEach((item) => { if (item !== menu) item.hidden = true; });
     menu.hidden = !menu.hidden;
   });
-  root.querySelector(".h3ps-input-panel").addEventListener("scroll", () => setOtherModelsPopover(false));
+  root.querySelector(".ps-input-panel").addEventListener("scroll", () => setOtherModelsPopover(false));
   root.querySelector("[data-settings-view]").addEventListener("scroll", () => setOtherModelsPopover(false));
   window.addEventListener("resize", () => {
     updateBriefCount();
@@ -3562,7 +3660,7 @@ function createStudio() {
     studio.lastModelPrompt = studio.refineRestore.lastModelPrompt;
     studio.lastModelMeta = studio.refineRestore.lastModelMeta;
     renderPromptHighlights();
-    root.querySelector(".h3ps-editor-meta span:last-child").textContent = studio.refineRestore.meta;
+    root.querySelector(".ps-editor-meta span:last-child").textContent = studio.refineRestore.meta;
     studio.refineRestore = null;
     root.querySelector("[data-refine-restore]").hidden = true;
     syncModifiedState();
@@ -3573,13 +3671,13 @@ function createStudio() {
     if (typeof studio.lastModelPrompt !== "string") return;
     const output = root.querySelector("[data-output]");
     output.value = studio.lastModelPrompt;
-    root.querySelector(".h3ps-editor-meta span:last-child").textContent = studio.lastModelMeta;
+    root.querySelector(".ps-editor-meta span:last-child").textContent = studio.lastModelMeta;
     renderPromptHighlights();
     syncModifiedState();
     saveCurrentModeDraft();
     showToast("Edits undone", "Restored the latest AI-generated prompt.");
   });
-  root.querySelector("[data-copy]").addEventListener("click", () => copyPromptText(root.querySelector("[data-output]").value, studio.mode === "Music3"));
+  root.querySelector("[data-copy]").addEventListener("click", () => copyPromptText(root.querySelector("[data-output]").value, isAudioMode(studio.mode)));
   root.querySelector("[data-output]").addEventListener("input", () => {
     syncModifiedState();
     renderPromptHighlights();
@@ -3589,11 +3687,11 @@ function createStudio() {
   });
   root.querySelector("[data-output]").addEventListener("scroll", renderPromptHighlights);
   const editor = root.querySelector("[data-output]");
-  const supportedReferenceEditors = root.querySelectorAll("[data-video-brief], [data-output], [data-refine-instruction]");
+  const supportedReferenceEditors = root.querySelectorAll("[data-video-brief], [data-image-brief], [data-edit-instruction], [data-output], [data-refine-instruction]");
   supportedReferenceEditors.forEach((field) => {
     ["focus", "click", "keyup", "select", "input"].forEach((type) => field.addEventListener(type, () => rememberReferenceInsertTarget(field)));
   });
-  const editorWrap = root.querySelector(".h3ps-editor-wrap");
+  const editorWrap = root.querySelector(".ps-editor-wrap");
   const peek = root.querySelector("[data-reference-peek]");
   editor.addEventListener("focus", () => {
     editorWrap.classList.add("is-editing");
@@ -3607,7 +3705,7 @@ function createStudio() {
     const asset = studio.assets.find((item) => item.reference === reference);
     if (!asset) return;
     const visual = asset.type === "audio"
-      ? `<span class="h3ps-peek-audio">${icon("audio", 18)}</span>`
+      ? `<span class="ps-peek-audio">${icon("audio", 18)}</span>`
       : `<img src="${asset.preview_url}" alt="">`;
     peek.innerHTML = `${visual}<span><strong>${escapeHtml(reference)}</strong><small>${escapeHtml(asset.filename)}</small></span>`;
     const markRect = mark.getBoundingClientRect();
@@ -3634,12 +3732,12 @@ function createStudio() {
     busy: (busy) => {
       if (busy) markActiveWriterRequest(); else clearActiveWriterRequest();
       setGenerationState(busy ? "busy" : "idle", "Generating sequence", "Completed prompts are kept as each chunk finishes");
-      root.querySelector(".h3ps-generation-options").inert = busy;
+      root.querySelector(".ps-generation-options").inert = busy;
       root.querySelector("[data-settings-view]").inert = busy;
     },
     refresh: () => { syncWorkspace(); renderMedia(studio.mode); },
     clearMedia: () => clearCurrentMedia(),
-    settled: (status) => studio.desktopNotifications.notify(status === "complete" ? "Sequence generation finished." : "Sequence needs attention. Open Writer for details."),
+    settled: (status) => studio.desktopNotifications.notify(status === "complete" ? "Sequence generation finished." : "Sequence needs attention. Open Prompt Studio for details."),
     error: (error) => showToast("Sequence", error.message, error.details || null, null, sequenceNotificationOptions(error)),
     copy: (text) => copyPromptText(text),
     insert: (editor, reference) => insertReferenceAtCaret(editor, reference, editor.selectionStart),
@@ -3648,8 +3746,12 @@ function createStudio() {
   restoreModeDraft(studio.mode);
   renderMedia(studio.mode);
   renderPromptHighlights();
-  syncSystemPromptEditors();
-  setMusicSystemPromptProfile(studio.musicSystemPromptProfile);
+  // The generation target is chosen on every launch, covering the whole studio,
+  // so the user always starts from a deliberate choice of which model the prompt
+  // is being written for.
+  setTargetSelectionOpen(true);
+  // The prompt model (the LLM that writes prompts) is remembered from the last
+  // session; it is changed from the header pill or Settings, not asked at launch.
   refreshModels();
   return studio;
 }
@@ -3689,15 +3791,13 @@ function openStudio() {
   mediaPanelRequest++;
   const current = createStudio();
   current.floatingMedia?.suspend(true);
-  const modal = current.root.querySelector(".h3ps-modal");
+  const modal = current.root.querySelector(".ps-modal");
   studioReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-  setMusicSystemPromptExpanded(false);
-  syncMusicSystemPromptSummary();
   modal.hidden = false;
   modal.setAttribute("aria-modal", "true");
   current.root.classList.add("is-open");
   current.root.setAttribute("aria-hidden", "false");
-  document.body.classList.add("h3ps-modal-open");
+  document.body.classList.add("ps-modal-open");
   requestAnimationFrame(() => {
     updateBriefLayout();
     modal.tabIndex = -1;
@@ -3710,7 +3810,7 @@ function closeStudio() {
   mediaPanelRequest++;
   if (!studio) return;
   studio.sequence?.leave();
-  const modal = studio.root.querySelector(".h3ps-modal");
+  const modal = studio.root.querySelector(".ps-modal");
   studio.mediaComposer?.close();
   if (studio.mediaEditor?.close() === false) return false;
   setSettingsOpen(false);
@@ -3721,7 +3821,7 @@ function closeStudio() {
   modal.hidden = true;
   studio.root.classList.remove("is-open");
   studio.root.setAttribute("aria-hidden", "true");
-  document.body.classList.remove("h3ps-modal-open");
+  document.body.classList.remove("ps-modal-open");
   studio.floatingMedia?.suspend(false);
   studioReturnFocus?.focus?.({ preventScroll: true });
   studioReturnFocus = null;
@@ -3729,22 +3829,22 @@ function closeStudio() {
 
 function installLauncher() {
   if (!HOST_CAPABILITIES.windowed) return;
-  const existingLauncher = document.querySelector("[data-h3ps-launcher]");
-  if (existingLauncher?.dataset.h3psLauncherVersion === LAUNCHER_SCHEMA_VERSION) return;
+  const existingLauncher = document.querySelector("[data-ps-launcher]");
+  if (existingLauncher?.dataset.psLauncherVersion === LAUNCHER_SCHEMA_VERSION) return;
   existingLauncher?.remove();
-  document.querySelector("[data-h3ps-launcher-group]")?.remove();
+  document.querySelector("[data-ps-launcher-group]")?.remove();
   const launcher = document.createElement("button");
   launcher.type = "button";
-  launcher.className = "h3ps-floating-launcher";
-  launcher.dataset.h3psLauncher = "true";
-  launcher.dataset.h3psLauncherVersion = LAUNCHER_SCHEMA_VERSION;
-  launcher.setAttribute("aria-label", "Open H3 Prompt Writer");
-  launcher.title = "Open H3 Prompt Writer · drag to move";
-  const launcherIcon = new URL("./assets/h3-prompt-writer-launcher.svg", import.meta.url).href;
-  launcher.innerHTML = `<img src="${launcherIcon}" alt="H3 Prompt Writer">`;
+  launcher.className = "ps-floating-launcher";
+  launcher.dataset.psLauncher = "true";
+  launcher.dataset.psLauncherVersion = LAUNCHER_SCHEMA_VERSION;
+  launcher.setAttribute("aria-label", "Open Prompt Studio");
+  launcher.title = "Open Prompt Studio · drag to move";
+  const launcherIcon = new URL("./assets/prompt-studio-launcher.svg", import.meta.url).href;
+  launcher.innerHTML = `<img src="${launcherIcon}" alt="Prompt Studio">`;
   document.body.appendChild(launcher);
 
-  const positionKey = "h3ps-launcher-position";
+  const positionKey = "ps-launcher-position";
   const edgeGap = 10;
   const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(value, maximum));
   const savePosition = (position) => localStorage.setItem(positionKey, JSON.stringify(position));
@@ -3786,33 +3886,51 @@ function installLauncher() {
     savePosition(saved);
   }
   let drag = null;
+  // Movement is measured as total displacement from the press point. Relying on
+  // event.movementX/Y made the first click ambiguous and it started a drag
+  // instead of opening the studio.
+  const DRAG_THRESHOLD_PX = 4;
   launcher.addEventListener("pointerdown", (event) => {
+    if (event.button !== undefined && event.button !== 0) return;
     const rect = launcher.getBoundingClientRect();
-    drag = { dx: event.clientX - rect.left, dy: event.clientY - rect.top, moved: false };
+    drag = {
+      dx: event.clientX - rect.left,
+      dy: event.clientY - rect.top,
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false,
+      pointerId: event.pointerId,
+    };
     launcher.setPointerCapture(event.pointerId);
   });
   launcher.addEventListener("pointermove", (event) => {
-    if (!drag) return;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    if (!drag.moved) {
+      const travelled = Math.abs(event.clientX - drag.startX) + Math.abs(event.clientY - drag.startY);
+      if (travelled <= DRAG_THRESHOLD_PX) return;
+      drag.moved = true;
+    }
     const x = Math.max(10, Math.min(event.clientX - drag.dx, window.innerWidth - launcher.offsetWidth - 10));
     const y = Math.max(10, Math.min(event.clientY - drag.dy, window.innerHeight - launcher.offsetHeight - 10));
-    drag.moved ||= Math.abs(event.movementX) + Math.abs(event.movementY) > 1;
     launcher.style.left = `${x}px`;
     launcher.style.top = `${y}px`;
     launcher.style.right = "auto";
     launcher.style.bottom = "auto";
   });
   launcher.addEventListener("pointerup", (event) => {
-    if (!drag) return;
-    launcher.releasePointerCapture(event.pointerId);
-    const rect = launcher.getBoundingClientRect();
-    if (drag.moved) {
-      saved = positionFromRect(rect);
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    if (launcher.hasPointerCapture?.(event.pointerId)) launcher.releasePointerCapture(event.pointerId);
+    const moved = drag.moved;
+    drag = null;
+    if (moved) {
+      saved = positionFromRect(launcher.getBoundingClientRect());
       applyPosition(saved);
       savePosition(saved);
+    } else {
+      openStudio();
     }
-    else openStudio();
-    drag = null;
   });
+  launcher.addEventListener("pointercancel", () => { drag = null; });
   window.addEventListener("resize", () => {
     if (!saved || drag) return;
     applyPosition(saved);
@@ -3821,11 +3939,11 @@ function installLauncher() {
 
 document.addEventListener("keydown", (event) => {
   if (!studio?.root.classList.contains("is-open")) return;
-  const openComposer = studio.root.querySelector(".h3ps-composer.is-open");
-  const openEditor = studio.root.querySelector(".h3ps-media-editor.is-open");
+  const openComposer = studio.root.querySelector(".ps-composer.is-open");
+  const openEditor = studio.root.querySelector(".ps-media-editor.is-open");
   if (event.key === "Tab") {
     const openPopover = studio.root.querySelector("[data-other-models-popover]:not([hidden])");
-    const focusScope = openEditor?.querySelector(".h3ps-ed-dialog") || openComposer?.querySelector(".h3ps-cmp-dialog") || openPopover || studio.root.querySelector(".h3ps-modal");
+    const focusScope = openEditor?.querySelector(".ps-ed-dialog") || openComposer?.querySelector(".ps-cmp-dialog") || openPopover || studio.root.querySelector(".ps-modal");
     const focusable = Array.from(focusScope.querySelectorAll('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'))
       .filter((element) => element.getClientRects().length && !element.closest("[hidden]"));
     if (focusable.length) {
@@ -3847,17 +3965,11 @@ document.addEventListener("keydown", (event) => {
       setClearMenuOpen(false);
       return;
     }
-    const guideMenu = studio.root.querySelector("[data-guide-menu]");
     const interfaceSizeMenu = studio.root.querySelector("[data-interface-size-menu]");
     const choiceMenu = Array.from(studio.root.querySelectorAll("[data-choice-menu]")).find((menu) => !menu.hidden);
     const runtimeMenu = Array.from(studio.root.querySelectorAll("[data-runtime-menu]")).find((menu) => !menu.hidden);
     if (!interfaceSizeMenu.hidden) {
       setInterfaceSizeMenuOpen(false, true);
-    } else if (!guideMenu.hidden) {
-      guideMenu.hidden = true;
-      const toggle = studio.root.querySelector("[data-guide-toggle]");
-      toggle.setAttribute("aria-expanded", "false");
-      toggle.focus();
     } else if (choiceMenu) {
       choiceMenu.hidden = true;
       const toggle = studio.root.querySelector(`[data-choice-toggle="${choiceMenu.dataset.choiceMenu}"]`);
@@ -3879,9 +3991,9 @@ document.addEventListener("keydown", (event) => {
 app.registerExtension({
   name: EXTENSION_NAME,
   beforeConfigureGraph() { workflowRevision++; },
-  commands: [{ id: "h3-prompt-studio.open", label: "Open H3 Prompt Writer", function: openStudio },
-    { id: "h3-prompt-studio.media", label: "Prompt Writer media over workflow", function: openFloatingMedia }],
-  menuCommands: [{ path: ["Extensions", "H3 Prompt Writer"], commands: ["h3-prompt-studio.open", "h3-prompt-studio.media"] }],
+  commands: [{ id: "prompt-studio.open", label: "Open Prompt Studio", function: openStudio },
+    { id: "prompt-studio.media", label: "Prompt Studio media over workflow", function: openFloatingMedia }],
+  menuCommands: [{ path: ["Extensions", "Prompt Studio"], commands: ["prompt-studio.open", "prompt-studio.media"] }],
   async setup() {
     injectStyles();
     installVramHandoff(app, {
@@ -3894,3 +4006,25 @@ app.registerExtension({
     installLauncher();
   },
 });
+
+/**
+ * Test-only surface.
+ *
+ * `tests/main_smoke.mjs` loads this module for real and needs to CALL functions,
+ * because a free variable inside a function body only throws when the line runs.
+ * Exposed unconditionally so the test never has to mutate production code, and
+ * because a plain object reference is inert at runtime.
+ */
+globalThis.__promptStudioInternals = {
+  createStudio,
+  selectModel,
+  syncWorkspace,
+  renderMedia,
+  currentBriefTextarea,
+  bindMediaActions,
+  setTargetSelectionOpen,
+  confirmTargetSelection,
+  getStudio: () => studio,
+  setStudio: (value) => { studio = value; },
+};
+

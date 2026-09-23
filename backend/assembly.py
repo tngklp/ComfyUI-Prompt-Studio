@@ -3,16 +3,34 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from .guides import MODE_GUIDES, guide_for_mode, load_guide, reference_base_excerpt
+from .guides import guide_for_mode, load_guide, reference_base_excerpt
 from .media import STORE, MediaError, parse_session_id
 from .references import canonical_reference_tags
 from .system_prompts import SystemPromptError, resolve_system_prompt
+from .targets import TargetError, target_for_mode, targets
 from .text_normalization import normalize_unicode_text
 
 
-ASPECT_RATIOS = {"1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"}
 CAPABILITY_BY_TYPE = {"image": "images", "video": "video_frames", "audio": "audio"}
-MUSIC3_MODE = "Music3"
+
+
+def _aspect_ratios(mode: str) -> tuple[str, ...]:
+    return target_for_mode(mode).aspect_ratios
+
+
+def _duration_bounds(mode: str) -> tuple[float, float]:
+    durations = target_for_mode(mode).durations
+    if durations is None:
+        raise AssemblyError("INVALID_DURATION", "The selected mode does not accept a duration.")
+    return durations.min, durations.max
+
+
+def _mode_or_error(mode: str) -> str:
+    try:
+        target_for_mode(mode)
+    except TargetError as error:
+        raise AssemblyError("INVALID_MODE", "The selected mode is not supported.") from error
+    return mode
 
 
 class AssemblyError(Exception):
@@ -65,98 +83,107 @@ def _validate_reference_tags(text: str, manifest: dict[str, Any], mode: str, fie
         )
 
 
-def _validated_generation_context(source: dict[str, Any]) -> tuple[float, str, str]:
+def _validated_generation_context(source: dict[str, Any], mode: str) -> tuple[float, str, str]:
+    minimum, maximum = _duration_bounds(mode)
     duration = source.get("duration_seconds")
-    if not isinstance(duration, (int, float)) or isinstance(duration, bool) or duration <= 0 or duration > 20:
-        raise AssemblyError("INVALID_DURATION", "Duration must be between 1 and 20 seconds.")
+    if (
+        not isinstance(duration, (int, float))
+        or isinstance(duration, bool)
+        or duration < minimum
+        or duration > maximum
+    ):
+        raise AssemblyError(
+            "INVALID_DURATION",
+            f"Duration must be between {minimum:g} and {maximum:g} seconds.",
+        )
     aspect_ratio = _required_text(source, "aspect_ratio", "Aspect ratio")
-    if aspect_ratio not in ASPECT_RATIOS:
+    allowed = _aspect_ratios(mode)
+    if aspect_ratio not in allowed:
         raise AssemblyError("INVALID_ASPECT_RATIO", "The selected aspect ratio is not supported.")
+    brief_limit = target_for_mode(mode).output_contract.brief_limit
     brief = _required_text(source, "creative_brief", "Creative brief")
-    if len(brief) > 8000:
-        raise AssemblyError("BRIEF_TOO_LONG", "Creative brief cannot exceed 8,000 characters.")
+    if len(brief) > brief_limit:
+        raise AssemblyError(
+            "BRIEF_TOO_LONG",
+            f"Creative brief cannot exceed {brief_limit:,} characters.",
+        )
     return duration, aspect_ratio, brief
 
 
-def _validated_music_caption_context(source: dict[str, Any]) -> tuple[str, str]:
+def _validated_music_caption_context(source: dict[str, Any], mode: str) -> tuple[str, str]:
+    contract = target_for_mode(mode).output_contract
     brief = _required_text(source, "creative_brief", "Music brief")
-    if len(brief) > 2000:
-        raise AssemblyError("BRIEF_TOO_LONG", "Music brief cannot exceed 2,000 characters.")
+    if len(brief) > contract.brief_limit:
+        raise AssemblyError(
+            "BRIEF_TOO_LONG",
+            f"Music brief cannot exceed {contract.brief_limit:,} characters.",
+        )
     lyrics = source.get("lyrics", "")
     if not isinstance(lyrics, str):
         raise AssemblyError("INVALID_REQUEST", "Lyrics must be text.", {"field": "lyrics"})
     lyrics = normalize_unicode_text(lyrics).strip()
-    if len(lyrics) > 4000:
-        raise AssemblyError("LYRICS_TOO_LONG", "Lyrics cannot exceed 4,000 characters.")
+    if contract.lyrics_limit is not None and len(lyrics) > contract.lyrics_limit:
+        raise AssemblyError(
+            "LYRICS_TOO_LONG",
+            f"Lyrics cannot exceed {contract.lyrics_limit:,} characters.",
+        )
     return brief, lyrics
 
 
 def _guide_messages(mode: str, system_prompt: str) -> list[dict[str, str]]:
-    if mode == MUSIC3_MODE:
-        return ([{"role": "system", "name": "music3_caption_contract", "content": system_prompt}] if system_prompt else [])
-    guide = guide_for_mode(mode)
-    messages = []
+    """System messages for a mode: its prompt profile, guide, and shared rules.
+
+    A mode without a guide (Music 3) contributes only its prompt profile. A
+    reference mode additionally receives the shared base-guide rules its guide
+    depends on, declared through the mode's ``supporting_guide_sections`` field.
+    """
+    target = target_for_mode(mode)
+    selected = target.mode(mode)
+    messages: list[dict[str, str]] = []
     if system_prompt:
-        messages.append({"role": "system", "name": "prompt_studio_system_prompt", "content": system_prompt})
-    messages.append({"role": "system", "name": "official_minimax_h3_guide", "content": guide["content"]})
+        profile = selected.system_prompt or "system_prompt"
+        messages.append({"role": "system", "name": f"prompt_studio_{profile}", "content": system_prompt})
+    if selected.guide is None:
+        return messages
+    guide = guide_for_mode(mode)
+    guide_spec = target.guide(selected.guide)
+    messages.append({"role": "system", "name": f"official_{target.id}_guide", "content": str(guide["content"])})
     if mode == "Reference":
         messages.append({
             "role": "system",
-            "name": "official_minimax_h3_shared_base_rules",
+            "name": f"official_{target.id}_shared_base_rules",
             "content": reference_base_excerpt(),
         })
     return messages
 
 
 def _final_contract(mode: str, task_text: str) -> str:
-    if mode != "Reference":
-        mode_rule = {
-            "T2VA": "Preserve any explicit continuous-camera or no-cut instruction instead of introducing an unsupported cut.",
-            "I2VA": "Separate facts visible in the first frame from newly requested space or action revealed after it.",
-            "FL2VA": "Prioritize exact endpoint geometry and a continuous state/camera path between the first and last frames.",
-            "L2VA": "Invent only the minimum compatible preceding state needed to reach the final frame; do not infer a named location or period without evidence.",
-        }[mode]
-        return (
-            f"Final grounding check: {mode_rule} "
-            "If the brief does not explicitly request non-diegetic music, return N/A for non_diegetic_music. "
-            "Return only the complete final MiniMax H3 prompt."
-        )
-    explicit_edit = bool(re.search(
-        r"\b(?:edit(?:ing)?|continue|continuation|extend|remix|re-cut)\b.{0,40}\bvideo\b|\bvideo\s+editing\b",
-        task_text,
-        re.IGNORECASE | re.DOTALL,
-    ))
-    task_classification = (
-        "source-video editing or continuation; scale detailed_description with source complexity"
-        if explicit_edit
-        else "reference generation, not keyframe completion or source-video editing"
-    )
-    return (
-        f"Final request classification: {task_classification}. "
-        "Treat every explicitly assigned reference role as exclusive unless the user asks that reference to contribute "
-        "additional traits; 'only' and 'solely' emphasize this rule but are not required. Unspecified target environment, lighting, "
-        "composition, camera treatment, and atmosphere may be designed as new target content, but never described as "
-        "facts derived from a reference. Do not add unsupported subject actions, dialogue, props, visible text, or an "
-        "invented ending. Music requested without an uploaded audio asset belongs only in non_diegetic_music and must "
-        "not create audio-reference or audio-reuse semantics. Prefer one continuous shot unless cuts are requested; "
-        "purposeful camera movement within that shot is allowed. Because H3 receives each source video itself, bind the "
-        "complete choreography, temporal order, pacing, and rhythmic character of a motion-only video without "
-        "reconstructing individual sampled gestures, named steps, poses, expressions, transitions, or a concluding move. "
-        "When a concrete visible object, character, scene, or effect from <Video N> is reused in the target, describe that "
-        "reused visual element through an appropriate <Subject N> while keeping <Video N> as its source provenance; do not "
-        "automatically create a separate subject for ordinary motion transfer. "
-        "If the brief does not explicitly request music, non_diegetic_music must be N/A. "
-        "Use the official detail budget for grounded target composition, placement, lighting, atmosphere, camera treatment, "
-        "supported action progression, and reference application; never pad solely to reach a word count. Return only the complete "
-        "prompt with all six required sections in the official order and no commentary outside the prompt."
-    )
+    """Closing grounding check, delegated to the mode's generation-target strategy."""
+    return target_for_mode(mode).strategy.final_contract(mode, task_text)
+
+
+def normalize_generated_prompt(prompt: str, mode: str) -> str:
+    """Let the generation target normalise its own output text.
+
+    A strategy that once asked for a JSON envelope (Qwen Image 2.1 used to return
+    ``{"rewritten_prompt": …, "wh_ratio": …}``) implements ``normalize_prompt_text``
+    to unwrap a legacy reply so the editor shows the prompt and the ratio stays an
+    application setting. Targets without the hook are returned unchanged.
+    """
+    from .targets.contract import supports
+
+    strategy = target_for_mode(mode).strategy
+    if not supports(strategy, "normalize_prompt_text"):
+        return prompt
+    return strategy.normalize_prompt_text(prompt)
 
 
 def assemble_request(body: dict[str, Any]) -> dict[str, Any]:
-    mode = _required_text(body, "mode", "Mode")
-    if mode == MUSIC3_MODE:
+    mode = _mode_or_error(_required_text(body, "mode", "Mode"))
+    target = target_for_mode(mode)
+    if target.category == "audio":
         system_prompt, system_prompt_custom = _effective_system_prompt(body, mode)
-        brief, lyrics = _validated_music_caption_context(body)
+        brief, lyrics = _validated_music_caption_context(body, mode)
         try:
             session_id = parse_session_id(body.get("session_id"))
         except ValueError as error:
@@ -181,15 +208,15 @@ def assemble_request(body: dict[str, Any]) -> dict[str, Any]:
             "system_prompt": {"custom": system_prompt_custom, "content": system_prompt},
             "messages": _guide_messages(mode, system_prompt) + [{"role": "user", "content": user_content}],
         }
-    if mode not in MODE_GUIDES:
-        raise AssemblyError("INVALID_MODE", "The selected MiniMax mode is not supported.")
+    if not target.has_mode(mode):
+        raise AssemblyError("INVALID_MODE", "The selected mode is not supported.")
     system_prompt, system_prompt_custom = _effective_system_prompt(body, mode)
     brief = _required_text(body, "creative_brief", "Creative brief")
     if len(brief) > 8000:
         raise AssemblyError("BRIEF_TOO_LONG", "Creative brief cannot exceed 8,000 characters.")
 
     aspect_ratio = _required_text(body, "aspect_ratio", "Aspect ratio")
-    if aspect_ratio not in ASPECT_RATIOS:
+    if aspect_ratio not in _aspect_ratios(mode):
         raise AssemblyError("INVALID_ASPECT_RATIO", "The selected aspect ratio is not supported.")
     duration = body.get("duration_seconds")
     if not isinstance(duration, (int, float)) or isinstance(duration, bool) or duration <= 0 or duration > 20:
@@ -252,8 +279,13 @@ def assemble_request(body: dict[str, Any]) -> dict[str, Any]:
             "media_manifest": manifest,
         },
         "media_inputs": media_inputs,
+        # Resolved through the target, not by bare id: several targets now declare
+        # a guide called "base", so an unqualified load_guide("base") would be
+        # ambiguous. Reference mode's shared rules live in its own target's base guide.
         "supporting_guides": ([{
-            key: value for key, value in load_guide("base").items() if key != "content"
+            key: value
+            for key, value in load_guide("base", target_for_mode(mode).id).items()
+            if key != "content"
         }] if mode == "Reference" else []),
         "system_prompt": {"custom": system_prompt_custom, "content": system_prompt},
         "messages": _guide_messages(mode, system_prompt) + [{"role": "user", "content": user_content}],
@@ -264,8 +296,9 @@ def assemble_refinement(
     body: dict[str, Any],
     cached_generation: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    mode = _required_text(body, "mode", "Mode")
-    if mode == MUSIC3_MODE:
+    mode = _mode_or_error(_required_text(body, "mode", "Mode"))
+    target = target_for_mode(mode)
+    if target.category == "audio":
         system_prompt, system_prompt_custom = _effective_system_prompt(body, mode)
         current_prompt = _required_text(body, "current_prompt", "Current caption")
         instruction = _required_text(body, "instruction", "Revision instruction")
@@ -277,7 +310,7 @@ def assemble_refinement(
             session_id = parse_session_id(body.get("session_id"))
         except ValueError as error:
             raise AssemblyError("INVALID_SESSION", "The session ID is invalid.") from error
-        brief, lyrics = _validated_music_caption_context(body)
+        brief, lyrics = _validated_music_caption_context(body, mode)
         user_content = (
             f"Original music brief:\n{brief}\n\n"
             f"Lyrics:\n{lyrics or 'None provided.'}\n\n"
@@ -303,8 +336,8 @@ def assemble_refinement(
             "system_prompt": {"custom": system_prompt_custom, "content": system_prompt},
             "messages": _guide_messages(mode, system_prompt) + [{"role": "user", "content": user_content}],
         }
-    if mode not in MODE_GUIDES:
-        raise AssemblyError("INVALID_MODE", "The selected MiniMax mode is not supported.")
+    if not target.has_mode(mode):
+        raise AssemblyError("INVALID_MODE", "The selected mode is not supported.")
     system_prompt, system_prompt_custom = _effective_system_prompt(body, mode)
     current_prompt = _required_text(body, "current_prompt", "Current prompt")
     instruction = _required_text(body, "instruction", "Revision instruction")
@@ -321,7 +354,7 @@ def assemble_refinement(
     if not manifest["valid"]:
         raise AssemblyError("INVALID_MEDIA_MANIFEST", "The media manifest is not valid.", manifest["violations"])
     context_source = cached_generation if cached_generation and cached_generation.get("mode") == mode else body
-    duration, aspect_ratio, creative_brief = _validated_generation_context(context_source)
+    duration, aspect_ratio, creative_brief = _validated_generation_context(context_source, mode)
     _validate_reference_tags(creative_brief, manifest, mode, "Creative Brief")
     _validate_reference_tags(instruction, manifest, mode, "Revision instruction")
     references = "\n".join(_media_line(asset) for asset in manifest["assets"]) or "None"
@@ -356,7 +389,9 @@ def assemble_refinement(
         },
         "media_inputs": [],
         "supporting_guides": ([{
-            key: value for key, value in load_guide("base").items() if key != "content"
+            key: value
+            for key, value in load_guide("base", target_for_mode(mode).id).items()
+            if key != "content"
         }] if mode == "Reference" else []),
         "system_prompt": {"custom": system_prompt_custom, "content": system_prompt},
         "messages": _guide_messages(mode, system_prompt) + [{"role": "user", "content": user_content}],
@@ -364,12 +399,19 @@ def assemble_refinement(
 
 
 def assemble_lyrics_request(body: dict[str, Any]) -> dict[str, Any]:
-    mode = _required_text(body, "mode", "Mode")
-    if mode != MUSIC3_MODE:
-        raise AssemblyError("INVALID_MODE", "Lyrics rewriting is available only in Music 3.")
+    mode = _mode_or_error(_required_text(body, "mode", "Mode"))
+    target = target_for_mode(mode)
+    # Lyrics is a sub-request of the audio target: the caller sends the caption mode
+    # plus target="lyrics", and the registry supplies the lyrics prompt profile.
+    lyrics_mode = next(
+        (candidate.id for candidate in target.modes if candidate.output_only),
+        None,
+    )
+    if lyrics_mode is None:
+        raise AssemblyError("INVALID_MODE", "This target does not support lyrics rewriting.")
     try:
         system_prompt, system_prompt_custom = resolve_system_prompt(
-            "Music3Lyrics",
+            lyrics_mode,
             body.get("system_prompt_override"),
         )
     except SystemPromptError as error:

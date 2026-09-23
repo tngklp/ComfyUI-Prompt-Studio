@@ -11,7 +11,7 @@ from aiohttp import web
 from .assembly import AssemblyError
 from .media import MediaError
 from .models.contract import ModelError
-from .h3_pipeline import validate_media_capabilities
+from .pipeline import validate_media_capabilities
 from .sequence import validate_sequence, snapshot_media, assemble_chunk, timeline, plain_chunk_prompt, normalize_local_timestamps
 from .sequence_plan import assemble_plan, parse_plan
 from .sequence_repair import assemble_repair, attention_message, preserve_content
@@ -30,7 +30,7 @@ async def run_sequence(body, services, emit):
             state["chunks"][index]["prompt"] = ""
     request_id = services._claim_generation_request()
     if request_id is None:
-        raise ModelError("GENERATION_BUSY", "Another Writer operation is still running.")
+        raise ModelError("GENERATION_BUSY", "Another Prompt Studio operation is still running.")
     backend = model = None
     current_chunk = None
     raw = None

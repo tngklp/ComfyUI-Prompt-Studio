@@ -164,7 +164,7 @@ class ManagedLlamaServer:
                 "--host", LOCALHOST,
                 "--port", str(port),
                 "--ctx-size", str(context_tokens),
-                "--alias", "h3-managed",
+                "--alias", "ps-managed",
             ]
             if projector is not None:
                 command.extend(["--mmproj", str(projector)])
