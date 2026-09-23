@@ -8,7 +8,7 @@ Current Standalone version: **1.1.0**
 
 ## This is the Standalone version
 
-[Sequence mode](../docs/USAGE.md#sequence) writes several standalone Official H3 or Compact descriptive prompts from one brief. Set chunk durations, assign First, Last, or Reference media, then generate and refine each part.
+[Sequence mode](../docs/USAGE.md#sequence) writes several standalone Official or Compact descriptive prompts from one brief. Set chunk durations, assign First, Last, or Reference media, then generate and refine each part.
 
 You do not need ComfyUI. Do not install this ZIP into ComfyUI `custom_nodes`.
 

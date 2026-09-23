@@ -19,9 +19,12 @@ from .targets import GuideRef, target, target_for_mode
 
 GUIDES_DIR = Path(__file__).resolve().parent.parent / "guides"
 
-# Sections of the H3 base guide that full-reference mode reuses verbatim, with the
-# number of prose paragraphs to take from each. This is H3 guide structure, not
-# prompt behaviour, so it stays here rather than in the H3 strategy module.
+# Sections of the MiniMax H3 base guide that full-reference mode reuses verbatim,
+# with the number of prose paragraphs to take from each. This is target guide
+# structure, not prompt behaviour, so it stays here rather than in the strategy
+# module. It is keyed by MiniMax H3's own section headings and only ever reads
+# REFERENCE_EXCERPT_SOURCE, so it stays correct even though other targets share
+# the section shape.
 REFERENCE_EXCERPT_PARAGRAPHS = {
     "4.2 Shots and Cuts": 1,
     "4.3 Camera Motion: Motion Type + Amplitude + Speed": 1,
@@ -83,7 +86,7 @@ def load_guide(guide_id: str, target_id: str | None = None) -> dict[str, str | N
     """Load one guide.
 
     ``target_id`` may be omitted when the guide id is unique across targets, which
-    is the common case for the H3 ``base``/``reference`` pair.
+    is the common case for the MiniMax H3 ``base``/``ref`` pair.
     """
     if target_id is None:
         target_id = _owner_of_guide(guide_id)

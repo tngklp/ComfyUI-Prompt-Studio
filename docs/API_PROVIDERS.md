@@ -2,8 +2,6 @@
 
 API providers use one OpenAI-compatible Chat Completions backend with presets for Gemini, OpenAI, OpenRouter, and Custom endpoints.
 
-![API provider settings](assets/v0.3/api-providers.png)
-
 ## Choose a preset
 
 - **Gemini** uses Google's OpenAI-compatible endpoint and exposes Gemini Thinking levels.
@@ -13,7 +11,7 @@ API providers use one OpenAI-compatible Chat Completions backend with presets fo
 
 Gemini was validated live. The shared Custom transport was validated live with LM Studio. OpenAI and OpenRouter contract tests cover request serialization, model listing, streaming, cancellation, errors, and secret handling, but no credentialed live smoke was run for those two services.
 
-The API provider path is not tied to Gemma 4. You can choose another multimodal model when the provider accepts image inputs in a format Prompt Studio supports. A successful connection shows that Prompt Studio can reach the model, but it does not guarantee a good H3 prompt.
+The API provider path is not tied to Gemma 4. You can choose another multimodal model when the provider accepts image inputs in a format Prompt Studio supports. A successful connection shows that Prompt Studio can reach the model, but it does not guarantee a good prompt for every target.
 
 ## Connect
 
@@ -54,14 +52,14 @@ Custom is a transport contract, not a claim that every OpenAI-compatible server 
 
 ## Keys and saved settings
 
-The key is sent once to the local H3 backend and held only in the current Prompt Studio backend process's memory. It is not read from environment variables and is not written to browser storage, model settings, developer notes, or request content. The backend uses it only to authenticate provider requests. Disconnecting removes the in-memory connection. The browser may save the preset, base URL, model ID, Gemini Thinking level, and Custom capability settings.
+The key is sent once to the local Prompt Studio backend and held only in the current Prompt Studio backend process's memory. It is not read from environment variables and is not written to browser storage, model settings, developer notes, or request content. The backend uses it only to authenticate provider requests. Disconnecting removes the in-memory connection. The browser may save the preset, base URL, model ID, Gemini Thinking level, and Custom capability settings.
 
 ## What leaves this computer
 
 For a remote provider, Prompt Studio sends:
 
 - your Creative Brief;
-- H3 and system instructions;
+- the current target's writing and system instructions;
 - prepared images in the current mode's manifest;
 - one derived contact sheet for each video in that manifest.
 
@@ -73,6 +71,6 @@ The provider can retain or process requests according to its own policy. OpenRou
 
 API providers show **Cancel** for the current Prompt Studio request. Prompt Studio cannot unload or stop a remote service.
 
-Authentication, billing, rate-limit, safety, and quota errors are returned by the provider. A response that reaches its length limit is rejected rather than displayed as a successful but truncated H3 prompt.
+Authentication, billing, rate-limit, safety, and quota errors are returned by the provider. A response that reaches its length limit is rejected rather than displayed as a successful but truncated prompt.
 
 Comfy Cloud has not been validated for v0.3. The existence of an API provider does not establish that the extension, outbound networking, or session-key handling works there.

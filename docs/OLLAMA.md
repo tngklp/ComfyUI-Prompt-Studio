@@ -2,8 +2,6 @@
 
 Ollama is the recommended local provider. It keeps the prompt-model runtime outside ComfyUI and avoids the optional Direct GGUF Python wheel.
 
-![Ollama setup in Prompt Studio](assets/v0.3/ollama-setup.png)
-
 ## Quick setup
 
 1. [Install Ollama](https://ollama.com/download) and open the Ollama app.
@@ -35,13 +33,13 @@ These are starting recommendations, not guaranteed minimum requirements:
 | 24 GB | `gemma4:26b` | `ollama pull gemma4:26b` |
 | 32 GB | `gemma4:31b` | `ollama pull gemma4:31b` |
 
-All five exact tags completed H3 multimodal validation. The measurements were taken on a 32 GB RTX 5090. Actual headroom depends on display use, ComfyUI models, other applications, context size, and Ollama's GPU/CPU placement.
+All five exact tags completed multimodal validation on the video target. The measurements were taken on a 32 GB RTX 5090. Actual headroom depends on display use, ComfyUI models, other applications, context size, and Ollama's GPU/CPU placement.
 
-The Prompt Studio marks these exact tags **Tested for H3**. Other installed vision models can still appear when Ollama reports compatible capabilities; they are shown as compatible but not H3-tested.
+The Prompt Studio marks these exact tags **Tested with Prompt Studio**. The measurement was taken against the video target, but the badge means the tag is a known-good prompt model rather than a promise about one target. Other installed vision models can still appear when Ollama reports compatible capabilities; they are shown as compatible but not yet tested.
 
-Qwen 3.6 also completed all five H3 modes through Ollama without special changes to Prompt Studio. It is not part of the fixed GPU table because those starting tiers come from the measured Gemma 4 runs.
+Qwen 3.6 also completed all five video modes through Ollama without special changes to Prompt Studio. It is not part of the fixed GPU table because those starting tiers come from the measured Gemma 4 runs.
 
-You can try other Ollama vision models when Ollama reports the required image capability. This is an option for experimentation, not a promise that every multimodal model will follow the H3 format equally well.
+You can try other Ollama vision models when Ollama reports the required image capability. This is an option for experimentation, not a promise that every multimodal model will follow a given target's format equally well.
 
 ## Context and Thinking
 

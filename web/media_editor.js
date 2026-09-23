@@ -141,12 +141,12 @@ export function createMediaEditor({root,icon,request,onSaved,onAddFrame,notify,o
     $('[data-ed-view-subtitle]').textContent=asset.status==='needs_edit'?'Not a Reference':'Applied media';
     $('[data-ed-save]').disabled=busy||loading||!mediaReady||!dirty();
     $('[data-ed-download]').disabled=busy||loading||!mediaReady;
-    $('[data-ed-status]').textContent=busy?'Processing media…':loading?'Loading source…':invalid?'H3 Reference requires 2–15 s. Edits can still be applied.':dirty()?'Unapplied changes':'Edits saved';
+    $('[data-ed-status]').textContent=busy?'Processing media…':loading?'Loading source…':invalid?'Reference media requires 2–15 s. Edits can still be applied.':dirty()?'Unapplied changes':'Edits saved';
     $$('[data-ed-count]').forEach(b=>{const active=!customMode&&b.dataset.edCount===edit.frame_count_mode;b.classList.toggle('is-active',active);b.setAttribute('aria-pressed',String(active));});
     $('[data-ed-custom-row]').hidden=!customMode;
     $('[data-ed-custom]').classList.toggle('is-active',customMode);$('[data-ed-custom]').setAttribute('aria-pressed',String(customMode));
     if(customMode){$('[data-ed-custom-count]').value=edit.frame_count_mode;$('[data-ed-count-value]').textContent=edit.frame_count_mode;}
-    $('[data-ed-analysis-state]').textContent=dirty()?'Unapplied changes · saved preview unchanged':asset.status==='needs_edit'?'H3 Reference requires 2–15 s':isVideo()?`${asset.frames?.length||asset.frame_count||0} applied frames`:'Applied Picture';
+    $('[data-ed-analysis-state]').textContent=dirty()?'Unapplied changes · saved preview unchanged':asset.status==='needs_edit'?'Reference media requires 2–15 s':isVideo()?`${asset.frames?.length||asset.frame_count||0} applied frames`:'Applied Picture';
     $('[data-ed-endpoints]').checked=edit.include_endpoints;
     syncTime();
   }

@@ -62,12 +62,12 @@ def assemble_repair(item, prompt, failure):
             "Keep overall_soundscape and non_diegetic_music as the final two fields, with their content unchanged. Return the full Compact prompt.\n" + json.dumps(payload, ensure_ascii=False)}]
         return request
     request["messages"] = _guide_messages(mode, "") + [{"role": "user", "content":
-        "Correct only objective H3 contract/format violations in the supplied model output. This is the sole repair attempt. "
+        "Correct only objective contract/format violations in the supplied model output. This is the sole repair attempt. "
         "Preserve scene facts, actions, progression, dialogue/monologue verbatim, timing intent, camera intent and style. "
         "Do not add events or visual facts, move actions between intervals, invent missing prose, or creatively improve the prompt. "
         "Keep the entire narrative, overall_soundscape and non_diegetic_music fields unchanged. "
         "Do not plan or generate another scene. Use existing descriptions for missing definitions; if a binding cannot be established "
-        "without guessing, leave it unresolved. Return the full corrected H3 prompt only.\n"
+        "without guessing, leave it unresolved. Return the full corrected prompt only.\n"
         + media_contract(mode, item["input"]["media_manifest"]["assets"]) + "\n" + json.dumps(payload, ensure_ascii=False)}]
     return request
 
@@ -120,7 +120,7 @@ def attention_message(failure, item):
         elif "alignment" in problem and item["input"]["mode"] == "I2VA":
             explanations.append("The model omitted or changed the first-frame binding. Expected:\nFor the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.")
         elif "prefix" in problem:
-            explanations.append("The model did not use the required H3 task prefix. Suggested fix: " + media_contract(item["input"]["mode"], assets))
+            explanations.append("The model did not use the required task prefix. Suggested fix: " + media_contract(item["input"]["mode"], assets))
         elif "timestamp" in problem or "cut time" in problem:
             explanations.append(problem.rstrip(".") + ". " + time_hint)
         elif "shot" in problem:
@@ -132,4 +132,4 @@ def attention_message(failure, item):
             narrative = "detailed_description" if item["input"]["mode"] == "Reference" else "integrated_multimodal_description"
             explanations.append("The model's output needs review: " + problem.rstrip(".") + ". Required narrative field: " + narrative +
                                 ": [Shot 1] Scene and action. Keep overall_soundscape and non_diegetic_music below it. Edit the format or Regenerate / Refine.")
-    return "The model could not finish the H3 formatting. This is a generated-output issue; you do not need to change your inputs.\n\n" + "\n\n".join(explanations)
+    return "The model could not finish the prompt formatting. This is a generated-output issue; you do not need to change your inputs.\n\n" + "\n\n".join(explanations)

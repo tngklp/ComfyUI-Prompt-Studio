@@ -1277,7 +1277,7 @@ test("Settings separates providers, installed models, diagnostics, and verified 
   assert.match(mainSource, /studio\.selectedModel\?\.family === "gguf"/);
   assert.doesNotMatch(mainSource, /\/api\/pull/);
   assert.doesNotMatch(mainSource, /Install .*Gemma|Cancel download|Downloading model/i);
-  assert.match(mainSource, /Compatible · not yet H3-tested/);
+  assert.match(mainSource, /Compatible · not yet tested/);
   assert.match(mainSource, /data-copy-ollama-command/);
   assert.match(mainSource, /Choose a model for your GPU/);
   assert.match(mainSource, /<code>\$\{escapeHtml\(command\)\}<\/code>/);
@@ -1305,7 +1305,7 @@ test("Settings separates providers, installed models, diagnostics, and verified 
   }
   assert.doesNotMatch(mainSource, /ps-provider-icon">[SO]<\/span>/);
   assert.match(mainSource, /data-api-provider-form/);
-  assert.match(mainSource, /The key is sent once to the local H3 backend/);
+  assert.match(mainSource, /The key is sent once to the local Prompt Studio backend/);
   assert.match(mainSource, /Reasoning provider managed/);
   assert.match(mainSource, /label\.hidden = apiManaged/);
   assert.doesNotMatch(mainSource, /credential_source|environment_name|Not analyzed locally|Exclude from AI analysis|data-analysis-asset/);

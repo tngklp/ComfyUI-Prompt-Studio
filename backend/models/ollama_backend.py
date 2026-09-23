@@ -19,6 +19,10 @@ from .contract import ModelError
 DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
 CONNECT_TIMEOUT_SECONDS = 3
 REQUEST_TIMEOUT_SECONDS = 900
+# Exact Ollama tags measured against Prompt Studio's writing contracts. The
+# measurements were taken on the MiniMax H3 video target, but the flag is
+# target-neutral: it means "this tag is a known-good prompt model", not "this tag
+# is specific to one target".
 TESTED_OLLAMA_TAGS = {
     "gemma4:e2b",
     "gemma4:e4b",
@@ -354,7 +358,7 @@ class OllamaBackend:
                         "endpoint": endpoint,
                         "remote_model": name, "runtime_ready": False,
                         "capabilities": {"images": False, "video_frames": False, "audio": False},
-                        "thinking": False, "available": True, "tested_for_h3": False,
+                        "thinking": False, "available": True, "tested_for_target": False,
                         "inspection_error": {"code": error.code, "message": error.message},
                     })
                     continue
@@ -386,7 +390,7 @@ class OllamaBackend:
                 "size": entry.get("size"),
                 "digest": digest,
                 "available": True,
-                "tested_for_h3": name in TESTED_OLLAMA_TAGS,
+                "tested_for_target": name in TESTED_OLLAMA_TAGS,
                 "source_label": "Ollama · installed locally" if local_endpoint else f"Ollama · {endpoint}",
             })
         compatible_models = [model for model in models if model["runtime_ready"]]

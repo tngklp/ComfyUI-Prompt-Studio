@@ -42,7 +42,7 @@ class TargetError(ValueError):
 
 @dataclass(frozen=True)
 class Mode:
-    """One selectable input mode of a target (for example H3 ``T2VA``)."""
+    """One selectable input mode of a target (for example MiniMax H3 ``T2VA``)."""
 
     id: str
     label: str

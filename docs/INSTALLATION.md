@@ -34,7 +34,7 @@ The base extension has no additional Python dependencies. Provider-specific soft
 
 Restart ComfyUI after installation. Open the floating **Prompt Studio** button or use **Extensions > Prompt Studio** in the ComfyUI menu.
 
-No node will appear in the graph. Prompt Studio creates text for your H3 workflow; it does not queue or modify the workflow itself.
+No node will appear in the graph. Prompt Studio creates text for your workflow; it does not queue or modify the workflow itself.
 
 ## Choose a provider
 

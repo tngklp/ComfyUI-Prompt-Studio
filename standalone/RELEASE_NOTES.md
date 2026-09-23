@@ -28,7 +28,7 @@ shown in Standalone.
 - Local GGUF Context, KV cache, Generation budget, and supported reasoning effort controls
 - Video Creative Briefs up to 8,000 characters
 
-External llama.cpp keeps its own reasoning and chat-template settings. Prompt Studio separates returned reasoning from the final H3 prompt without overriding the server.
+External llama.cpp keeps its own reasoning and chat-template settings. Prompt Studio separates returned reasoning from the final prompt without overriding the server.
 
 No ComfyUI installation is required. Models, API keys, llama.cpp binaries, and CUDA
 libraries are not bundled.

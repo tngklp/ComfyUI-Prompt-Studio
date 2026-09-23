@@ -6,8 +6,6 @@ Direct GGUF loads a local multimodal model inside ComfyUI. Choose it when you wa
 
 This is an optional advanced path. Most users should start with [Ollama](OLLAMA.md).
 
-![Direct GGUF settings](assets/v0.3/direct-gguf-settings.png)
-
 ## What you need
 
 - A compatible native `llama-cpp-python` runtime installed in the Python environment that starts ComfyUI.
@@ -93,7 +91,7 @@ Thinking uses `temperature 1.0`, `top_p 0.95`, `top_k 20`, `min_p 0`, `presence_
 
 The exact official `Qwen3.6-35B-A3B` metadata lineage has its own sampling settings and does not receive `reasoning_effort`. Unknown `qwen35` and `qwen35moe` lineages remain custom/unverified and use the generic Direct settings.
 
-Qwen Thinking output is split from the final prompt whether the runtime returns `reasoning_content` separately or emits a completed `</think>` prefix. Private reasoning is never included in the returned H3 prompt. A missing closing tag is treated as truncated Thinking. MTP/`nextn` tensors are detected for diagnostics but intentionally remain disabled.
+Qwen Thinking output is split from the final prompt whether the runtime returns `reasoning_content` separately or emits a completed `</think>` prefix. Private reasoning is never included in the returned prompt. A missing closing tag is treated as truncated Thinking. MTP/`nextn` tensors are detected for diagnostics but intentionally remain disabled.
 
 The validated Qwen adapter floor is `llama-cpp-python 0.3.35`; Gemma remains compatible with the existing 0.3.34 floor. If 0.3.34 is installed, Qwen is discoverable but not runtime-ready and Settings reports the required update before any weights are loaded.
 

@@ -6,7 +6,7 @@ The provider determines how Prompt Studio reaches its prompt model. That prompt 
 
 Provider setup can differ by host. Direct GGUF on this page means the ComfyUI extension path using `llama-cpp-python`. Standalone Local GGUF starts a user-selected `llama-server.exe` instead; see the [Standalone setup guide](../standalone/README.md#local-gguf).
 
-Ollama, External llama.cpp, and API providers can use other multimodal models when the provider and model accept image inputs. Gemma 4 is the recommended local family and has received the most testing, but it is not a whitelist for those three provider paths. Compatibility does not guarantee the same H3 prompt quality.
+Ollama, External llama.cpp, and API providers can use other multimodal models when the provider and model accept image inputs. Gemma 4 is the recommended local family and has received the most testing, but it is not a whitelist for those three provider paths. Compatibility does not guarantee the same prompt quality for every target.
 
 External llama.cpp can also use a text-only model for requests without images or video. Direct GGUF supports its verified Gemma 4 pairs, a verified Qwen 3.8 configuration, and metadata-recognized custom configurations that remain labeled unverified.
 
@@ -19,7 +19,7 @@ External llama.cpp can also use a text-only model for requests without images or
 
 ## Ollama
 
-Choose Ollama if you want a local model without managing Python wheels, GGUF projector pairing, or llama.cpp build flags inside ComfyUI. Prompt Studio detects installed compatible vision models. Its built-in Gemma 4 list marks exact tags tested with H3; it is not a whitelist. Qwen 3.6 has also completed all five H3 modes through Ollama as a compatibility test, not a quality ranking.
+Choose Ollama if you want a local model without managing Python wheels, GGUF projector pairing, or llama.cpp build flags inside ComfyUI. Prompt Studio detects installed compatible vision models. Its built-in Gemma 4 list marks exact tags tested with Prompt Studio; it is not a whitelist. Qwen 3.6 has also completed all five video modes through Ollama as a compatibility test, not a quality ranking.
 
 Prompt Studio does not install or start Ollama, and it never pulls a model automatically.
 
@@ -33,7 +33,7 @@ Direct is optional. It depends on a native `llama-cpp-python` wheel, so compatib
 
 ## External llama.cpp
 
-Choose External if you already use llama.cpp or want your own current/custom build. Prompt Studio handles the H3 request and cancellation. Your server controls model loading, context, KV cache, GPU placement, optimizations, and server lifetime.
+Choose External if you already use llama.cpp or want your own current/custom build. Prompt Studio handles the generation request and cancellation. Your server controls model loading, context, KV cache, GPU placement, optimizations, and server lifetime.
 
 External has its own local provider path and is the recommended advanced alternative when the Direct Python runtime is incompatible with a system.
 
@@ -43,6 +43,6 @@ A text-only server works with Music 3, T2VA, and Refine. Add the model's matchin
 
 Choose an API provider if you do not want a local prompt-model runtime. Gemini, OpenAI, and OpenRouter have presets. Custom accepts a generic OpenAI-compatible endpoint such as local LM Studio.
 
-Remote providers receive the brief, H3 instructions, and prepared visual inputs from the current mode's manifest. Read [API providers](API_PROVIDERS.md#what-leaves-this-computer) before connecting a remote service.
+Remote providers receive the brief, the current target's instructions, and prepared visual inputs from the current mode's manifest. Read [API providers](API_PROVIDERS.md#what-leaves-this-computer) before connecting a remote service.
 
 Comfy Cloud has not been validated for v0.3.

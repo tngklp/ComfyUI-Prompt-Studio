@@ -2,8 +2,6 @@
 
 External llama.cpp is the advanced local provider for users who want to control the inference runtime. It is also an alternative when a Direct `llama-cpp-python` wheel is incompatible with the system.
 
-![External llama.cpp connection](assets/v0.3/external-llama-server.png)
-
 ## Quick setup
 
 1. Get a current `llama-server` from the [official llama.cpp project](https://github.com/ggml-org/llama.cpp).
@@ -49,7 +47,7 @@ The external server controls:
 - build flags and runtime optimizations;
 - server startup, shutdown, sleep, and model unload.
 
-Prompt Studio does not send `enable_thinking` or other reasoning controls to External llama.cpp. If the server returns reasoning through `reasoning_content` or a leading `<think>` block, Prompt Studio keeps it out of the final H3 prompt.
+Prompt Studio does not send `enable_thinking` or other reasoning controls to External llama.cpp. If the server returns reasoning through `reasoning_content` or a leading `<think>` block, Prompt Studio keeps it out of the final prompt.
 
 Changing provider, disconnecting, or closing Prompt Studio does not stop `llama-server`. Cancelling an active router generation releases the selected model; single-model lifecycle remains server-managed.
 

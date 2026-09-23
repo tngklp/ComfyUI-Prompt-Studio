@@ -578,7 +578,7 @@ function notifyMediaCompatibility() {
   studio.mediaCompatibilityNotice=signature;
   const messages=[];
   if(pending.length)messages.push("Trim the video source to 2–15 seconds and Apply to use it as a reference.");
-  if(total>15)messages.push("Reference videos exceed 15 seconds in total. Prompt generation is still available; check H3 compatibility.");
+  if(total>15)messages.push("Reference videos exceed 15 seconds in total. Prompt generation is still available; check the target model's limits.");
   if(messages.length)showToast("Reference media",messages.join(" "),null,null,{dismissOnWorkspaceClick:true});
 }
 
@@ -932,7 +932,7 @@ function currentBriefTextarea() {
 async function copyPromptText(text, music = false) {
   try {
     await navigator.clipboard.writeText(text);
-    showToast(music ? "Caption copied" : "Prompt copied", music ? "The generated Music 3 caption is on your clipboard." : "The generated H3 prompt is on your clipboard.");
+    showToast(music ? "Caption copied" : "Prompt copied", music ? "The generated Music 3 caption is on your clipboard." : "The generated prompt is on your clipboard.");
   } catch (error) {
     showToast("Copy failed", "Clipboard access was denied.", error.message);
   }
@@ -1945,15 +1945,15 @@ function renderOllamaProviderControl(hostValue) {
     </div>${hostControl}`;
   }
   const selected = ollamaModelForSettings();
-  const tested = selected?.tested_for_h3 === true;
+  const tested = selected?.tested_for_target === true;
   const addModelOpen = studio.ollamaAddModelOpen === true;
   return `${header}${ollamaJourneyMarkup("ready")}<div class="ps-ollama-ready">
     <div class="ps-ollama-ready-heading"><span class="ps-provider-icon" data-provider-icon="ollama" aria-hidden="true"></span><span><strong>Ollama is ready</strong><small>Version ${escapeHtml(status.version || "unknown")} · ${remoteHost ? escapeHtml(studio.ollamaHost) : "local service"}</small></span><em>Running</em></div>
     <div class="ps-ollama-model-heading"><span>Prompt model</span><button class="ps-ollama-add-model-toggle" type="button" data-ollama-add-model aria-expanded="${String(addModelOpen)}">${addModelOpen ? "− Hide models" : "+ Add model"}</button></div>
     <label class="ps-ollama-model-select"><select data-ollama-model>${models.map((model) => `<option value="${escapeHtml(model.remote_model)}" ${model.remote_model === selected?.remote_model ? "selected" : ""}>${escapeHtml(model.name)}${model.parameter_size ? ` · ${escapeHtml(model.parameter_size)}` : ""}${model.quantization_level ? ` · ${escapeHtml(model.quantization_level)}` : ""}</option>`).join("")}</select></label>
     ${addModelOpen ? `<div class="ps-ollama-add-model"><strong>Choose another tested model</strong>${renderOllamaModelTiers(status)}<small>Copy a command and run it in Terminal or PowerShell. Select Refresh after the pull completes.</small></div>` : ""}
-    <div class="ps-ollama-badges"><span>Vision</span><span>${selected?.thinking_detected ? "Thinking detected" : "Standard generation"}</span><span class="${tested ? "is-tested" : ""}">${tested ? "Tested for H3" : "Compatible · not yet H3-tested"}</span></div>
-    <p>${tested ? "This exact Ollama tag passed the focused H3 Generate and Refine smoke test." : "Compatibility comes from Ollama model metadata. It is not a quality guarantee for H3 prompts."}</p>
+    <div class="ps-ollama-badges"><span>Vision</span><span>${selected?.thinking_detected ? "Thinking detected" : "Standard generation"}</span><span class="${tested ? "is-tested" : ""}">${tested ? "Tested with Prompt Studio" : "Compatible · not yet tested"}</span></div>
+    <p>${tested ? "This exact Ollama tag passed the focused Generate and Refine smoke test for the writing contracts Prompt Studio ships." : "Compatibility comes from Ollama model metadata. It is not a quality guarantee for any generation target."}</p>
     <small>Use “Keep model loaded” on the Generate page to control whether Ollama retains this model after each request.</small>
   </div>${hostControl}`;
 }
@@ -1987,7 +1987,7 @@ function renderApiProviderControl() {
       <span class="ps-provider-icon" data-provider-icon="${provider.icon}" aria-hidden="true"></span><span><strong>${provider.name}</strong><small>${provider.note}</small></span>${icon("check", 13)}
     </button>`).join("");
   const header = `<header class="ps-settings-section-heading"><span><small>OpenAI-compatible</small><strong>API providers</strong></span></header>`;
-  const disclosure = `<div class="ps-api-disclosure"><strong>What leaves this computer</strong><p>The provider receives your brief, H3 instructions, prepared images and one derived contact sheet per video in the current manifest. Original videos and audio bytes are not uploaded.</p>${config.preset === "openrouter" ? "<small>OpenRouter forwards the request to an upstream model provider with its own data policy.</small>" : ""}</div>`;
+  const disclosure = `<div class="ps-api-disclosure"><strong>What leaves this computer</strong><p>The provider receives your brief, the writing instructions for the current target, prepared images and one derived contact sheet per video in the current manifest. Original videos and audio bytes are not uploaded.</p>${config.preset === "openrouter" ? "<small>OpenRouter forwards the request to an upstream model provider with its own data policy.</small>" : ""}</div>`;
   const policyLinks = [
     providerMetadata.pricing_url ? `<a href="${escapeHtml(providerMetadata.pricing_url)}" target="_blank" rel="noopener noreferrer">Pricing ↗</a>` : "",
     providerMetadata.privacy_url ? `<a href="${escapeHtml(providerMetadata.privacy_url)}" target="_blank" rel="noopener noreferrer">Data policy ↗</a>` : "",
@@ -2006,7 +2006,7 @@ function renderApiProviderControl() {
         <div class="ps-api-badges"><span class="${model?.capabilities?.images ? "is-ready" : ""}">${model?.capabilities?.images ? "Vision" : "Text only / unknown"}</span><span>${config.preset === "gemini" ? `Thinking ${escapeHtml(connection.reasoning_effort || "minimal")}` : "Reasoning provider managed"}</span><span>Provider managed</span></div>
         <div class="ps-api-actions"><span>${policyLinks}</span><button type="button" data-api-model-refresh>${icon("refresh", 13)} Refresh models</button><button type="button" data-api-disconnect>Disconnect</button></div>
         ${disclosure}
-        <p class="ps-api-cancel-note">Stop aborts H3's connection. The remote provider may continue processing or billing.</p>
+        <p class="ps-api-cancel-note">Stop aborts Prompt Studio's connection. The remote provider may continue processing or billing.</p>
       </div>
     </div>`;
   }
@@ -2015,7 +2015,7 @@ function renderApiProviderControl() {
     <form class="ps-api-setup" data-api-provider-form>
       <div class="ps-api-intro"><strong>Connect ${selectedPreset.name}</strong><p>One shared Chat Completions backend. Provider-specific fields are applied by the selected preset.</p></div>
       ${config.preset === "custom" ? `<label><span>API base URL</span><input name="base_url" type="url" value="${escapeHtml(config.base_url)}" placeholder="https://host.example/v1 or http://localhost:8000/v1" required><small>Public endpoints require HTTPS; loopback and private LAN addresses may use HTTP.</small></label>` : ""}
-      <label><span>API key ${config.preset === "custom" ? "<em>optional</em>" : ""}</span><input name="api_key" type="password" value="" placeholder="Paste key for this session" autocomplete="off" spellcheck="false" ${config.preset === "custom" ? "" : "required"}><small>The key is sent once to the local H3 backend, kept only in memory, and never saved in localStorage.</small></label>
+      <label><span>API key ${config.preset === "custom" ? "<em>optional</em>" : ""}</span><input name="api_key" type="password" value="" placeholder="Paste key for this session" autocomplete="off" spellcheck="false" ${config.preset === "custom" ? "" : "required"}><small>The key is sent once to the local Prompt Studio backend, kept only in memory, and never saved in localStorage.</small></label>
       <label><span>Model ID <em>optional before connect</em></span><input name="model_id" type="text" value="${escapeHtml(config.model_id)}" placeholder="Choose from provider list or enter an exact ID" spellcheck="false"></label>
       ${config.preset === "gemini" ? `<label><span>Thinking level</span><select name="gemini_reasoning_effort"><option value="minimal" ${config.gemini_reasoning_effort === "minimal" ? "selected" : ""}>Minimal</option><option value="low" ${config.gemini_reasoning_effort === "low" ? "selected" : ""}>Low</option><option value="medium" ${config.gemini_reasoning_effort === "medium" ? "selected" : ""}>Medium</option><option value="high" ${config.gemini_reasoning_effort === "high" ? "selected" : ""}>High</option></select><small>Gemini manages the reasoning and output budget. Higher levels can use more tokens and take longer.</small></label>` : ""}
       ${config.preset === "custom" ? `<div class="ps-api-custom-options"><label><input name="custom_images" type="checkbox" ${config.custom_images ? "checked" : ""}><span>Endpoint accepts image_url inputs</span></label><label><span>Known context <em>optional</em></span><input name="custom_context_tokens" type="number" min="4096" step="1024" value="${config.custom_context_tokens || ""}" placeholder="32768"></label></div>` : ""}

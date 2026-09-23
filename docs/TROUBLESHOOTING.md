@@ -247,7 +247,7 @@ Authentication, quotas, pricing, context, and output limits are provider and mod
 
 **Fix**
 
-Confirm the key and selected model in the provider's console. Check current billing and rate-limit status. For Gemini, try **Minimal** or a lower Thinking level when latency or token use is the concern. Do not treat a response with `finish_reason=length` as a complete H3 prompt; Prompt Studio rejects it.
+Confirm the key and selected model in the provider's console. Check current billing and rate-limit status. For Gemini, try **Minimal** or a lower Thinking level when latency or token use is the concern. Do not treat a response with `finish_reason=length` as a complete prompt; Prompt Studio rejects it.
 
 **Verify**
 
@@ -287,7 +287,7 @@ The model may return an incomplete plan, unsupported prompt structure, or ambigu
 
 **Fix**
 
-Review the brief and Chunk Direction. Make required event order or endpoint explicit, then regenerate the affected chunks. Open-ended activity does not need an invented endpoint. An incomplete or ambiguous plan stops generation without fallback. The message identifies missing steps, a missing ending, or unreadable JSON. Run Generate Sequence again. Technical details show the exact planner failure. A redundant interval number is ignored only when it matches the requested interval. A repairable H3 format problem gets one automatic correction. If it still needs attention, the model output stays visible and later chunks are not started. Select the orange icon for the model error and a suggested fix. Use Refine, Regenerate, or edit the text yourself. A manual edit clears that old warning. Completed chunks survive cancellation or a later failure; previous versions remain in Undo/Redo. If one model repeatedly fails, try another supported model.
+Review the brief and Chunk Direction. Make required event order or endpoint explicit, then regenerate the affected chunks. Open-ended activity does not need an invented endpoint. An incomplete or ambiguous plan stops generation without fallback. The message identifies missing steps, a missing ending, or unreadable JSON. Run Generate Sequence again. Technical details show the exact planner failure. A redundant interval number is ignored only when it matches the requested interval. A repairable format problem gets one automatic correction. If it still needs attention, the model output stays visible and later chunks are not started. Select the orange icon for the model error and a suggested fix. Use Refine, Regenerate, or edit the text yourself. A manual edit clears that old warning. Completed chunks survive cancellation or a later failure; previous versions remain in Undo/Redo. If one model repeatedly fails, try another supported model.
 
 For context errors, increase the supported Context or reduce Generation budget or reference load. Prompt Studio does not silently truncate continuity evidence. Do not increase context for a VRAM allocation failure; follow the memory guidance above.
 

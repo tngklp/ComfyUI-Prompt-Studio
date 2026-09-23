@@ -301,7 +301,7 @@ class OllamaBackendTests(unittest.TestCase):
         self.assertEqual(model["recommended_context"], "low")
         self.assertTrue(model["auto_context_ladder"])
         self.assertTrue(model["thinking_detected"])
-        self.assertFalse(model["tested_for_h3"])
+        self.assertFalse(model["tested_for_target"])
         self.assertFalse(model["capabilities"]["audio"])
 
     def test_custom_endpoint_scopes_model_ids_metadata_cache_and_inference(self):

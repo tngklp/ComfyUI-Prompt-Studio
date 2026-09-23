@@ -23,14 +23,12 @@ Model Selection opens every time you start Prompt Studio. Pick the model that wr
 Generating a prompt does not change or queue your workflow. To add media loaders, use the separate **Media panel** described below.
 
 The **Creative Brief** limit, the available modes, and the media limits all come from the selected
-target. A text-only prompt model can still run every mode that does not require media — H3 text-to-video
+target. A text-only prompt model can still run every mode that does not require media — the video target's text-to-video
 and the music modes, for example.
 
 Use the fullscreen button in the Prompt Studio header when you want the workspace to fill the browser. Press Escape to leave fullscreen.
 
 The sun/moon button switches between Dark and Light. The **Aa** button adjusts **Interface Size** from 100% to 125%. These preferences are saved and affect only Prompt Studio, not ComfyUI or exported media.
-
-![Reference mode with a generated prompt](assets/v0.3/reference-workspace.png)
 
 ## Modes
 
@@ -46,9 +44,9 @@ Duration and aspect ratio become part of the request. The generated text remains
 
 ## Sequence
 
-Choose **Sequence** to write several H3 prompts from one Creative Brief. Add chunks and set their durations, from 1 to 15 seconds each. **New chunk duration** applies to the next added chunk. On first use, a short example fills Creative Brief while chunk prompts stay empty. Edit or clear it; saved edits and empty briefs stay as you left them. The sequence keeps its own draft. It does not join videos, connect a workflow, or assume how you will use the chunks.
+Choose **Sequence** to write several prompts from one Creative Brief. Add chunks and set their durations, from 1 to 15 seconds each. **New chunk duration** applies to the next added chunk. On first use, a short example fills Creative Brief while chunk prompts stay empty. Edit or clear it; saved edits and empty briefs stay as you left them. The sequence keeps its own draft. It does not join videos, connect a workflow, or assume how you will use the chunks.
 
-For a multi-chunk operation, Prompt Studio makes one internal semantic planning call to allocate development and intended ending states for the requested chunks. It then makes one generation call per requested chunk, in order. A sequence with only one chunk skips planning. Official output is a full standalone MiniMax H3 prompt, with its own scene description and local `[Shot 1]` numbering. Compact output is a standalone descriptive video prompt in natural language.
+For a multi-chunk operation, Prompt Studio makes one internal semantic planning call to allocate development and intended ending states for the requested chunks. It then makes one generation call per requested chunk, in order. A sequence with only one chunk skips planning. Official output is a full standalone prompt using the target's own structure, with its own scene description and local `[Shot 1]` numbering. Compact output is a standalone descriptive video prompt in natural language.
 
 The brief and explicit instructions govern intent. Current media and visible prompts, including manual edits, supply scene evidence. The planner reads your original brief, Chunk Direction and objective chunk boundaries. It interprets timing in your own words, without an application-side language parser. The temporary plan distributes events, speech, atmosphere, or sustained activity. It does not require a new action at every boundary or invent a conclusion for an open-ended brief. Each writer continues the actual preceding ending and considers any following accepted opening. Planning is rebuilt for each operation. **Sequence Instructions** lets you adjust shared writing directions. No camera moves or cuts are requested unless you ask for them; added behavior stays modest and consistent with the brief.
 
@@ -90,7 +88,7 @@ Chunk ranges show global sequence time. Prompt timestamps start at zero within e
 
 ### Reading and copying
 
-Edit prompts in place or use **Reader** for a compact view. Official uses Single mode colors for H3 sections, subjects, media tags, shots, timing, and dialogue. Compact highlights `<Picture N>`, `overall_soundscape:` and `non_diegetic_music:`. Highlighting is a reading aid, not a validation result; copied text stays plain. A chunk's copy button copies its prompt. **Copy All** copies nonempty prompts in sequence order. If a chunk needs attention, fix it first; individual Copy remains available. Reader keeps the same attention indicator. **Default** separates them with blank lines. **Custom** applies a chunk template and a separator without changing the saved prompts.
+Edit prompts in place or use **Reader** for a compact view. Official uses Single mode colors for sections, subjects, media tags, shots, timing, and dialogue. Compact highlights `<Picture N>`, `overall_soundscape:` and `non_diegetic_music:`. Highlighting is a reading aid, not a validation result; copied text stays plain. A chunk's copy button copies its prompt. **Copy All** copies nonempty prompts in sequence order. If a chunk needs attention, fix it first; individual Copy remains available. Reader keeps the same attention indicator. **Default** separates them with blank lines. **Custom** applies a chunk template and a separator without changing the saved prompts.
 
 Templates support `{prompt}`, `{index}`, `{start}`, `{end}`, and `{duration}`. Times are global seconds. Try **Divider**, **Time ranges**, **Numbered**, or **Chapters**. The separator field displays escapes such as `\n\n---\n\n` visibly; copying turns `\n`, `\r`, `\t`, and `\\` into their literal characters. This is template formatting, not a regular-expression engine.
 
@@ -106,7 +104,7 @@ During generation, chunks show Queued, Generating, Checking, or Repairing. Targe
 
 ## Music 3
 
-Music 3 is a separate workspace for the MiniMax Music 3 model. It writes structured music captions and does not generate H3 video prompts.
+Music 3 is a separate workspace for the MiniMax Music 3 model. It writes structured music captions and does not generate video prompts.
 
 Describe the intended sound, vocals, mood, arrangement, and production in **Music Brief**. **Lyrics** is optional. After generation, copy **Generated Caption** to the workflow **Caption** input and pass the original **Lyrics** to the workflow **Lyrics** input.
 
@@ -120,7 +118,7 @@ Music 3 keeps its own saved Music Brief, Lyrics, and edited caption. Its Caption
 
 ## Writing a useful Creative Brief
 
-Write what should happen in ordinary language. You do not need to reproduce the official H3 prompt format. Prompt Studio builds that structure for you.
+Write what should happen in ordinary language. You do not need to reproduce the official prompt format. Prompt Studio builds that structure for you.
 
 Video Creative Briefs can contain up to 8,000 characters. Music Briefs keep their separate 2,000-character limit.
 
@@ -186,7 +184,7 @@ Open a picture or video card to edit it. Crop pictures, trim or crop video, and 
 
 Edits stay in the editor until you select **Apply**. **Reset edits** returns the draft to the original media; Apply saves that reset. Closing with unapplied changes lets you keep editing or discard the draft. The original file is preserved.
 
-Long clips can stay in Media with **Trim required**. Trim them to 2–15 seconds and Apply before using them as H3 Reference inputs.
+Long clips can stay in Media with **Trim required**. Trim them to 2–15 seconds and Apply before using them as Reference inputs.
 
 ## Media Composer
 
@@ -259,7 +257,7 @@ Prompt Studio saves stable preferences in the browser used to open ComfyUI:
 
 It never saves API keys. If a saved model no longer exists, discovery falls back without treating the missing model as a fatal error.
 
-Every H3 mode keeps its own Creative Brief and editable prompt draft across a page reload. Music 3 separately keeps its Music Brief, Lyrics, and edited caption. Uploaded media is session content and is not restored after reload.
+Every video mode keeps its own Creative Brief and editable prompt draft across a page reload. Music 3 separately keeps its Music Brief, Lyrics, and edited caption. Uploaded media is session content and is not restored after reload.
 
 To discard every saved draft, clear the `ps-mode-drafts-v1` entry from your browser's local storage and reload. The current mode then returns to its built-in Creative Brief and prompt, and each other mode uses its built-in defaults when opened. Media, provider settings, system prompts, and API credentials are not affected.
 

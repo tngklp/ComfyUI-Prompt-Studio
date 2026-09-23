@@ -360,8 +360,8 @@ def assemble_refinement(
     references = "\n".join(_media_line(asset) for asset in manifest["assets"]) or "None"
     guide = guide_for_mode(mode)
     user_content = (
-        "Rewrite the current H3 prompt according to the revision instruction. "
-        "Return only the complete revised H3 prompt. Do not discuss the changes.\n\n"
+        "Rewrite the current prompt according to the revision instruction. "
+        "Return only the complete revised prompt. Do not discuss the changes.\n\n"
         f"Original mode: {mode}\n"
         f"Original duration: {duration:g} seconds\n"
         f"Original aspect ratio: {aspect_ratio}\n"

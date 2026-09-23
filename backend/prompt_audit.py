@@ -2,8 +2,9 @@
 
 Audit behaviour belongs to a generation target, so this module is a thin
 dispatcher onto the resolved target's strategy. The exported helpers re-export
-the MiniMax H3 rules because H3 is the only target whose output contract is
-structurally checkable; other targets audit what applies to them.
+the MiniMax H3 rules, which are the most structurally detailed of the targets:
+H3's Reference mode has a checkable section schema, while the image and audio
+targets audit only the parts that apply to them.
 """
 
 from __future__ import annotations

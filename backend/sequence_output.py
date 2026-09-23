@@ -1,4 +1,4 @@
-"""Objective standalone H3 checks. No inference, semantic repair, or style scoring."""
+"""Objective standalone prompt checks. No inference, semantic repair, or style scoring."""
 from __future__ import annotations
 
 import re
@@ -12,7 +12,7 @@ STAMP = re.compile(r"(?<![\d:])(\d{2}):(\d{2})\.(\d{3})(?![\d:])")
 
 
 def invalid(detail, repairable=False):
-    raise ModelError("INVALID_SEQUENCE_PROMPT", f"Invalid standalone H3 prompt: {detail}.",
+    raise ModelError("INVALID_SEQUENCE_PROMPT", f"Invalid standalone prompt: {detail}.",
                      {"contract_failure": detail, "repairable": repairable})
 
 
@@ -120,6 +120,6 @@ def validate_output(prompt, mode, duration, assets=None):
             if any(t in task_types for t in ("audio reuse", "audio reference")) and not any(a["reference"].startswith("<Audio ") for a in assets):
                 problem("an audio-reference task requires an effective Audio asset", True)
         if problems:
-            raise ModelError("INVALID_SEQUENCE_PROMPT", "Invalid standalone H3 prompt: " + "; ".join(problems),
+            raise ModelError("INVALID_SEQUENCE_PROMPT", "Invalid standalone prompt: " + "; ".join(problems),
                              {"contract_failure": "; ".join(problems), "problems": problems, "repairable": True})
     return prompt

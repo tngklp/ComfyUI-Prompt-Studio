@@ -181,7 +181,7 @@ def plain_chunk_prompt(text, mode, duration, assets=None, output_format="officia
         "integrated_multimodal_description", "overall_soundscape", "non_diegetic_music")
     matches = list(re.finditer(r"(?m)^\s*(" + "|".join(fields) + r")\s*:[ \t]*", without_literals(prompt)))
     def invalid():
-        raise ModelError("INVALID_SEQUENCE_PROMPT", "The chunk has an unsupported wrapper or incomplete H3 sections. Prompt Studio cannot safely supply missing content.")
+        raise ModelError("INVALID_SEQUENCE_PROMPT", "The chunk has an unsupported wrapper or incomplete prompt sections. Prompt Studio cannot safely supply missing content.")
     if [m[1] for m in matches] != list(fields):
         invalid()
     prefix = prompt[:matches[0].start()].strip()
@@ -220,7 +220,7 @@ def assemble_chunk(state, index, body, media, action_plan=None):
                        "visual_height": asset.get("prepared_height") if kind == "image" else asset.get("contact_sheet_height"),
                        "snapshot_asset": frozen["asset"], "snapshot_uri": frozen["uri"]})
     if counts["image"] > 9 or counts["video"] > 3 or counts["audio"] > 3 or len(assets) > 12:
-        raise AssemblyError("INVALID_MEDIA_MANIFEST", "Effective chunk media exceeds H3 Reference limits (9 images, 3 videos, 3 audio, 12 total).")
+        raise AssemblyError("INVALID_MEDIA_MANIFEST", "Effective chunk media exceeds the Reference limits (9 images, 3 videos, 3 audio, 12 total).")
     previous_index = next((i for i in range(index - 1, -1, -1) if rows[i]["prompt"].strip()), None)
     previous = rows[previous_index]["prompt"] if previous_index is not None else ""
     outline = "\n".join(f"C{r['index']} · {r['start']}–{r['end']}s · {r['instruction']}" for r in rows)
