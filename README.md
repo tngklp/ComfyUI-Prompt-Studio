@@ -10,7 +10,9 @@ Prompt Studio is a multimodal prompt-writing workspace for ComfyUI. Pick a gener
 
 It is a ComfyUI UI extension, not a workflow node. It writes prompt text for your existing workflow and helps prepare reference media. The optional Media panel can add media loaders to your workflow. Prompt Studio does not run the generation models themselves and does not queue renders.
 
-Standalone for Windows: **1.1.0** · [Download ZIP](../../releases/download/standalone-v1.1.0/Prompt-Studio-Standalone-Windows-v1.1.0.zip) · [Setup guide](standalone/README.md)
+**ComfyUI extension**: **1.0.0** · [Download ZIP](../../releases/download/v1.0.0/Prompt-Studio-ComfyUI-v1.0.0.zip) · [Installation](docs/INSTALLATION.md)
+
+**Standalone for Windows**: **1.1.0** · [Download ZIP](../../releases/download/standalone-v1.1.0/Prompt-Studio-Standalone-Windows-v1.1.0.zip) · [Setup guide](standalone/README.md)
 
 ## Supported generation targets
 
@@ -154,6 +156,8 @@ The launcher creates `.venv`, installs the requirements, and runs the same entry
 - [API providers](docs/API_PROVIDERS.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
 - [Changelog](CHANGELOG.md)
+- [Extension release notes](RELEASE_NOTES.md)
+- [Standalone guide](standalone/README.md) · [Standalone release notes](standalone/RELEASE_NOTES.md)
 
 The project is released under the [MIT License](LICENSE). MiniMax H3 guides and model files keep their upstream terms, and the Qwen Image 2.1 guides keep theirs. Model weights are not bundled with this extension.
 
