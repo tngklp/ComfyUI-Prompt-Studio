@@ -1,0 +1,75 @@
+{
+  "$comment": [
+    "Packaging contract for the Windows Standalone ZIP, consumed by scripts/build_standalone.ps1.",
+    "Every entry is a path RELATIVE to the repository root unless stated otherwise.",
+    "Directories are copied recursively from git-tracked files (so new files inside them",
+    "ship automatically). Files are copied verbatim. Adding a root-level file to the",
+    "project means adding it to upstream.files below - the build fails if a path is",
+    "missing, which is how targets.json going absent was caught."
+  ],
+  "schema_version": 1,
+
+  "app": {
+    "source_root": "standalone",
+    "trees": ["prompt_studio", "ui"],
+    "files": [
+      "start.bat",
+      "requirements.txt",
+      "README.md",
+      "CHANGELOG.md",
+      "RELEASE_NOTES.md",
+      "VERSION"
+    ],
+    "data_example": "data/settings.example.json",
+    "create_empty_dirs": ["models"]
+  },
+
+  "upstream": {
+    "destination": "upstream",
+    "trees": ["backend", "web", "guides", "docs"],
+    "files": [
+      "README.md",
+      "CHANGELOG.md",
+      "LICENSE",
+      "models.json",
+      "targets.json",
+      "requirements-gguf.txt"
+    ],
+    "$required_comment": [
+      "These mirror standalone/prompt_studio/config.py::validate_upstream().",
+      "targets.json is resolved by backend/targets/__init__.py at the checkout root",
+      "and is also a modern-checkout marker, so a package without it will not start."
+    ],
+    "required": [
+      "backend/routes.py",
+      "backend/targets/__init__.py",
+      "web/main.js",
+      "web/target_registry.js",
+      "targets.json"
+    ],
+    "snapshot_file": "UPSTREAM_SNAPSHOT.txt"
+  },
+
+  "$link_rewrites_comment": [
+    "The repository README and docs link to each other across the repo/standalone",
+    "boundary. Inside the ZIP that boundary moves, so these literal replacements keep",
+    "the links resolvable. Order matters."
+  ],
+  "link_rewrites": [
+    {
+      "file": "app/README.md",
+      "replacements": [
+        { "from": "../docs/", "to": "upstream/docs/" },
+        { "from": "../README.md", "to": "upstream/README.md" }
+      ]
+    },
+    {
+      "file": "upstream/README.md",
+      "replacements": [{ "from": "(standalone/README.md)", "to": "(../README.md)" }]
+    },
+    {
+      "file": "upstream/docs/*.md",
+      "replacements": [{ "from": "../standalone/README.md", "to": "../../README.md" }]
+    }
+  ]
+}

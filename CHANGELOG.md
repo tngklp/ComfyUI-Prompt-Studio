@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Standalone ZIP was missing `targets.json`.** The Standalone build kept a private
+  copy list that drifted from the project, so the packaged app shipped without the
+  generation-target registry and refused to start
+  (`REGISTRY_MISSING` / "checkout is out of date"). The list now comes from
+  `standalone/package.manifest.json`, and the build fails loudly if a required file
+  is absent instead of producing a ZIP that cannot run.
+
 ## 1.0.0 - 2026-09-21
 
 ### Features

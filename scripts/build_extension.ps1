@@ -21,9 +21,23 @@ if (-not $backendMatch.Success -or $backendMatch.Groups[1].Value -ne $version) {
     throw "pyproject.toml and backend/version.py versions do not match"
 }
 
-foreach ($required in @("__init__.py", "backend\routes.py", "web\main.js", "models.json")) {
+$requiredSources = @(
+    "__init__.py",
+    "backend\routes.py",
+    "backend\version.py",
+    "backend\targets\__init__.py",
+    "web\main.js",
+    "models.json",
+    "targets.json"
+)
+foreach ($required in $requiredSources) {
     if (-not (Test-Path -LiteralPath (Join-Path $repositoryRoot $required))) {
         throw "Required extension source is missing: $required"
+    }
+}
+foreach ($required in @("guides", "backend\system_prompts", "web\styles")) {
+    if (-not (Test-Path -LiteralPath (Join-Path $repositoryRoot $required) -PathType Container)) {
+        throw "Required extension directory is missing: $required"
     }
 }
 
