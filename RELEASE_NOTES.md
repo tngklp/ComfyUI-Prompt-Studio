@@ -32,6 +32,8 @@ install.
 - Media Composer for collages, Media Editor for crop and trim, and a Floating Media
   panel that drags media into ComfyUI workflows.
 - Ollama, Direct GGUF, External llama.cpp, and API providers.
+- Fixed image-edit replies that put a sentence before the JSON envelope: the editor
+  could show prose plus raw JSON and lose the model's chosen aspect ratio.
 
 ## Requirements
 

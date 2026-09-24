@@ -1,12 +1,13 @@
 # Standalone changelog
 
-## 1.1.0 - 2026-09-21
+## 1.1.0 - 2026-09-24
 
 - Rebranded to **Prompt Studio**. The package, launch scripts, environment variables, and interface now use the Prompt Studio name.
 - Added generation-target support: video, music, and image prompts from one workspace, driven by `targets.json`.
 - Environment variables renamed from `H3_*` to `PS_*`. Existing launchers and scripts must be updated.
 - The upstream checkout is now expected in a folder named `prompt-studio`.
 - Requires Prompt Studio core `1.0.0`.
+- Fixed the Windows ZIP shipping without generation targets: the build kept a private copy list that drifted from the project, so the packaged app refused to start with `REGISTRY_MISSING`. The list now comes from `standalone/package.manifest.json`, and the build fails loudly if a required file is missing instead of producing a ZIP that cannot run.
 
 ## 0.1.7 - 2026-09-11
 

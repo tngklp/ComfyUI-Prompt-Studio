@@ -82,11 +82,21 @@ def normalize_prompt_text(text: str) -> str:
     it, which put raw JSON in the editor and the wrong words in the generated image.
     Only a *recognised* envelope is unwrapped, so a prompt that legitimately contains
     braces is left untouched.
+
+    Recognition accepts two shapes: the whole reply is the envelope (optionally in a
+    ```` ```json ```` fence), or the reply is prose followed by a fenced envelope. The
+    second shape is a real observed failure - a leading sentence such as "Generate a
+    passport photograph of the person featured in <image1>" defeated a prefix-only
+    check, so the fence and its ratio fields reached the editor. A fence is the
+    model's declared output boundary, so it wins over any preamble; unfenced prose
+    followed by bare braces is still left alone.
     """
     import json
 
     candidate = (text or "").strip()
     block = _JSON_BLOCK.fullmatch(candidate)
+    if block is None:
+        block = _JSON_BLOCK.search(candidate)
     if block:
         candidate = block.group(1).strip()
     if not candidate.startswith("{"):

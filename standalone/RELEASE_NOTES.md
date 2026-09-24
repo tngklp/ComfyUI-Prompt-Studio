@@ -11,8 +11,17 @@ Do not install this package into ComfyUI `custom_nodes`.
 
 ## What's new
 
-- Fixed video trimming and cropping failing because NumPy was missing.
-- Existing Windows environments now install missing dependencies on launch.
+- Rebranded to **Prompt Studio**. The package, launch scripts, environment variables, and
+  interface now use the Prompt Studio name. Environment variables renamed from `H3_*` to
+  `PS_*`, and the upstream checkout is now expected in a folder named `prompt-studio`.
+- Added generation-target support: video, music, and image prompts from one workspace,
+  driven by `targets.json`.
+- Added Qwen Image 2.1 text-to-image and image-edit prompts, plus Krea 2 and MiniMax
+  Music 3 caption and lyrics writing.
+- Fixed the Windows ZIP shipping without the generation-target registry. The release
+  build no longer keeps a private copy list that can drift from the project, so the
+  package starts correctly instead of failing with `REGISTRY_MISSING`.
+- Requires Prompt Studio core `1.0.0`.
 
 ComfyUI-only controls, including Auto VRAM management and Add to workflow, are not
 shown in Standalone.

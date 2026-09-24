@@ -441,10 +441,56 @@ class ImageTargetTests(unittest.TestCase):
             '{"wh_ratio": "16:9"}',
         )
 
-    def test_a_narration_prefix_defeats_the_envelope(self):
-        """A leading sentence means the check fails safe rather than mangling prose."""
+    def test_prose_before_a_bare_envelope_is_left_alone(self):
+        """Unfenced braces in prose must not be mistaken for an envelope.
+
+        A stray ``{`` cannot be treated as a payload boundary, so this shape keeps
+        failing safe; only a fenced block is an unambiguous boundary.
+        """
         chatty = 'Here you go:\n{"rewritten_prompt": "An edit.", "wh_ratio": "1:1"}'
         self.assertEqual(self.strategy.normalize_prompt_text(chatty), chatty)
+
+    def test_a_preamble_before_a_fenced_envelope_is_unwrapped(self):
+        """Observed failure: a sentence before the fence defeated prefix-only checks.
+
+        The sentence was repeated verbatim inside ``rewritten_prompt``, so the
+        editor showed the preamble plus raw JSON and the ratio fields, and the
+        ``3:4`` the model chose never reached the size control.
+        """
+        reply = (
+            "Generate a passport photograph of the person featured in <image1>, "
+            "<image2>, and <image3>. The image must feature the subject centered, "
+            "posed for a passport photo, with a plain, solid white background and "
+            "even studio lighting. Maintain the consistent facial identity and "
+            "overall physical characteristics of the person from all three source "
+            "images.\n\n"
+            "```json\n"
+            "{\n"
+            '  "rewritten_prompt": "Generate a passport photograph of the person '
+            'featured in <image1>, <image2>, and <image3>.",\n'
+            '  "wh_ratio": "3:4",\n'
+            '  "ratio_follow": ""\n'
+            "}\n"
+            "```"
+        )
+        self.assertEqual(
+            self.strategy.normalize_prompt_text(reply),
+            "Generate a passport photograph of the person featured in <image1>, "
+            "<image2>, and <image3>.",
+        )
+
+    def test_a_fenced_envelope_after_prose_drops_the_ratio_fields(self):
+        chatty = (
+            "Sure, here is the instruction.\n"
+            "```json\n"
+            '{"rewritten_prompt": "Replace the background with a sunset beach.", '
+            '"wh_ratio": "16:9", "ratio_follow": ""}\n'
+            "```"
+        )
+        unwrapped = self.strategy.normalize_prompt_text(chatty)
+        self.assertEqual(unwrapped, "Replace the background with a sunset beach.")
+        self.assertNotIn("wh_ratio", unwrapped)
+        self.assertNotIn("ratio_follow", unwrapped)
 
     def test_the_guides_are_official_and_still_request_a_json_envelope(self):
         """The Qwen guides are vendored verbatim, so they still ask for JSON.

@@ -1,17 +1,6 @@
 # Changelog
 
-## Unreleased
-
-### Fixed
-
-- **Standalone ZIP was missing `targets.json`.** The Standalone build kept a private
-  copy list that drifted from the project, so the packaged app shipped without the
-  generation-target registry and refused to start
-  (`REGISTRY_MISSING` / "checkout is out of date"). The list now comes from
-  `standalone/package.manifest.json`, and the build fails loudly if a required file
-  is absent instead of producing a ZIP that cannot run.
-
-## 1.0.0 - 2026-09-21
+## 1.0.0 - 2026-09-24
 
 ### Features
 
@@ -23,6 +12,22 @@
 - **New `GET /promptstudio/targets` endpoint** describing every target, its modes, limits, and guide metadata.
 - **Registry-driven interface.** Workspaces, mode tabs, brief limits, media limits, and system-prompt profiles are rendered from the registry, so a new target appears without interface changes.
 - **Qwen Image 2.1 support** with text-to-image and image-edit modes, plus an image prompt writing guide.
+
+### Fixed
+
+- **Qwen Image edit replies that put a sentence before the JSON envelope.** Some
+  models answered with a sentence such as "Generate a passport photograph of the
+  person featured in `<image1>`" followed by a fenced JSON block. The envelope check
+  only looked at the start of the reply, so the editor showed the preamble plus the
+  raw `rewritten_prompt`, `wh_ratio`, and `ratio_follow` fields. A fenced envelope is
+  now recognised anywhere in the reply and unwrapped; unfenced prose followed by bare
+  braces is still left untouched.
+- **Standalone ZIP was missing `targets.json`.** The Standalone build kept a private
+  copy list that drifted from the project, so the packaged app shipped without the
+  generation-target registry and refused to start
+  (`REGISTRY_MISSING` / "checkout is out of date"). The list now comes from
+  `standalone/package.manifest.json`, and the build fails loudly if a required file
+  is absent instead of producing a ZIP that cannot run.
 
 ### Breaking changes
 
