@@ -16,7 +16,7 @@ from aiohttp import web
 from server import PromptServer
 
 from .assembly import AssemblyError, assemble_lyrics_request, assemble_refinement, assemble_request
-from .catalog import discover_models_with_diagnostics, find_model, model_setup_catalog
+from .catalog import discover_models_with_diagnostics, find_model, model_setup_catalog, resolve_projector
 from .comfy_state import comfyui_runtime_snapshot
 from .devlog import DEVELOPER_MODE, LOG_PATH, PeakVRAMMonitor, gpu_memory_snapshot, write_event
 from .guides import guide_catalog, guide_for_mode
@@ -334,6 +334,11 @@ async def _resolve_model(body: dict[str, Any]) -> dict[str, Any] | None:
                 {"requested_model_id": requested_id, "current_model_id": model["id"]},
             )
         return model
+    if body.get("gguf_projector"):
+        model = resolve_projector(str(body.get("model_id") or ""), body["gguf_projector"])
+        if model is None:
+            raise ModelError("INVALID_PROJECTOR", "The selected projector is no longer compatible or available. Choose it again in Settings.")
+        return model
     return find_model(str(body.get("model_id") or ""))
 
 
@@ -434,10 +439,11 @@ async def _prepare_generation_runtime(
         "kv_cache": body.get("kv_cache", "auto"),
         "thinking": body.get("thinking", False),
     }
+    if model["family"] in {"gguf", "ollama"}:
+        runtime_options["generation_budget"] = body.get("generation_budget")
     if model["family"] == "gguf":
         runtime_options.update({
             "context_tokens": body.get("context_tokens"),
-            "generation_budget": body.get("generation_budget"),
             "reasoning_effort": body.get("reasoning_effort", "auto"),
         })
     runtime_plan, cancellation = await _run_thread_worker(
@@ -675,6 +681,17 @@ async def get_models(_request: web.Request) -> web.Response:
         "setup": model_setup_catalog(),
         "discovery": discovery,
     })
+
+
+@routes.post(f"{ROUTE_PREFIX}/models/projector")
+async def select_projector(request: web.Request) -> web.Response:
+    body = await _json_body(request)
+    if not isinstance(body, dict) or not isinstance(body.get("model_id"), str) or not isinstance(body.get("projector"), str):
+        return _error("INVALID_PROJECTOR", "Select a model and a compatible projector.", status=400)
+    model = await asyncio.to_thread(resolve_projector, body["model_id"], body["projector"])
+    if model is None:
+        return _error("INVALID_PROJECTOR", "The selected projector is no longer compatible or available. Refresh the model list.", status=400)
+    return web.json_response({"model": model})
 
 
 @routes.post(f"{ROUTE_PREFIX}/runtime/gguf/diagnostics")
@@ -1325,7 +1342,7 @@ async def media_content(request: web.Request) -> web.StreamResponse:
 @routes.post(f"{ROUTE_PREFIX}/media/{{asset_id}}/edit")
 async def edit_media(request: web.Request) -> web.StreamResponse:
     body = await _json_body(request)
-    if not isinstance(body, dict) or body.get("action") not in {"preview", "save", "download", "frame", "source"}:
+    if not isinstance(body, dict) or body.get("action") not in {"preview", "save", "download", "frame", "source", "audio"}:
         return _error("INVALID_EDIT", "Select a valid media edit action.", status=400)
     if not _claim_media_mutation():
         return _error("GENERATION_BUSY", "Wait for the current Prompt Studio operation to finish.", status=409)
@@ -1355,7 +1372,7 @@ async def edit_media(request: web.Request) -> web.StreamResponse:
             _invalidate_generation_cache(session_id, asset["mode"])
             return web.json_response({"asset": result, "assets": STORE.list(session_id)})
         target = prepared["target"]
-        response = web.StreamResponse(headers={"Content-Type": "image/png" if asset["type"] == "image" else "video/mp4",
+        response = web.StreamResponse(headers={"Content-Type": "audio/wav" if action == "audio" else "image/png" if asset["type"] == "image" else "video/mp4",
                                               "Content-Disposition": f'attachment; filename="{target.name}"',
                                               "Content-Length": str(target.stat().st_size)})
         await response.prepare(request)

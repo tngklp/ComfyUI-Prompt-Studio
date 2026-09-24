@@ -22,7 +22,6 @@
 }
 .ps-modal > * { min-width: 0; }
 .ps-root.is-fullscreen .ps-modal { inset: 0; width: 100vw; height: 100dvh; transform: none; border: 0; border-radius: 0; }
-.ps-root.is-fullscreen .ps-brief textarea { max-height: none; }
 
 .ps-header {
   display: flex;

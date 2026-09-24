@@ -118,7 +118,7 @@ export function loadSequence(storage) {
     if (value?.version !== 1 || !Array.isArray(value.chunks) || !value.chunks.length) return fallback;
     const ids = new Set();
     const strings = a => Array.isArray(a) ? [...new Set(a.filter(x => typeof x === "string"))] : [];
-    return { ...fallback, outputFormat:value.outputFormat === "compact" ? "compact" : "official", brief: typeof value.brief === "string" ? value.brief.slice(0,8000) : "",
+    return { ...fallback, outputFormat:value.outputFormat === "compact" ? "compact" : "official", brief: typeof value.brief === "string" ? value.brief : "",
       instructions: typeof value.instructions === "string" && ![LEGACY_SEQUENCE_INSTRUCTIONS, PREVIOUS_SEQUENCE_INSTRUCTIONS].includes(value.instructions) ? value.instructions : sequenceInstructionDefault(value.outputFormat),
       defaultDuration: duration(value.defaultDuration),
       aspectRatio: ["1:1","2:3","3:2","3:4","4:3","9:16","16:9","21:9"].includes(value.aspectRatio) ? value.aspectRatio : fallback.aspectRatio,

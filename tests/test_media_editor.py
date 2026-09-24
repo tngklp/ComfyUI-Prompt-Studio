@@ -40,6 +40,29 @@ def make_video(path, duration=4, audio=True, variable=False):
 
 
 class MediaEditorTests(unittest.TestCase):
+    def test_extract_audio_uses_trim_and_preserves_video(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "video"; root.mkdir()
+            source = root / "original.mp4"; make_video(source)
+            original = source.read_bytes()
+            store = media.MediaStore(); store.add("session", "Reference", "video.mp4", "video/mp4", source)
+            asset = store.get("session", "video")
+            result = prepare_edit(asset, {"revision":0, "start":.4, "end":2.8}, "audio")
+            with av.open(str(result["target"])) as output:
+                self.assertEqual(len(output.streams.video), 0)
+                samples = list(output.decode(audio=0))
+            self.assertAlmostEqual(sum(f.samples for f in samples) / 48000, 2.4, places=3)
+            self.assertGreater(float(np.abs(samples[0].to_ndarray()).max()), 100)
+            self.assertEqual(source.read_bytes(), original)
+            self.assertEqual(asset.get("content_revision", 0), 0)
+            with self.assertRaises(media.MediaError):
+                prepare_edit(asset, {"revision":0, "start":0, "end":1}, "audio")
+            silent = root / "silent.mp4"; make_video(silent, audio=False)
+            asset = {**asset, "_original_path":str(silent)}
+            with self.assertRaises(media.MediaError) as error:
+                prepare_edit(asset, {"revision":0, "start":0, "end":2}, "audio")
+            self.assertEqual(error.exception.code, "NO_AUDIO")
+
     def test_current_frame_png_uses_playhead_draft_crop_without_applying(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)/'video';root.mkdir();path=root/'original.mp4';make_video(path,audio=False)
@@ -212,21 +235,17 @@ class ReferencePromotionTests(unittest.TestCase):
             self.assertEqual(promoted['reference'],'<Video 2>')
             self.assertEqual([a['id'] for a in store.manifest('s','Reference')['assets']],['ready','staged'])
 
-    def test_temporary_ineligibility_reserves_identity_across_reorder_and_add(self):
+    def test_active_reference_labels_follow_order_without_changing_asset_ids(self):
         first = dict(id="first", mode="Reference", type="video", status="ready", reference="<Video 1>")
         second = dict(id="second", mode="Reference", type="video", status="ready", reference="<Video 2>")
         staged = dict(id="staged", mode="Reference", type="video", status="needs_edit", reference=None)
-        assets = [first, second, staged]
-        first["status"] = "needs_edit"
-        media.MediaStore._assign_reference_identity(assets, first)
-        assets.reverse()
+        assets = [second, staged, first]
         media.MediaStore._renumber(assets, "Reference")
-        self.assertEqual(second["reference"], "<Video 2>")
-        self.assertIsNone(staged.get("_reference_reservation"))
-        added = dict(id="added", mode="Reference", type="video", status="ready", reference=None)
-        assets.append(added)
-        media.MediaStore._assign_reference_identity(assets, added)
-        self.assertEqual(added["reference"], "<Video 3>")
-        first["status"] = "ready"
-        media.MediaStore._assign_reference_identity(assets, first)
+        self.assertEqual([a["reference"] for a in assets], ["<Video 1>", None, "<Video 2>"])
+        assets.remove(second)
+        media.MediaStore._renumber(assets, "Reference")
         self.assertEqual(first["reference"], "<Video 1>")
+        self.assertEqual(first["id"], "first")
+        staged["status"] = "ready"
+        media.MediaStore._renumber(assets, "Reference")
+        self.assertEqual([a["reference"] for a in assets], ["<Video 1>", "<Video 2>"])

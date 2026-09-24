@@ -1,0 +1,24 @@
+{
+  "name": "Prompt Studio",
+  "short_name": "Prompt Studio",
+  "description": "Standalone prompt writer with local and API providers",
+  "start_url": "./",
+  "icons": [
+    {
+      "src": "/app-icons/prompt-studio-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/app-icons/prompt-studio-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/assets/prompt-studio-launcher.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "display": "standalone"
+}

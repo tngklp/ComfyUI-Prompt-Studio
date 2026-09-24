@@ -172,6 +172,8 @@ export function loadUserPreferences(storage = globalThis.localStorage) {
       direct_kv_cache: KV_CACHES.includes(value.direct_kv_cache) ? value.direct_kv_cache : "auto",
       direct_generation_budget: GENERATION_BUDGETS.includes(value.direct_generation_budget) ? value.direct_generation_budget : "auto",
       direct_generation_budget_tokens: Number.isInteger(value.direct_generation_budget_tokens) && value.direct_generation_budget_tokens > 0 ? value.direct_generation_budget_tokens : null,
+      ollama_generation_budget: GENERATION_BUDGETS.includes(value.ollama_generation_budget) ? value.ollama_generation_budget : "auto",
+      ollama_generation_budget_tokens: Number.isInteger(value.ollama_generation_budget_tokens) && value.ollama_generation_budget_tokens > 0 ? value.ollama_generation_budget_tokens : null,
       direct_reasoning_effort: typeof value.direct_reasoning_effort === "string" && value.direct_reasoning_effort ? value.direct_reasoning_effort : "auto",
       music_lyrics_use_brief: value.music_lyrics_use_brief !== false,
       fullscreen: value.fullscreen === true,
@@ -197,6 +199,8 @@ export function saveUserPreferences(storage, state) {
     direct_kv_cache: KV_CACHES.includes(state.directKvCache) ? state.directKvCache : "auto",
     direct_generation_budget: GENERATION_BUDGETS.includes(state.directGenerationBudget) ? state.directGenerationBudget : "auto",
     direct_generation_budget_tokens: Number.isInteger(state.directGenerationBudgetTokens) && state.directGenerationBudgetTokens > 0 ? state.directGenerationBudgetTokens : null,
+    ollama_generation_budget: GENERATION_BUDGETS.includes(state.ollamaGenerationBudget) ? state.ollamaGenerationBudget : "auto",
+    ollama_generation_budget_tokens: Number.isInteger(state.ollamaGenerationBudgetTokens) && state.ollamaGenerationBudgetTokens > 0 ? state.ollamaGenerationBudgetTokens : null,
     direct_reasoning_effort: typeof state.directReasoningEffort === "string" && state.directReasoningEffort ? state.directReasoningEffort : "auto",
     music_lyrics_use_brief: state.musicLyricsUseBrief !== false,
     fullscreen: state.fullscreen === true,
@@ -390,14 +394,16 @@ export function restoredModelAfterDiscovery(state) {
 function sharedInferencePayload(state) {
   const directRuntime = state.selectedModel?.family === "gguf";
   const thinking = state.selectedModel?.family === "external" ? false : state.thinking;
-  const generationBudgetMode = state.generationBudget || "auto";
-  const generationBudget = generationBudgetMode === "custom"
-    ? (state.generationBudgetTokens ?? 0)
-    : generationBudgetMode === "auto" ? null : Number(generationBudgetMode);
+  const budgetMode = directRuntime ? (state.directGenerationBudget || "auto") : (state.ollamaGenerationBudget || "auto");
+  const budgetTokens = directRuntime ? state.directGenerationBudgetTokens : state.ollamaGenerationBudgetTokens;
+  const generationBudget = budgetMode === "custom"
+    ? (budgetTokens ?? 0)
+    : budgetMode === "auto" ? null : Number(budgetMode);
   return {
     session_id: state.sessionId,
     mode: state.mode,
     model_id: state.selectedModel?.id,
+    ...(directRuntime && state.selectedModel.selected_projector ? { gguf_projector: state.selectedModel.selected_projector } : {}),
     external_server: selectedExternalServer(state),
     ollama_model: selectedOllamaModel(state),
     ollama_host: selectedOllamaHost(state),
@@ -407,8 +413,8 @@ function sharedInferencePayload(state) {
     kv_cache: directRuntime ? state.kvCache : "auto",
     ...(directRuntime ? {
       context_tokens: state.contextProfile === "custom" ? state.contextTokens : null,
-      generation_budget: generationBudget,
     } : {}),
+    ...(["gguf", "ollama"].includes(state.selectedModel?.family) ? { generation_budget: generationBudget } : {}),
     ...(directRuntime && thinking ? { reasoning_effort: state.reasoningEffort || "auto" } : {}),
     system_prompt_override: currentSystemPromptOverride(state),
     unload_after: !state.keepModelLoaded,
@@ -485,6 +491,8 @@ export function createStudioState({ sessionId, storage = globalThis.localStorage
     directContextProfile: preferences?.direct_context_profile || "auto",
     directContextTokens: preferences?.direct_context_tokens || null,
     directKvCache: preferences?.direct_kv_cache || "auto",
+    ollamaGenerationBudget: preferences?.ollama_generation_budget || "auto",
+    ollamaGenerationBudgetTokens: preferences?.ollama_generation_budget_tokens || null,
     directGenerationBudget: preferences?.direct_generation_budget || "auto",
     directGenerationBudgetTokens: preferences?.direct_generation_budget_tokens || null,
     directReasoningEffort: preferences?.direct_reasoning_effort || "auto",

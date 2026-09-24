@@ -2,7 +2,7 @@ import { promptHighlightMarkup, createPromptMirrorHighlighter } from "./prompt_h
 import { loadSequence, saveSequence, addChunk, deleteChunk, timeline, effectiveMedia, aggregate, duration, MAX_CHUNK_DURATION, sequenceInstructionDefault, setSequenceFormat, revisePrompt, assignReference, removeReference, reconcileMedia } from "./sequence_state.js";
 import { createSequenceController } from "./sequence_controller.js";
 import { mediaVisualDescriptor } from "./media_visual.js";
-import { formatChoiceMarkup, generationButtonMarkup, aspectRatioMarkup, bindAspectRatio, splitMenuMarkup, setSplitMenuOpen, copyButtonMarkup } from "./writer_controls.js";
+import { fitTextarea, formatChoiceMarkup, generationButtonMarkup, aspectRatioMarkup, bindAspectRatio, splitMenuMarkup, setSplitMenuOpen, copyButtonMarkup } from "./writer_controls.js";
 
 export const displaySeparator = value => value.replace(/\\/g,"\\\\").replace(/\n/g,"\\n").replace(/\r/g,"\\r").replace(/\t/g,"\\t");
 export const parseSeparator = value => value.replace(/\\([\\nrt])/g,(_, char)=>({n:"\n",r:"\r",t:"\t","\\":"\\"}[char]));
@@ -28,13 +28,13 @@ export function createSequenceWorkspace(host) {
   const left = document.createElement("div"); left.className = "ps-sequence-inputs";
   left.innerHTML = `<div class="ps-control-grid"><label class="ps-field ps-duration-field" title="Applies to the next Add chunk; existing chunks keep their durations"><span>New chunk duration <b data-seq-default-label></b></span><div><input type="range" min="1" max="${MAX_CHUNK_DURATION}" step="1" data-seq-default><i></i></div></label>${aspectRatioMarkup(host.icon,"sequence-aspect")}</div>
     <section class="ps-sequence-media"><strong title="Add a first frame, last frame, or references to guide the sequence. In the Creative Brief, refer to them as first frame, last frame, or reference 1; inside chunks, use the shown &lt;Picture N&gt; tag.">Sequence media</strong><div data-seq-global-media></div></section>
-    <label class="ps-brief"><span><strong>Creative brief</strong><small>Describe the whole sequence, including absolute times</small></span><textarea spellcheck="false" maxlength="8000" data-seq-brief placeholder="At around 15 seconds she stands up…"></textarea></label>
+    <label class="ps-brief"><span><strong>Creative brief</strong><small>Describe the whole sequence, including absolute times</small></span><textarea spellcheck="false" data-seq-brief placeholder="At around 15 seconds she stands up…"></textarea><small class="ps-char-count" data-seq-brief-count></small></label>
     <section class="ps-music-system-prompt"><button type="button" class="ps-music-system-prompt-toggle" data-seq-action="instructions" aria-expanded="false"><strong>Sequence Instructions</strong><span>${host.icon("chevron",12)}</span></button><div data-seq-instructions-panel hidden><div class="ps-system-prompt-panel"><textarea spellcheck="false" maxlength="32000" data-seq-instructions aria-label="Sequence Instructions"></textarea><footer class="ps-sequence-instructions-footer">${formatChoiceMarkup("Sequence output format",[["format-official","Official"],["format-compact","Compact"]],"format-"+state.outputFormat)}${button("reset", "Restore default")}</footer></div><small class="ps-sequence-contract-hint" data-seq-contract></small></div></section>`;
   root.querySelector("[data-video-inputs]").append(left);
   left.querySelector("[data-seq-brief]").value = state.brief;
   left.querySelector("[data-seq-instructions]").value = state.instructions;
   left.querySelector("[data-seq-default]").value = state.defaultDuration;
-  bindAspectRatio(left.querySelector(".ps-choice"), state.aspectRatio, value => { state.aspectRatio = value; persist(); });
+  const aspectControl = bindAspectRatio(left.querySelector(".ps-choice"), state.aspectRatio, value => { state.aspectRatio = value; persist(); });
   const right = document.createElement("section"); right.className = "ps-sequence-output"; right.setAttribute("aria-label","Generated sequence");
   right.innerHTML = `<header><strong>Generated sequence</strong><span data-seq-count></span>${iconButton("reader","Reader","reader",'aria-pressed="false"')}${copyButtonMarkup(host.icon,'data-seq-action="copy-all" title="Copy all prompts" aria-label="Copy all prompts"', "", true)}</header><section class="ps-sequence-copy-format" data-seq-copy-format hidden aria-label="Copy format">
     <div class="ps-sequence-copy-options"><span>Copy format</span>${formatChoiceMarkup("Copy format",[["copy-default","Default"],["copy-custom","Custom"]],"copy-default")}<small data-seq-copy-default>Prompts only</small></div>
@@ -54,11 +54,10 @@ export function createSequenceWorkspace(host) {
     changed, progressChanged:render, error:host.error, settled:host.settled, busyChanged(busy) { if(busy) selection=null; host.busy(busy); left.inert=busy; render(); } });
   function fit(editor) {
     if (!editor || editor.closest("[hidden]")) return;
-    const scroll = right.scrollTop;
-    editor.style.height="auto"; editor.style.height=`${Math.max(editor.matches("[data-seq-copy-template]") ? 56 : editor.value ? 90 : 52,editor.scrollHeight)}px`;
-    right.scrollTop=scroll;
+    fitTextarea(editor, editor.matches("[data-seq-copy-template]") ? 56 : editor.value ? 90 : 52);
   }
   function sync() {
+    left.querySelector("[data-seq-brief-count]").textContent=`${state.brief.length.toLocaleString()} characters`;
     root.classList.toggle("is-sequence",enabled); root.classList.toggle("is-sequence-reader",enabled && reader);
     root.classList.toggle("is-sequence-selecting",enabled && !!selection);
     left.hidden=right.hidden=!enabled;
@@ -308,7 +307,18 @@ export function createSequenceWorkspace(host) {
   // Resize only measures existing editors; it never reconstructs the document.
   if(typeof ResizeObserver!=="undefined") { const observer=new ResizeObserver(()=>{if(enabled && !reader) right.querySelectorAll("[data-seq-prompt]").forEach(fit);}); observer.observe(right); }
   render();
-  return { get active(){return enabled;}, get reader(){return reader;}, state, controller, mediaMode:mode=>enabled?"Reference":mode,
+  return { get active(){return enabled;}, get reader(){return reader;}, state, controller, setActive:setEnabled,
+    loadDraft(value){
+      if(controller.busy) return;
+      Object.assign(state,value); aspectControl.update(state.aspectRatio); refineDrafts.clear(); selection=null; activeTarget=null;
+      left.querySelector("[data-seq-brief]").value=state.brief;
+      left.querySelector("[data-seq-instructions]").value=state.instructions;
+      left.querySelector("[data-seq-default]").value=state.defaultDuration;
+      right.querySelector("[data-seq-copy-template]").value=state.copyFormat.template;
+      right.querySelector("[data-seq-copy-separator]").value=displaySeparator(state.copyFormat.separator);
+      setReader(false); persist(); setEnabled(true); render();
+    },
+    mediaMode:mode=>enabled?"Reference":mode,
     refresh(){ if(enabled && !controller.busy && reconcileMedia(state,host.assets())) persist(); render(); },
     leave(){controller.leave();selection=null;setReader(false);highlights.clear();},
     insert(assetId){

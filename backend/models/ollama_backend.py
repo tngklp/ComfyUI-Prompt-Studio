@@ -429,6 +429,7 @@ class OllamaBackend:
         context_profile: str | None,
         kv_cache: str | None,
         thinking: bool,
+        generation_budget: int | None = None,
     ) -> dict[str, Any]:
         if (kv_cache or "auto").lower() != "auto":
             raise ModelError("OLLAMA_KV_MANAGED", "KV cache is managed by Ollama. Set it to Auto.")
@@ -438,6 +439,7 @@ class OllamaBackend:
             runtime_plan = plan_context(
                 assembled,
                 model_info,
+                requested_output_tokens=generation_budget,
                 requested_context=context_profile,
                 requested_kv_cache="auto",
                 thinking=thinking,
@@ -470,6 +472,7 @@ class OllamaBackend:
                 runtime_plan = plan_context(
                     assembled,
                     model_info,
+                    requested_output_tokens=generation_budget,
                     requested_context=fitting[-1],
                     requested_kv_cache="auto",
                     thinking=thinking,
@@ -673,6 +676,7 @@ class OllamaBackend:
         context_profile: str | None = None,
         kv_cache: str | None = None,
         runtime_plan: dict[str, Any] | None = None,
+        generation_budget: int | None = None,
         on_phase: Callable[[str], None] | None = None,
     ) -> dict[str, Any]:
         with self.lock:
@@ -682,7 +686,7 @@ class OllamaBackend:
             self.model_endpoint = endpoint
             runtime_plan = runtime_plan or self.preflight(
                 model_info, assembled,
-                context_profile=context_profile, kv_cache=kv_cache, thinking=thinking,
+                context_profile=context_profile, kv_cache=kv_cache, thinking=thinking, generation_budget=generation_budget,
             )
             response = None
             try:

@@ -35,7 +35,10 @@ body.ps-modal-open { overflow: hidden; }
   width: calc(var(--ps-icon-size) * var(--ps-interface-scale));
   height: calc(var(--ps-icon-size) * var(--ps-interface-scale));
 }
-.ps-root ::selection { background: var(--ps-accent-soft); }
+.ps-root ::selection {
+  background: var(--ps-accent-soft);
+  color: var(--ps-text-editor);
+}
 .ps-root :is(button, textarea, input, select):focus-visible {
   outline: 1.5px solid rgba(167, 139, 250, .72);
   outline-offset: 2px;
@@ -54,11 +57,10 @@ body.ps-modal-open { overflow: hidden; }
 .ps-input-panel,
 .ps-input-scroll,
 .ps-output-panel,
-.ps-editor { scrollbar-width: none; -ms-overflow-style: none; }
-.ps-input-panel::-webkit-scrollbar,
-.ps-input-scroll::-webkit-scrollbar,
-.ps-output-panel::-webkit-scrollbar,
-.ps-editor::-webkit-scrollbar { display: none; }
+.ps-editor {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ps-scrollbar) transparent;
+}
 
 .ps-floating-launcher {
   position: fixed;

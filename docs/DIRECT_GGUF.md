@@ -155,5 +155,5 @@ writer_models:
 
 **Scan details** lists every searched folder. **Copy model path** copies the first
 search folder. Subfolders are scanned too. If several compatible projectors share
-one folder, move each model and its intended projector into its own subfolder.
-Prompt Studio will not guess which projector to use.
+one folder, choose **Vision projector** in Direct settings or move each model and
+its intended projector into its own subfolder. Prompt Studio will not guess which file to use.

@@ -19,6 +19,7 @@ function post(path, body = {}) {
 const ollamaQuery = (name, host) => host ? `?${name}=${encodeURIComponent(host)}` : "";
 
 export const getStatus = (ollamaHost = null) => request(`/status${ollamaQuery("ollama_host", ollamaHost)}`);
+export const selectProjector = (modelId, projector) => post("/models/projector", { model_id: modelId, projector });
 export const getModels = () => request("/models");
 export const getTargets = () => request("/targets");
 export const diagnoseGGUFRuntime = (refresh = false) => post("/runtime/gguf/diagnostics", { refresh });
@@ -62,7 +63,7 @@ export async function editMedia(sessionId, assetId, options) {
   const response = await api.fetchApi(`${PREFIX}/media/${encodeURIComponent(assetId)}/edit`, {
     method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({session_id:sessionId,...options}),
   });
-  if (options.action === "download" && response.ok) return response.blob();
+  if (["download", "audio"].includes(options.action) && response.ok) return response.blob();
   return readApiResponse(response);
 }
 export const removeMedia = (sessionId, assetId) => request(

@@ -190,6 +190,52 @@ def render_video(source, target, edit):
                 outgoing.mux(packet)
 
 
+def extract_audio(source, target, start, end):
+    """Export the selected video interval as PCM audio, preserving silence and timing."""
+    import wave
+
+    if not 2 <= end - start <= 15:
+        raise MediaError("UNSUPPORTED_DURATION", "Select 2-15 seconds to extract an audio reference.")
+    with av.open(str(source)) as incoming:
+        audio = next(iter(incoming.streams.audio), None)
+        if audio is None:
+            raise MediaError("NO_AUDIO", "This video has no audio track.")
+        video = incoming.streams.video[0]
+        origin = float((video.start_time or 0) * video.time_base)
+        channels = len(audio.codec_context.layout.channels)
+        rate, written, decoded_any = 48000, 0, False
+        total = round((end - start) * rate)
+        incoming.seek(max(0, int((origin + start) / audio.time_base)), stream=audio, backward=True)
+        resampler = av.AudioResampler(format="s16", layout=audio.codec_context.layout, rate=rate)
+        with wave.open(str(target), "wb") as output:
+            output.setparams((channels, 2, rate, 0, "NONE", "not compressed"))
+
+            def write(frame):
+                nonlocal written, decoded_any
+                if frame.time is None:
+                    return
+                offset = round((float(frame.time) - origin - start) * rate)
+                lo, hi = max(0, -offset, written - offset), min(frame.samples, total - offset)
+                if hi <= lo:
+                    return
+                if offset + lo > written:
+                    output.writeframesraw(bytes((offset + lo - written) * channels * 2))
+                output.writeframesraw(frame.to_ndarray()[:, lo * channels:hi * channels].tobytes())
+                written, decoded_any = offset + hi, True
+
+            for frame in incoming.decode(audio):
+                if frame.time is not None and float(frame.time) - origin >= end:
+                    break
+                for converted in resampler.resample(frame):
+                    write(converted)
+            for converted in resampler.resample(None):
+                write(converted)
+            if not decoded_any:
+                raise MediaError("NO_AUDIO", "The selected interval contains no decodable audio.")
+            if written < total:
+                output.writeframesraw(bytes((total - written) * channels * 2))
+
+
 def prepare_edit(asset, body, action):
     if asset["type"] not in ("image", "video"):
         raise MediaError("UNSUPPORTED_MEDIA", "Only Pictures and Videos can be edited.")
@@ -202,6 +248,12 @@ def prepare_edit(asset, body, action):
     try:
         source = Path(asset["_original_path"])
         target = directory / ("edited.png" if asset["type"] == "image" else "edited.mp4")
+        if action == "audio":
+            if asset["type"] != "video":
+                raise MediaError("UNSUPPORTED_MEDIA", "Extract audio requires a video.")
+            target = directory / "audio.wav"
+            extract_audio(source, target, edit["start"], edit["end"])
+            return {"directory": directory, "target": target}
         if asset["type"] == "image":
             with Image.open(source) as opened:
                 image = ImageOps.exif_transpose(opened).convert("RGBA")
@@ -248,14 +300,11 @@ def commit_edit(store, session_id, asset_id, prepared):
                  _edited_path=str(prepared["target"]), size=prepared["target"].stat().st_size,
                  mime_type="image/png" if asset["type"] == "image" else "video/mp4")
     if was_staged and not non_reference and asset["mode"] == "Reference":
-        # Promotion allocates the next slot, preserving references already used in prompts.
+        # Newly eligible media joins the end of the active reference order.
         assets = store.sessions[session_id]
         assets.remove(asset)
         assets.append(asset)
-    if asset["mode"] == "Reference":
-        store._assign_reference_identity(store.sessions[session_id], asset)
-    else:
-        store._renumber(store.sessions[session_id], asset["mode"])
+    store._renumber(store.sessions[session_id], asset["mode"])
     source_dir = Path(asset["_original_path"]).parent
     for directory in {Path(p).parent for p in old_paths if p}:
         if directory != source_dir and directory != prepared["directory"] and directory.parent == source_dir:

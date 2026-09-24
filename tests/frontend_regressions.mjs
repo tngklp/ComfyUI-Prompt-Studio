@@ -1,3 +1,5 @@
+import "./reference_labels.mjs";
+import "./draft_files.mjs";
 import "./desktop_notifications.mjs";
 import { generationButtonMarkup } from "../web/writer_controls.js";
 import { aspectRatioMarkup, splitMenuMarkup } from "../web/writer_controls.js";
@@ -564,6 +566,8 @@ test("user preferences persist only stable non-secret settings", () => {
     direct_kv_cache: "q8",
     direct_generation_budget: "custom",
     direct_generation_budget_tokens: 6000,
+    ollama_generation_budget: "auto",
+    ollama_generation_budget_tokens: null,
     direct_reasoning_effort: "medium",
     music_lyrics_use_brief: false,
     fullscreen: true,
@@ -603,6 +607,8 @@ test("user preferences ignore corrupt or unknown versions and sanitize fields", 
     direct_kv_cache: "auto",
     direct_generation_budget: "auto",
     direct_generation_budget_tokens: null,
+    ollama_generation_budget: "auto",
+    ollama_generation_budget_tokens: null,
     direct_reasoning_effort: "auto",
     music_lyrics_use_brief: true,
     fullscreen: false,
@@ -1179,8 +1185,8 @@ test("Generate and Refine payloads are built from state rather than Settings DOM
   state.contextProfile = "custom";
   state.contextTokens = 20000;
   state.kvCache = "q8";
-  state.generationBudget = "custom";
-  state.generationBudgetTokens = 6000;
+  state.directGenerationBudget = "custom";
+  state.directGenerationBudgetTokens = 6000;
   state.reasoningEffort = "medium";
   const directPayload = buildGeneratePayload(state, { creativeBrief: "Direct brief", seed: 1 });
   assert.equal(directPayload.context_profile, "custom");
@@ -1189,6 +1195,17 @@ test("Generate and Refine payloads are built from state rather than Settings DOM
   assert.equal(directPayload.reasoning_effort, "medium");
   state.thinking = false;
   assert.equal(Object.hasOwn(buildGeneratePayload(state, { creativeBrief: "Direct brief", seed: 2 }), "reasoning_effort"), false);
+
+  // Ollama keeps its own budget and must not inherit Direct-only settings.
+  state.directGenerationBudget = "auto";
+  state.directGenerationBudgetTokens = null;
+  state.ollamaGenerationBudget = "custom";
+  state.ollamaGenerationBudgetTokens = 3000;
+  selectModelState(state, { id: "ollama-model", family: "ollama", capabilities: { audio: false } });
+  const budgetedOllama = buildGeneratePayload(state, { creativeBrief: "Ollama brief", seed: 3 });
+  assert.equal(budgetedOllama.generation_budget, 3000);
+  assert.equal(budgetedOllama.context_tokens, undefined);
+  assert.equal(budgetedOllama.reasoning_effort, undefined);
 });
 
 test("Ollama remote host controls stay collapsed and disclosure state survives refresh renders", () => {
@@ -1257,7 +1274,7 @@ test("Settings separates providers, installed models, diagnostics, and verified 
   assert.doesNotMatch(mainSource, /data-developer-mode/);
   assert.doesNotMatch(markup, /Prompt models/);
   assert.doesNotMatch(markup, /data-model-menu/);
-  assert.match(markup, /<strong>Context<\/strong>/);
+  assert.doesNotMatch(markup, /<strong>Context<\/strong>/);
   assert.match(mainSource, /llama-cpp-python is not installed/);
   assert.match(mainSource, /data-copy-direct-runtime-command/);
   assert.match(mainSource, /Close ComfyUI, run this from your ComfyUI Portable folder/);
@@ -1272,7 +1289,7 @@ test("Settings separates providers, installed models, diagnostics, and verified 
   assert.match(mainSource, /Troubleshooting ↗/);
   assert.match(mainSource, /refreshGGUFRuntimeDiagnostics\(\)/);
   assert.match(markup, /ps-model-icon ps-provider-icon[^>]+data-provider-icon="direct"/);
-  assert.match(mainSource, /runtimeSettings\.hidden = provider !== "direct"/);
+  assert.match(mainSource, /runtimeSettings\.hidden = !\["direct", "ollama"\]\.includes\(provider\)/);
   assert.doesNotMatch(mainSource, /Context is sent explicitly with each request/);
   assert.match(mainSource, /studio\.selectedModel\?\.family === "gguf"/);
   assert.doesNotMatch(mainSource, /\/api\/pull/);
@@ -1696,8 +1713,8 @@ test("fullscreen reuses the studio root and persists its UI state", () => {
   assert.match(mainSource, /current\.root\.classList\.add\("is-open"\)[\s\S]{0,420}requestAnimationFrame\(\(\) => \{[\s\S]{0,120}updateBriefLayout\(\)/);
   assert.match(mainSource, /\(modal\.querySelector\("\[data-close-studio\]:not\(\[hidden\]\)"\) \|\| modal\)\.focus\(\{ preventScroll: true \}\)/);
   assert.match(mainSource, /studioReturnFocus\?\.focus\?\.\(\{ preventScroll: true \}\)/);
-  assert.match(mainSource, /const fullscreen = studio\.fullscreen && studio\.root\.classList\.contains\("is-open"\)/);
-  assert.match(stylesSource, /\.ps-root\.is-fullscreen \.ps-brief textarea \{ max-height: none; \}/);
+  assert.match(mainSource, /fitTextarea\(brief, minimumHeight, 2\)/);
+  assert.doesNotMatch(stylesSource, /\.ps-root\.is-fullscreen \.ps-brief textarea \{ max-height: none; \}/);
 });
 
 test("prompt refinement keeps actions above a vertically resizable editor", () => {

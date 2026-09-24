@@ -1,12 +1,12 @@
 import { createDesktopNotifications } from "./desktop_notifications.js";
 import { promptHighlightMarkup } from "./prompt_highlights.js";
 import { MODE_DEFAULT_DRAFTS, defaultModeDraftFor } from "./mode_defaults.js";
-import { generationButtonMarkup, sequenceNotificationOptions, aspectRatioMarkup, bindAspectRatio, splitMenuMarkup, setSplitMenuOpen, copyButtonMarkup } from "./writer_controls.js";
+import { fitTextarea, generationButtonMarkup, sequenceNotificationOptions, aspectRatioMarkup, bindAspectRatio, splitMenuMarkup, setSplitMenuOpen, copyButtonMarkup } from "./writer_controls.js";
 import { mediaVisualDescriptor } from "./media_visual.js";
 import { createSequenceWorkspace } from "./sequence_workspace.js";
 import { generateSequence, cancelSequence } from "./api/sequence.js";
 import { app } from "/scripts/app.js";
-import { cancel, clearMedia, diagnoseGGUFRuntime, disconnectApiProvider, freeComfyVram, generate, getApiProviderModels, getApiProviderPresets, getModels, getOllamaStatus, getStatus, getTargets, probeApiProvider, probeExternalServer, refine, removeMedia, reorderMedia, unloadModel, uploadMedia } from "./api/prompt_studio.js";
+import { cancel, clearMedia, diagnoseGGUFRuntime, disconnectApiProvider, freeComfyVram, generate, getApiProviderModels, getApiProviderPresets, getModels, getOllamaStatus, getStatus, getTargets, probeApiProvider, probeExternalServer, refine, removeMedia, reorderMedia, selectProjector, unloadModel, uploadMedia } from "./api/prompt_studio.js";
 import { comfyVramIsAlreadyEmpty, createSessionId, fileCountFromDataTransfer, insertReferenceAtCaret, isChoiceMenuInteraction, isRuntimeMenuInteraction, moveOntoTarget, replacementTargetForFileDrop, replaceEventListener, vramReleaseReachedTarget } from "./compat.js";
 import { generateModelSummaryMarkup, settingsMarkup } from "./settings.js";
 import { targetSelectionMarkup } from "./target_selection.js";
@@ -36,6 +36,8 @@ import {
   selectModelState,
 } from "./studio_state.js";
 import { autoVramControlMarkup, createVramHandoffCoordinator, installVramHandoff, isLocalOllamaHost, releaseComfyVramWhenIdle, unloadWriterModels } from "./vram_handoff.js";
+import { draftFile, draftFilename, parseDraft } from "./draft_files.js";
+import { referenceTextRemapper } from "./reference_labels.js";
 import { createLazyMediaTool } from "./media_tools.js";
 
 import { editMedia } from "./api/prompt_studio.js";
@@ -582,6 +584,39 @@ function notifyMediaCompatibility() {
   if(messages.length)showToast("Reference media",messages.join(" "),null,null,{dismissOnWorkspaceClick:true});
 }
 
+/**
+ * Adopt a new asset list, rewriting Single Reference tags so they keep pointing at
+ * the same media. Sequence keeps its own chunk-local labels and is left alone.
+ */
+function acceptMediaAssets(next) {
+  const previous = studio.assets;
+  const remap = referenceTextRemapper(previous, next);
+  studio.assets = next;
+  if (studio.mode !== "Reference") return;
+  const fields = ["[data-video-brief]", "[data-output]", "[data-refine-instruction]"];
+  for (const selector of fields) {
+    const field = studio.root.querySelector(selector);
+    if (field) field.value = remap(field.value);
+  }
+  studio.lastModelPrompt = remap(studio.lastModelPrompt);
+  for (const draft of Object.values(studio.modeDrafts || {})) {
+    draft.brief = remap(draft.brief);
+    draft.prompt = remap(draft.prompt);
+  }
+  if (studio.refineRestore) {
+    studio.refineRestore.prompt = remap(studio.refineRestore.prompt);
+    studio.refineRestore.lastModelPrompt = remap(studio.refineRestore.lastModelPrompt);
+  }
+  updateBriefLayout();
+  renderPromptHighlights();
+  syncModifiedState();
+  saveCurrentModeDraft();
+  studio.root.querySelector(".ps-editor-meta span:last-child").textContent = promptLengthMeta(studio.root.querySelector("[data-output]").value);
+  if (previous.length && next.length && previous.length !== next.length) {
+    showToast("References updated", "Reference labels follow the current media order. Check the tags in your brief and prompt.");
+  }
+}
+
 function renderMedia(mode) {
   mode = studio.sequence?.mediaMode(mode) ?? mode;
   studio.floatingMedia?.refresh();
@@ -706,7 +741,7 @@ function bindMediaActions(mode) {
       event.stopPropagation();
       try {
         const result = await removeMedia(studio.sessionId, button.dataset.removeAsset);
-        studio.assets = result.assets;
+        acceptMediaAssets(result.assets);
         renderMedia(studio.mode);
       } catch (error) {
         showToast(error.code || "Remove failed", error.message, error.details);
@@ -779,7 +814,7 @@ function bindMediaActions(mode) {
       const reorderedAssets = moveOntoTarget(modeAssets, sourceId, targetId);
       try {
         const result = await reorderMedia(studio.sessionId, mode, reorderedAssets.map((asset) => asset.id));
-        studio.assets = result.assets;
+        acceptMediaAssets(result.assets);
         renderMedia(studio.mode);
       } catch (error) {
         showToast(error.code || "Reorder failed", error.message, error.details);
@@ -820,7 +855,7 @@ async function uploadFiles(mode, files, replaceAssetId = null) {
   try {
     const result = await uploadMedia(studio.sessionId, mode, files, replaceAssetId);
     studio.sessionId = result.session_id;
-    studio.assets = replaceAssetId ? result.assets : [...studio.assets, ...result.assets];
+    acceptMediaAssets(replaceAssetId ? result.assets : [...studio.assets, ...result.assets]);
     hideToast();
     if (audioWasAdded(previousAssets, studio.assets)) {
       showToast(
@@ -974,9 +1009,7 @@ async function clearCurrentMedia({ notify = true } = {}) {
   if (!studio || studio.requestBusy) return false;
   try {
     const result = await clearMedia(studio.sessionId, studio.sequence?.mediaMode(studio.mode) ?? studio.mode);
-    studio.assets = result.assets;
-
-
+    acceptMediaAssets(result.assets);
     renderMedia(studio.mode);
     if (notify) showToast("Media cleared", "The temporary session files were removed.");
     return true;
@@ -1016,16 +1049,80 @@ function stashCurrentModeDraft() {
 function updateBriefLayout() {
   if (!studio) return;
   const brief = currentBriefTextarea();
-  const fullscreen = studio.fullscreen && studio.root.classList.contains("is-open");
   const compactHeight = window.innerHeight <= 800;
   const largeCanvas = window.innerWidth >= 3000 && window.innerHeight >= 1600;
   const minimumHeight = compactHeight ? 80 : largeCanvas ? 125 : 105;
-  const maximumHeight = compactHeight ? 130 : largeCanvas ? 230 : 190;
   const briefLimit = modeBriefLimit(studio.mode);
-  brief.closest(".ps-brief").querySelector(".ps-char-count").textContent = `${brief.value.length.toLocaleString()} / ${briefLimit.toLocaleString()}`;
-  brief.style.height = "auto";
-  brief.style.height = `${fullscreen ? Math.max(minimumHeight, brief.scrollHeight) : Math.min(maximumHeight, Math.max(minimumHeight, brief.scrollHeight))}px`;
-  brief.style.overflowY = !fullscreen && brief.scrollHeight > maximumHeight ? "auto" : "hidden";
+  brief.closest(".ps-brief").querySelector(".ps-char-count").textContent = briefLimit ? `${brief.value.length.toLocaleString()} / ${briefLimit.toLocaleString()}` : `${brief.value.length.toLocaleString()} characters`;
+  // The brief grows with its content; the panel scrolls instead of the textarea.
+  fitTextarea(brief, minimumHeight, 2);
+}
+
+function saveTextDraft() {
+  if (!studio) return;
+  try {
+    const kind = studio.sequence?.active ? "sequence" : "single";
+    const content = kind === "sequence"
+      ? studio.sequence.state
+      : { mode: studio.mode, aspectRatio: studio.aspectRatio, duration: studio.durationSeconds, ...currentDraftFields(),
+          instructions: null };
+    const media = studio.assets.filter(a => a.mode === "Reference").map(a => `${a.reference || a.filename}: ${a.filename}`);
+    const value = draftFile(kind, content, media);
+    const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], { type: "application/json" }));
+    const link = document.createElement("a");
+    link.href = url; link.download = draftFilename(kind); link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    showToast("Draft saved", `${kind === "sequence" ? "Sequence" : "Single"} text draft downloaded. Media is not included.`);
+  } catch (error) {
+    showToast("Save draft", error.message);
+  }
+}
+
+async function loadTextDraft() {
+  if (!studio || studio.requestBusy) return;
+  const input = document.createElement("input");
+  input.type = "file"; input.accept = "application/json,.json";
+  input.onchange = async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    let draft;
+    try {
+      draft = parseDraft(await file.text());
+    } catch (error) {
+      showToast("Load draft", error.message);
+      return;
+    }
+    setGenerationState("busy");
+    let cleared = false;
+    try {
+      cleared = await clearCurrentMedia({ notify: false });
+    } finally {
+      if (!cleared) {
+        setGenerationState("idle");
+        showToast("Load draft", "The current media could not be cleared.");
+        return;
+      }
+    }
+    if (draft.kind === "sequence") {
+      studio.sequence.state.brief = draft.content.brief;
+      studio.sequence.loadDraft(draft.content);
+    } else {
+      studio.modeDrafts[draft.content.mode] = { brief: draft.content.brief, prompt: draft.content.prompt };
+      selectMode(draft.content.mode);
+      studio.aspectRatio = draft.content.aspectRatio;
+      studio.durationSeconds = draft.content.duration;
+      syncAspectRatioControls(studio.aspectRatio);
+      studio.root.querySelector("[data-duration-slider]").value = String(studio.durationSeconds);
+      studio.root.querySelector("[data-duration-slider]").style.setProperty("--ps-range", `${(studio.durationSeconds - 1) / 19 * 100}%`);
+      studio.root.querySelector("[data-duration-label]").textContent = `${studio.durationSeconds} seconds`;
+      restoreModeDraft(studio.mode);
+      saveUserPreferences(localStorage, studio);
+    }
+    setGenerationState("idle");
+    const media = draft.media.length ? ` Reattach: ${draft.media.join(", ")}.` : "";
+    showToast("Draft loaded", `Media was cleared.${media}`);
+  };
+  input.click();
 }
 
 function updateMusicLyricsCount() {
@@ -1211,7 +1308,7 @@ function setGenerationState(state, label, detail) {
   const wasBusy = studio.requestBusy;
   studio.requestBusy = busy;
   syncModeAvailability();
-  studio.root.querySelectorAll("[data-clear-media], [data-clear-menu-toggle], [data-actions-menu-toggle], [data-clear-action]").forEach((control) => { control.disabled = busy; });
+  studio.root.querySelectorAll("[data-clear-media], [data-clear-menu-toggle], [data-actions-menu-toggle], [data-clear-action], [data-save-draft], [data-load-draft]").forEach((control) => { control.disabled = busy; });
   if (busy) setClearMenuOpen(false);
   studio.root.querySelector("[data-lyrics-refine-toggle]").disabled = busy;
   const comfyMemory = studio.root.querySelector("[data-comfy-memory-action]");
@@ -2072,7 +2169,7 @@ function syncProviderSettings() {
     panel.hidden = panel.dataset.providerPanel !== provider;
   });
   const runtimeSettings = studio.root.querySelector(".ps-runtime-settings");
-  runtimeSettings.hidden = provider !== "direct";
+  runtimeSettings.hidden = !["direct", "ollama"].includes(provider);
 }
 
 function directModelRuntimeSuffix(model) {
@@ -2096,6 +2193,26 @@ function renderDirectModelRuntimeUpdate(model) {
     ${renderDirectRuntimeCommand(command, "update")}
     ${command ? "" : `<div class="ps-direct-runtime-links"><a href="${INSTALLATION_GUIDE_URL}" target="_blank" rel="noopener noreferrer">Installation guide ↗</a><a href="${TROUBLESHOOTING_GUIDE_URL}" target="_blank" rel="noopener noreferrer">Troubleshooting guide ↗</a></div>`}
   </section>`;
+}
+
+// Only offered when several compatible projectors share the model folder; a single
+// match is paired automatically and an unresolved model stays text-only.
+function renderDirectProjector(model) {
+  const candidates = model?.projector_candidates || [];
+  if (!model || candidates.length < 2) return "";
+  const active = model.selected_projector || model.projector || "";
+  return `<label class="ps-projector-control"><span>Vision projector</span><select data-direct-projector-select>
+    ${candidates.map((path) => `<option value="${escapeHtml(path)}" ${path === active ? "selected" : ""}>${escapeHtml(path.split(/[\\/]/).pop())}</option>`).join("")}
+  </select><small>Remembered for this model and checked again before generation.</small></label>`;
+}
+
+async function selectDirectProjector(modelId, projector) {
+  const response = await selectProjector(modelId, projector);
+  studio.models = studio.models.map((item) => (item.id === response.model.id ? response.model : item));
+  studio.selectedModel = studio.selectedModel?.id === response.model.id ? response.model : studio.selectedModel;
+  renderInferenceSettings();
+  syncActiveModelSummary();
+  showToast("Vision projector", "The selected projector will be used for this model.");
 }
 
 function renderInferenceSettings() {
@@ -2134,6 +2251,7 @@ function renderInferenceSettings() {
     directStatus.innerHTML = "";
   }
   studio.root.querySelector("[data-model-scan-slot]").innerHTML = renderModelScanDetails();
+  studio.root.querySelector("[data-direct-projector]").innerHTML = renderDirectProjector(directModel);
   studio.root.querySelector("[data-verified-models-slot]").innerHTML = studio.modelSetup.length ? renderOtherModelsTrigger() : "";
   studio.root.querySelector("[data-external-provider-control]").innerHTML = renderExternalServerControl();
   studio.root.querySelector("[data-ollama-provider-control]").innerHTML = renderOllamaProviderControl(ollamaHostDraft);
@@ -3172,6 +3290,9 @@ function createStudio() {
                   ${supportsWorkflowMedia() ? `<button type="button" data-open-floating-media data-media-panel-action disabled title="Add media first"><strong>Media panel</strong><small>ADD TO WORKFLOW</small></button>` : ""}
                   <button type="button" data-open-composer disabled><strong>Compose</strong><small>Create collage</small></button>
                   <hr data-compose-separator>
+                  <button type="button" data-clear-action data-save-draft><strong>Save text draft</strong><small>JSON backup</small></button>
+                  <button type="button" data-clear-action data-load-draft><strong>Load text draft</strong><small>Replaces this draft</small></button>
+                  <hr data-draft-separator>
                   <button type="button" data-clear-action data-clear-media><strong>Clear media</strong><small>Keep prompts</small></button>
                   <button type="button" data-clear-action data-clear-prompts><strong>Clear prompts</strong><small>Keep media</small></button>
                   <button class="is-destructive" type="button" data-clear-action data-clear-all><strong>Clear all</strong><small>Media and prompts</small></button>
@@ -3343,9 +3464,16 @@ function createStudio() {
         showToast("Picture added", result.assets[0].reference);
         renderMedia(studio.mode);
       },
+      onAddAudio: async (blob, filename) => {
+        const file = new File([blob], filename, { type: "audio/wav" });
+        const result = await uploadMedia(studio.sessionId, "Reference", [file]);
+        studio.assets.push(...result.assets);
+        showToast("Audio added", result.assets[0].reference);
+        renderMedia(studio.mode);
+      },
       request: (assetId, options) => editMedia(studio.sessionId, assetId, options),
       onSaved: (result) => {
-        studio.assets = result.assets;
+        acceptMediaAssets(result.assets);
         showToast("Media applied", "Crop and trim applied. The original source is preserved.");
         renderMedia(studio.mode);
       },
@@ -3413,6 +3541,14 @@ function createStudio() {
   root.querySelector("[data-open-settings-header]").addEventListener("click", () => setSettingsOpen(true));
   root.querySelector("[data-open-settings]").addEventListener("click", () => setSettingsOpen(true));
   root.querySelector("[data-close-settings]").addEventListener("click", () => setSettingsOpen(false));
+  root.querySelector("[data-save-draft]").addEventListener("click", () => {
+    setClearMenuOpen(false);
+    saveTextDraft();
+  });
+  root.querySelector("[data-load-draft]").addEventListener("click", () => {
+    setClearMenuOpen(false);
+    loadTextDraft();
+  });
   root.querySelector("[data-clear-media]").addEventListener("click", () => {
     setClearMenuOpen(false);
     clearCurrentMedia();
@@ -3510,6 +3646,16 @@ function createStudio() {
   });
   root.querySelector("[data-installed-model]").addEventListener("change", (event) => {
     selectModel(localModels().find((model) => model.id === event.target.value));
+  });
+  root.querySelector("[data-direct-projector]").addEventListener("change", async (event) => {
+    const select = event.target.closest("[data-direct-projector-select]");
+    if (!select) return;
+    try {
+      await selectDirectProjector(studio.selectedModel?.id || directModelForSettings()?.id, select.value);
+    } catch (error) {
+      showToast("Vision projector", error.message);
+      renderInferenceSettings();
+    }
   });
   root.querySelector("[data-provider-detail]").addEventListener("click", (event) => {
     const ollamaHostSummary = event.target.closest("[data-ollama-host-settings] summary");

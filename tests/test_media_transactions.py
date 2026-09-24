@@ -129,7 +129,21 @@ class MediaTransactionTests(unittest.TestCase):
             self.assertEqual(result["type"], "audio")
             self.assertEqual(result["reference"], "<Audio 1>")
             self.assertEqual([asset["id"] for asset in store.sessions["session"]], ["first", "replace-me", "third"])
-            self.assertEqual([asset["reference"] for asset in store.sessions["session"]], ["<Picture 1>", "<Audio 1>", "<Picture 3>"])
+            self.assertEqual([asset["reference"] for asset in store.sessions["session"]], ["<Picture 1>", "<Audio 1>", "<Picture 2>"])
+
+    def test_reference_delete_and_reorder_match_active_input_positions(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            assets = [self.asset(root, f"p{i}", "Reference", "image", f"<Picture {i}>") for i in range(1, 5)]
+            store = media.MediaStore()
+            store.sessions["session"] = assets
+            store.remove("session", "p1")
+            store.remove("session", "p2")
+            self.assertEqual([(a["id"], a["reference"]) for a in store.manifest("session", "Reference")["assets"]],
+                             [("p3", "<Picture 1>"), ("p4", "<Picture 2>")])
+            store.reorder("session", "Reference", ["p4", "p3"])
+            self.assertEqual([(a["id"], a["reference"]) for a in store.manifest("session", "Reference")["assets"]],
+                             [("p4", "<Picture 1>"), ("p3", "<Picture 2>")])
 
     def test_failed_resample_preserves_old_derived_media_and_revision(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -15,7 +15,7 @@
 .ps-image-controls { grid-template-columns: 1fr; }
 .ps-music-inputs { padding-top: calc(1px * var(--ps-interface-scale)); }
 .ps-music-inputs .ps-brief:first-of-type { margin-top: 20px; }
-.ps-music-inputs .ps-brief textarea { min-height: 150px; max-height: 240px; }
+.ps-music-inputs .ps-brief textarea { min-height: 150px; }
 .ps-music-inputs .ps-lyrics { margin-top: 20px; }
 .ps-music-inputs .ps-lyrics textarea { min-height: 190px; max-height: 330px; }
 .ps-lyrics-refine { margin-top: 8px; }

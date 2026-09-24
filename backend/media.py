@@ -194,10 +194,7 @@ class MediaStore:
         if base.get("status") != "needs_edit":
             validate_reference_durations(assets, base)
         assets.append(base)
-        if mode == "Reference":
-            self._assign_reference_identity(assets, base)
-        else:
-            self._renumber(assets, mode)
+        self._renumber(assets, mode)
         return self.public(base)
 
     def _prepare_asset(
@@ -294,12 +291,7 @@ class MediaStore:
         replacement["content_revision"] = int(old_asset.get("content_revision", 0)) + 1
         replacement["_source_revision"] = replacement["content_revision"]
         assets[index] = replacement
-        if old_asset["mode"] == "Reference" and replacement["type"] == old_asset["type"]:
-            replacement["reference"] = old_asset.get("reference")
-            replacement["_reference_reservation"] = old_asset.get("_reference_reservation")
-            self._assign_reference_identity(assets, replacement)
-        else:
-            self._renumber(assets, old_asset["mode"])
+        self._renumber(assets, old_asset["mode"])
         shutil.rmtree(Path(old_asset["_original_path"]).parent, ignore_errors=True)
         return self.public(replacement)
 
@@ -475,30 +467,7 @@ class MediaStore:
         }
 
     @staticmethod
-    def _assign_reference_identity(assets: list[dict[str, Any]], asset: dict[str, Any]) -> None:
-        if asset.get("status") == "needs_edit":
-            asset["_reference_reservation"] = asset.get("reference") or asset.get("_reference_reservation")
-            asset["reference"] = None
-            return
-        if asset.get("reference"):
-            return
-        name = {"image": "Picture", "video": "Video", "audio": "Audio"}[asset["type"]]
-        used = {item.get("reference") or item.get("_reference_reservation") for item in assets if item is not asset and item["mode"] == "Reference"}
-        reserved = asset.get("_reference_reservation")
-        if reserved and reserved not in used:
-            asset["reference"] = reserved
-            return
-        number = 1
-        while f"<{name} {number}>" in used:
-            number += 1
-        asset["reference"] = f"<{name} {number}>"
-
-    @staticmethod
     def _renumber(assets: list[dict[str, Any]], mode: str) -> None:
-        if mode == "Reference":
-            for asset in [item for item in assets if item["mode"] == mode]:
-                MediaStore._assign_reference_identity(assets, asset)
-            return
         per_type = {"image": 0, "video": 0, "audio": 0}
         for asset in [item for item in assets if item["mode"] == mode]:
             if asset.get("status") == "needs_edit":

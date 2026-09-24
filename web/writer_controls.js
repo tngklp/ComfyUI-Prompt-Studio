@@ -52,6 +52,17 @@ export function copyButtonMarkup(icon, attributes, label = "", iconOnly = false)
   return `<button class="${iconOnly ? "ps-icon-button" : "ps-secondary-button"}" type="button" ${attributes}>${icon("copy", 15)}${label ? ` ${label}` : ""}</button>`;
 }
 
+export function fitTextarea(editor, minimumHeight, borderHeight = 0) {
+  // Measuring a collapsed textarea can clamp the surrounding panel's scroll offset.
+  const scroll = [];
+  for (let parent = editor.parentElement; parent; parent = parent.parentElement) {
+    scroll.push([parent, parent.scrollTop]);
+  }
+  editor.style.height = "auto";
+  editor.style.height = `${Math.max(minimumHeight, editor.scrollHeight + borderHeight)}px`;
+  for (const [parent, top] of scroll) parent.scrollTop = top;
+}
+
 // Option labels and actions are trusted constants supplied by Prompt Studio views.
 export function formatChoiceMarkup(label, options, selected) {
   return `<div class="ps-sequence-copy-choice" role="group" aria-label="${label}">${options.map(([action,text])=>`<button type="button" data-seq-action="${action}" aria-pressed="${action===selected}">${text}</button>`).join("")}</div>`;

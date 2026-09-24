@@ -30,6 +30,7 @@ test("upload completion renders the current mode, including replacement", async 
     const studio = { mode: "Reference", assets: [], sessionId: "session" };
     const api = controller(["uploadFiles"], {
       studio, uploadMedia: () => pending.promise,
+      acceptMediaAssets: assets => { studio.assets = assets; },
       showToast() {}, hideToast() {}, audioWasAdded: () => false,
       renderMedia: (mode) => renders.push(mode),
     });

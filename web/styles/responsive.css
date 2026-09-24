@@ -51,7 +51,7 @@
   .ps-field > button, .ps-duration-field > div { height: calc(32px * var(--ps-interface-scale)); }
   .ps-brief { margin-top: 9px; }
   .ps-brief > span { margin-bottom: 4px; }
-  .ps-brief textarea { min-height: 80px; max-height: 130px; padding-top: calc(8px * var(--ps-interface-scale)); font-size: var(--ps-font-control); }
+  .ps-brief textarea { min-height: 80px; padding-top: calc(8px * var(--ps-interface-scale)); font-size: var(--ps-font-control); }
   .ps-model-picker { margin-top: 9px; }
   .ps-model-row { min-height: calc(43px * var(--ps-interface-scale)); }
   .ps-runtime-settings, .ps-system-settings { margin-top: 6px; }
@@ -175,8 +175,8 @@
   .ps-brief { margin-top: 17px; }
   .ps-brief > span { margin-bottom: 8px; }
   .ps-brief > span small { font-size: var(--ps-font-body-sm); }
-  .ps-brief textarea { min-height: 125px; max-height: 230px; padding: calc(12px * var(--ps-interface-scale)) calc(15px * var(--ps-interface-scale)) calc(27px * var(--ps-interface-scale)); font-size: var(--ps-font-subheading); }
-  .ps-char-count { right: 13px; bottom: 9px; font-size: var(--ps-font-control-sm); }
+  .ps-brief textarea { min-height: 125px; padding: calc(12px * var(--ps-interface-scale)) calc(15px * var(--ps-interface-scale)) calc(12px * var(--ps-interface-scale)); font-size: var(--ps-font-subheading); }
+  .ps-char-count { font-size: var(--ps-font-control-sm); }
   .ps-model-picker { margin-top: 17px; }
   .ps-model-row { min-height: calc(60px * var(--ps-interface-scale)); grid-template-columns: 40px minmax(0,1fr) auto 34px; padding: calc(8px * var(--ps-interface-scale)) calc(10px * var(--ps-interface-scale)) calc(8px * var(--ps-interface-scale)) calc(12px * var(--ps-interface-scale)); }
   .ps-model-icon { width: calc(34px * var(--ps-interface-scale)); height: calc(34px * var(--ps-interface-scale)); font-size: var(--ps-font-control-lg); }

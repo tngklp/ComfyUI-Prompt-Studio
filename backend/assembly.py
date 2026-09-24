@@ -357,6 +357,8 @@ def assemble_refinement(
     duration, aspect_ratio, creative_brief = _validated_generation_context(context_source, mode)
     _validate_reference_tags(creative_brief, manifest, mode, "Creative Brief")
     _validate_reference_tags(instruction, manifest, mode, "Revision instruction")
+    if mode == "Reference":
+        _validate_reference_tags(current_prompt, manifest, mode, "Current prompt")
     references = "\n".join(_media_line(asset) for asset in manifest["assets"]) or "None"
     guide = guide_for_mode(mode)
     user_content = (

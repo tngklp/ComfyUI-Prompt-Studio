@@ -127,7 +127,7 @@ class DirectMusicRuntimeTests(unittest.TestCase):
             self.assertNotIn("chat_handler", text_model.kwargs)
             self.assertIsNone(backend.chat_handler)
             self.assertEqual(_FakeVisionHandler.instances, [])
-            self.assertEqual(backend.runtime_signature[-1], "text")
+            self.assertEqual(backend.runtime_signature[-2], "text")
 
             backend.load(model_info(), runtime_plan(), text_only=False)
             multimodal_model = _FakeModel.instances[-1]
@@ -135,8 +135,21 @@ class DirectMusicRuntimeTests(unittest.TestCase):
             self.assertIs(multimodal_model.kwargs["chat_handler"], backend.chat_handler)
             self.assertEqual(len(_FakeVisionHandler.instances), 1)
             self.assertEqual(backend.chat_handler.kwargs["clip_model_path"], "mmproj.gguf")
-            self.assertEqual(backend.runtime_signature[-1], "multimodal")
+            self.assertEqual(backend.runtime_signature[-2], "multimodal")
             self.assertEqual(set(_FakeMTMD.callbacks), {"mtmd", "helper"})
+
+    def test_changing_only_projector_reloads_multimodal_runtime(self):
+        backend = GGUFBackend()
+        with patch.dict(sys.modules, self.fake_modules()):
+            info = model_info()
+            backend.load(info, runtime_plan())
+            old_model = backend.model
+            backend.load(info, runtime_plan())
+            self.assertIs(backend.model, old_model)
+            backend.load({**info, "projector": "other-mmproj.gguf"}, runtime_plan())
+            self.assertIsNot(backend.model, old_model)
+            self.assertTrue(old_model.closed)
+            self.assertEqual(backend.chat_handler.kwargs["clip_model_path"], "other-mmproj.gguf")
 
     def test_qwen_preflight_reuses_cpu_vocab_only_tokenizer(self):
         instances = []

@@ -1,5 +1,15 @@
 # Standalone changelog
 
+## Unreleased
+
+- Open Prompt Studio as an installed browser app with its own window and taskbar icon. Run `start.bat` first; the installed app needs the local server running at the same address.
+- Save and load text drafts for Single and Sequence from **Actions**.
+- Extract and download audio from a selected video interval.
+- Set a manual generation budget for Ollama; Direct keeps its own separate budget.
+- Keep Single Reference labels in sync after deleting or reordering media.
+- Write longer Creative Briefs without a character limit or scroll jumps.
+- Choose a vision projector manually when several compatible ones share a model folder.
+
 ## 1.1.0 - 2026-09-24
 
 - Rebranded to **Prompt Studio**. The package, launch scripts, environment variables, and interface now use the Prompt Studio name.

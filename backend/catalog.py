@@ -150,6 +150,7 @@ def _model_candidate(
     *,
     runtime_available: bool,
     runtime_version: str | None,
+    selected_projector: Path | None = None,
 ) -> tuple[dict[str, Any], str | None]:
     model_id = str(model_path.resolve())
     metadata, metadata_error = _metadata_result(model_path)
@@ -185,7 +186,9 @@ def _model_candidate(
         setup_message = f"The installed llama-cpp-python {runtime_version or 'version'} does not support the {adapter.id} Direct adapter."
 
     if metadata:
-        projector, vision_status, pairing_message = _pair_projector(metadata, sibling_projectors)
+        projector, vision_status, pairing_message = _pair_projector(
+            metadata, [selected_projector] if selected_projector else sibling_projectors
+        )
     else:
         projector, vision_status, pairing_message = None, "incompatible", "Vision is disabled because the model metadata could not be read."
     pairing_issue = f"{model_path}: {pairing_message}" if pairing_message else None
@@ -286,6 +289,14 @@ def _model_candidate(
             "reasoning_effort": bool(template_controls["reasoning_effort"]),
             "vision_projector": projector is not None,
         },
+        "selected_projector": str(selected_projector) if selected_projector else None,
+        "projector_candidates": [
+            str(path.resolve())
+            for path in sibling_projectors
+            if metadata
+            and _metadata_result(path)[0]
+            and projector_is_compatible(adapter, metadata, _metadata_result(path)[0])
+        ],
         "projector_metadata": {
             key: value
             for key, value in ((_metadata_result(projector)[0] if projector else {}) or {}).items()
@@ -431,3 +442,25 @@ def find_model(model_id: str) -> dict[str, Any] | None:
         _runtime_version() if runtime_available else None,
     )
     return copy.deepcopy(candidate)
+
+
+def resolve_projector(model_id: str, projector_path: str) -> dict[str, Any] | None:
+    """Explicit selection only among current, compatible siblings of a registered model."""
+    model = find_model(model_id)
+    if not model or not isinstance(projector_path, str):
+        return None
+    try:
+        selected = Path(projector_path).resolve(strict=True)
+    except (OSError, RuntimeError, ValueError):
+        return None
+    if str(selected) not in model["projector_candidates"]:
+        return None
+    runtime_available = importlib.util.find_spec("llama_cpp") is not None
+    candidate, _issue = _model_candidate(
+        Path(model["path"]),
+        [Path(path) for path in model["projector_candidates"]],
+        runtime_available=runtime_available,
+        runtime_version=_runtime_version() if runtime_available else None,
+        selected_projector=selected,
+    )
+    return candidate

@@ -30,6 +30,12 @@ Use the fullscreen button in the Prompt Studio header when you want the workspac
 
 The sun/moon button switches between Dark and Light. The **Aa** button adjusts **Interface Size** from 100% to 125%. These preferences are saved and affect only Prompt Studio, not ComfyUI or exported media.
 
+### Save and load text drafts
+
+Use **Actions > Save text draft** or **Load text draft** to save or open a JSON file for Single or Sequence. Drafts include the brief, prompts, writing instructions, duration and aspect ratio. Sequence also keeps chunk directions, output format and copy formatting. File names include the draft type and local date and time.
+
+Media files, model settings and credentials are not included. Loading replaces the target draft and clears its current media. Reattach the original files and check their labels before generating. File names and Sequence assignments are listed in the toast as a reminder. This is a text backup, not a complete project archive.
+
 ## Modes
 
 | Mode | Input | How the media is used |
@@ -120,7 +126,7 @@ Music 3 keeps its own saved Music Brief, Lyrics, and edited caption. Its Caption
 
 Write what should happen in ordinary language. You do not need to reproduce the official prompt format. Prompt Studio builds that structure for you.
 
-Video Creative Briefs can contain up to 8,000 characters. Music Briefs keep their separate 2,000-character limit.
+Single and Sequence Creative Briefs have no character limit. The full request must still fit the model context, including guides, media, and room for the answer. Music Briefs keep their separate 2,000-character limit.
 
 A useful brief usually says:
 
@@ -181,6 +187,8 @@ Local providers and remote API providers use the prepared contact sheet instead 
 ## Media Editor
 
 Open a picture or video card to edit it. Crop pictures, trim or crop video, and inspect the applied result in **What the model sees**. For video, you can also download the current frame or add it as a new Picture.
+
+For a video with audio, select 2-15 seconds and use the **Extract audio** icon next to **Add current frame as Picture**. Prompt Studio downloads a WAV file and adds it as an Audio reference, keeping the video unchanged. This uses the current trim selection without requiring Apply. Connect the WAV separately in your workflow. Prompt Studio does not analyze its sound; describe its intended role in the Brief.
 
 Edits stay in the editor until you select **Apply**. **Reset edits** returns the draft to the original media; Apply saves that reset. Closing with unapplied changes lets you keep editing or discard the draft. The original file is preserved.
 

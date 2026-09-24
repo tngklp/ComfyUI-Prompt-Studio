@@ -34,7 +34,31 @@ class StandaloneHostTest(unittest.IsolatedAsyncioTestCase):
     async def test_shell_and_health(self) -> None:
         response = await self.client.get("/")
         self.assertEqual(response.status, 200)
-        self.assertIn("/scripts/boot.js", await response.text())
+        html = await response.text()
+        self.assertIn("/scripts/boot.js", html)
+        self.assertIn('rel="manifest" href="manifest.json"', html)
+        self.assertIn('rel="icon" href="./assets/prompt-studio-launcher.svg"', html)
+
+        response = await self.client.get("/manifest.json")
+        self.assertEqual(response.status, 200)
+        payload = await response.json()
+        self.assertEqual(payload["name"], "Prompt Studio")
+        self.assertEqual(payload["display"], "standalone")
+        self.assertEqual(payload["start_url"], "./")
+        png_sizes = set()
+        for icon in payload["icons"]:
+            response = await self.client.get(icon["src"])
+            self.assertEqual(response.status, 200, icon["src"])
+            self.assertEqual(response.content_type, icon["type"])
+            data = await response.read()
+            if icon["type"] == "image/png":
+                with Image.open(io.BytesIO(data)) as image:
+                    size = tuple(int(value) for value in icon["sizes"].split("x"))
+                    self.assertEqual(image.size, size)
+                png_sizes.add(size)
+            else:
+                self.assertIn(b"<svg", data)
+        self.assertEqual(png_sizes, {(192, 192), (512, 512)})
 
         response = await self.client.get("/healthz")
         payload = await response.json()

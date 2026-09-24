@@ -41,6 +41,21 @@ over the same folder.
 The Prompt Studio opens directly in a full-window browser view. Close the browser tab or
 window normally.
 
+### Optional: install as a browser app
+
+This is optional. The normal way to use Prompt Studio is to run `start.bat` and work in
+the browser tab it opens; no browser app installation is required.
+
+In a Chromium-based browser that supports installing web apps, use the browser's
+install option to open Prompt Studio in its own window and pin it to the taskbar.
+This does not start the Python server: run `start.bat` first and keep its console
+open while using Prompt Studio.
+
+The installed app remembers the server address and port (normally
+`http://127.0.0.1:8766/`). If that port is occupied, Standalone opens on another port;
+the installed shortcut still points to the old address. Free the usual port and
+restart Standalone, or use the new browser URL printed in the console.
+
 ### Linux
 
 Standalone also runs on Linux using the same Python backend and browser-based interface.

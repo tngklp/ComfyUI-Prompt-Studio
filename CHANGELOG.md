@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Features
+
+- **Text drafts.** **Actions > Save text draft** / **Load text draft** writes or opens a JSON backup of the current workspace for Single and Sequence. Drafts include the brief, prompts, writing instructions, duration and aspect ratio; Sequence also keeps chunk directions, output format and copy formatting. Media, model settings and credentials are not included, and loading replaces the target draft and clears its media.
+- **Extract audio from video.** In the Media Editor, select 2-15 seconds and use the Extract audio button to download a WAV and add it as an Audio reference, keeping the video unchanged.
+- **Ollama generation budget.** Settings now exposes an output token limit for Ollama, separate from the Direct GGUF budget.
+- **Manual vision projector.** When several metadata-compatible projectors share a model folder, **Vision projector** in Direct settings picks one explicitly. The choice is remembered per model and re-checked before generation.
+- **No Creative Brief character limit.** Single and Sequence briefs now grow with their content and the panel scrolls instead of the textarea; the full request must still fit the model context.
+
+### Fixed
+
+- Single Reference labels now follow the current order of ready media, so deleting or reordering updates the labels and the matching tags in the Brief, prompt and Refine text. Tags that no longer resolve become `<Missing Picture 1>` and are rejected before Generate or Refine.
+- Changing only the vision projector now reloads the multimodal runtime instead of reusing the previous projector.
+
 ## 1.0.0 - 2026-09-24
 
 ### Features

@@ -218,19 +218,17 @@ test("the pill matches the input content width instead of overflowing it", () =>
   assert.match(css, /\.ps-active-model \{[^}]*width: 100%/);
 });
 
-test("the input scroller hides its scrollbar like the other panels", () => {
-  // The scroller exists so the pill can stay pinned, which introduced a real
-  // 16px scrollbar regression. It must be listed alongside the panels in both
-  // the Firefox and WebKit scrollbar-suppression rules.
+test("workspace panels use a visible thin scrollbar", () => {
+  // Scrollbars were fully hidden, which made the scrolled panels look frozen
+  // once the Creative Brief grew taller than its container. They are now thin
+  // and themed instead, and the input scroller must be listed alongside them.
   const foundation = styleModulesForLayout.foundation;
-  const suppression = foundation.match(/\.ps-input-panel,[^}]*\}/)?.[0];
-  assert.ok(suppression, "the scrollbar suppression list must exist");
-  assert.match(suppression, /\.ps-input-scroll/);
-  assert.match(suppression, /scrollbar-width: none/);
-  const webkit = foundation.match(/\.ps-input-panel::-webkit-scrollbar,[^}]*\}/)?.[0];
-  assert.ok(webkit, "the WebKit scrollbar list must exist");
-  assert.match(webkit, /\.ps-input-scroll::-webkit-scrollbar/);
-  assert.match(webkit, /display: none/);
+  const rule = foundation.match(/\.ps-input-panel,[^}]*\}/)?.[0];
+  assert.ok(rule, "the scrollbar styling list must exist");
+  assert.match(rule, /\.ps-input-scroll/);
+  assert.match(rule, /scrollbar-width: thin/);
+  assert.doesNotMatch(foundation, /scrollbar-width: none/);
+  assert.doesNotMatch(foundation, /::-webkit-scrollbar[^}]*display: none/);
 });
 
 test("settings controls sit below the brief in both panels", () => {
