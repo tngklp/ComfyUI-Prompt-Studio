@@ -10,3 +10,11 @@ standalone/models/
 standalone/data/settings.json
 standalone/data/logs/
 standalone/data/tmp/
+
+# Test and runtime scratch. The standalone host shim defaults its temp directory to
+# <cwd>/data/tmp and backend/media.py writes "derived_<uuid>/" beside each asset it
+# processes, so running either suite from the repository root leaves empty
+# directories behind. They are not tracked and are always safe to delete.
+/data/
+/tmp/
+/derived_*/
