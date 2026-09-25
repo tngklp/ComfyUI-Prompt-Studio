@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.1 - 2026-09-25
+
+### Fixed
+
+- **Anima no longer adds a `safe` tag unless you choose a rating.** The guide and system prompt both hard-coded a `safe` default, so selecting **None** still produced `safe` in the output.
+- **A selected character keeps its series.** The output could contain `hatsune miku` without `vocaloid`. Character and series are now specified as one inseparable pair in the guide, the system prompt and the closing contract, and the audit reports and repairs a dropped series.
+- **Anima tag order.** Character and series read as one group sitting before the artist tags, rather than as two separate groups that invited the series to drift to the end of the prompt.
+- **Longer, more detailed Anima prompts.** The system prompt asks for the brief to be covered thoroughly instead of saying not to pad, and the audit forces a repair when the output contradicts the selected rating or style - a mismatch the user cannot see for themselves.
+
 ## 1.1.0 - 2026-09-25
 
 ### Features

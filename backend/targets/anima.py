@@ -101,11 +101,15 @@ def final_contract(mode: str, task_text: str) -> str:
         return (
             "Final grounding check: describe a single still image for Anima, using the prompt style "
             "and content rating stated above. If you write tags, group them as quality/meta/year/safety "
-            "first, then the subject count, then character, series, artist and general tags, and write "
-            "them in lowercase with spaces instead of underscores. Prefix every artist tag with @. Name "
-            "each character and then describe their basic appearance. Add nothing the brief does not "
-            "support, and invent no artist, series, character or visible text. Return only the complete "
-            "final image prompt, with no commentary and no JSON."
+            "first, then the subject count, then character and series as one pair, then artist, then "
+            "general tags, and write them in lowercase with spaces instead of underscores. Every "
+            "character must be followed by the work it comes from, e.g. `hatsune miku, vocaloid`; never "
+            "write a character name on its own. Include a safety tag only if a rating was stated above. "
+            "Prefix every artist tag with @. Name each character and then describe their basic "
+            "appearance, and use the general-tag group to describe appearance, clothing, pose, "
+            "expression, props, framing, background and lighting thoroughly enough to cover the whole "
+            "brief. Add nothing the brief does not support, and invent no artist, series, character or "
+            "visible text. Return only the complete final image prompt, with no commentary and no JSON."
         )
     raise ValueError(f"{mode!r} is not an Anima mode.")
 
@@ -123,6 +127,7 @@ def audit_prompt(
     prompt: str,
     mode: str = "AnimaTextToImage",
     mode_options: dict[str, Any] | None = None,
+    selected_characters: list[dict[str, Any]] | None = None,
     **_ignored: Any,
 ) -> dict[str, Any]:
     """Audit an Anima prompt for tag discipline and for contract leakage.
@@ -131,6 +136,9 @@ def audit_prompt(
     prompt against what was actually asked for: a prompt that omits the safety tag
     is correct when the rating is "none", and a prose prompt is correct when the
     style is natural language. Without this the audit would contradict the user.
+
+    ``selected_characters`` are the picker's resolved entries, so the audit can report
+    a character whose series tag the model dropped.
     """
     text = prompt or ""
     options = mode_options or {}
@@ -161,6 +169,24 @@ def audit_prompt(
     tag_like_ratio = _tag_like_ratio(text)
     is_tag_list = tag_like_ratio >= 0.6 and len(text.split(",")) >= 3
 
+    # A character whose series tag is absent from the prompt. The picker hands the
+    # model "character, series", so seeing the character without the series means half
+    # the trigger was dropped - which silently degrades the result.
+    present = {segment.strip().lower() for segment in text.split(",")}
+    character_missing_series: list[str] = []
+    for entry in (selected_characters or []):
+        parts = [part.strip().lower() for part in str(entry.get("trigger") or "").split(",")]
+        character = parts[0] if parts else ""
+        series = parts[1] if len(parts) > 1 else ""
+        if not character or character in character_missing_series:
+            continue
+        if character not in present:
+            continue
+        # The series may legitimately be absent from a dataset row, so only report a
+        # problem when there was a series to drop.
+        if series and series not in present:
+            character_missing_series.append(str(entry.get("character") or character))
+
     quality_warnings: list[str] = []
     # A warning must not contradict a choice the user actually made.
     rating_requested = rating not in (None, "none")
@@ -180,6 +206,13 @@ def audit_prompt(
         quality_warnings.append("a tag list should state how many subjects to compose")
     if is_tag_list and not (quality_tags or safety_tags):
         quality_warnings.append("a tag list usually opens with a quality and safety group")
+    # A character tag without the series right after it is the failure the picker
+    # exists to prevent: the trigger is "character, series" and half of it is missing.
+    if is_tag_list and character_missing_series:
+        quality_warnings.append(
+            "a selected character is missing its series tag next to it "
+            f"({', '.join(character_missing_series)})"
+        )
     if score_tags and rating != "safe":
         quality_warnings.append("score_* tags fight the Anima-Aesthetic finetune and are usually omitted")
     # The rating and style the user selected are checked against the output, because
@@ -196,8 +229,21 @@ def audit_prompt(
     if style == "natural_language" and is_tag_list:
         quality_warnings.append("the prompt style is Natural language but the output is a tag list")
 
-    # Leakage of the video contract is the only condition that justifies a repair.
+    # Leakage of the video contract is the primary condition that justifies a repair.
     repair_required = bool(leakage)
+
+    # A contradiction of the user's own selection also forces a repair. These are the
+    # failures the user cannot see for themselves: they picked a rating and got a
+    # different one, or picked a style and got another. Leaving them as warnings meant
+    # a prompt that visibly disagrees with the settings was still shipped.
+    if rating == "none" and safety_tags:
+        repair_required = True
+    if rating_requested and rating not in {tag.lower() for tag in safety_tags}:
+        repair_required = True
+    if style == "tags" and not is_tag_list:
+        repair_required = True
+    if style == "natural_language" and is_tag_list:
+        repair_required = True
 
     return {
         "mode": mode,

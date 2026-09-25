@@ -398,6 +398,11 @@ def assemble_request(body: dict[str, Any]) -> dict[str, Any]:
             "copy/reference role only from the user's words and do not invent its content):\n"
         )
     options_directive = _mode_options_directive(mode, resolved_options)
+    # Resolved once here rather than inline in the input dict, so the directive and the
+    # audit both read the same entries.
+    resolved_characters = characters.resolve(
+        [name for name in (body.get("characters") or []) if isinstance(name, str)]
+    )["characters"]
     character_directive = _character_directive(mode, body.get("characters"))
     # Options first, then characters: the option lines set the dialect and rating the
     # character triggers must be written in.
@@ -424,11 +429,10 @@ def assemble_request(body: dict[str, Any]) -> dict[str, Any]:
             "media_manifest": manifest,
             "blind_media": blind_media,
             "mode_options": resolved_options,
-            "characters": [
-                entry["character"] for entry in characters.resolve(
-                    [name for name in (body.get("characters") or []) if isinstance(name, str)]
-                )["characters"]
-            ],
+            # The full resolved entries, not just the slugs: the audit needs each
+            # trigger to tell whether the model dropped a character's series tag.
+            "selected_characters": resolved_characters,
+            "characters": [entry["character"] for entry in resolved_characters],
         },
         "media_inputs": media_inputs,
         # Resolved through the target, not by bare id: several targets now declare

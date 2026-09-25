@@ -1,10 +1,10 @@
-# Prompt Studio Standalone v1.2.0
+# Prompt Studio Standalone v1.2.1
 
 Standalone Windows version. ComfyUI is not required.
 
 ## Download
 
-Download **Prompt-Studio-Standalone-Windows-v1.2.0.zip** from the release assets below.
+Download **Prompt-Studio-Standalone-Windows-v1.2.1.zip** from the release assets below.
 
 Do not download **Source code (zip)** or **Source code (tar.gz)** for normal use.
 Do not install this package into ComfyUI `custom_nodes`.
@@ -26,7 +26,7 @@ Do not install this package into ComfyUI `custom_nodes`.
   revalidate and the interface reloads itself once when it is older than the backend.
 - Added text drafts, a manual Ollama generation budget, an explicit vision projector, and
   no Creative Brief character limit.
-- Requires Prompt Studio core `1.1.0`.
+- Requires Prompt Studio core `1.1.1`.
 
 ComfyUI-only controls, including Auto VRAM management and Add to workflow, are not
 shown in Standalone.

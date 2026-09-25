@@ -10,9 +10,9 @@ Prompt Studio is a multimodal prompt-writing workspace for ComfyUI. Pick a gener
 
 It is a ComfyUI UI extension, not a workflow node. It writes prompt text for your existing workflow and helps prepare reference media. The optional Media panel can add media loaders to your workflow. Prompt Studio does not run the generation models themselves and does not queue renders.
 
-**ComfyUI extension**: **1.1.0** · [Download ZIP](../../releases/download/v1.1.0/Prompt-Studio-ComfyUI-v1.1.0.zip) · [Installation](docs/INSTALLATION.md)
+**ComfyUI extension**: **1.1.1** · [Download ZIP](../../releases/download/v1.1.1/Prompt-Studio-ComfyUI-v1.1.1.zip) · [Installation](docs/INSTALLATION.md)
 
-**Standalone for Windows**: **1.2.0** · [Download ZIP](../../releases/download/standalone-v1.2.0/Prompt-Studio-Standalone-Windows-v1.2.0.zip) · [Setup guide](standalone/README.md)
+**Standalone for Windows**: **1.2.1** · [Download ZIP](../../releases/download/standalone-v1.2.1/Prompt-Studio-Standalone-Windows-v1.2.1.zip) · [Setup guide](standalone/README.md)
 
 ## Supported generation targets
 

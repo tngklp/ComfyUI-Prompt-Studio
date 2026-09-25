@@ -1,5 +1,13 @@
 # Standalone changelog
 
+## 1.2.1 - 2026-09-25
+
+- Fixed Anima adding a `safe` tag when the content rating was None; the safety tag is only emitted when a rating is selected.
+- Fixed a selected character losing its series tag in the output.
+- Fixed the Anima tag group order so character and series read as one group.
+- Anima prompts are now longer and more detailed, and an output that contradicts the chosen rating or style is repaired.
+- Requires Prompt Studio core `1.1.1`.
+
 ## 1.2.0 - 2026-09-25
 
 - Added the **Anima** text-to-image target, with content rating and prompt style options, character references, and per-region tag highlighting.

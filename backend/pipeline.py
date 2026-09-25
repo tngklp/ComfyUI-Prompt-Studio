@@ -158,6 +158,7 @@ def _audit(
         duration_seconds,
         camera_structure_allowed,
         mode_options=assembled["input"].get("mode_options"),
+        selected_characters=assembled["input"].get("selected_characters"),
     )
     policy = reference_policy(assembled["input"])
     actual_reference_tags = reference_tags(prompt)
@@ -417,6 +418,7 @@ def run_pipeline(
             duration_seconds,
             camera_structure_allowed,
             mode_options=assembled["input"].get("mode_options"),
+            selected_characters=assembled["input"].get("selected_characters"),
         )
         repaired_tags = reference_tags(repaired)
         repaired_audit["missing_reference_tags"] = sorted(expected_reference_tags - repaired_tags)

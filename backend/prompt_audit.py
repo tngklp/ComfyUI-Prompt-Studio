@@ -46,11 +46,14 @@ def audit_prompt(
     duration_seconds: float | None = None,
     camera_structure_allowed: bool = True,
     mode_options: dict[str, Any] | None = None,
+    selected_characters: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Audit a prompt using the strategy of the mode that produced it.
 
     ``mode_options`` carries the user's per-mode selections, so an audit can judge
     the output against what was actually requested rather than against a default.
+    ``selected_characters`` are the resolved picker entries, so an audit can report a
+    character whose series tag the model dropped.
     """
     strategy = target_for_mode(mode).strategy
     return strategy.audit_prompt(
@@ -59,4 +62,5 @@ def audit_prompt(
         duration_seconds=duration_seconds,
         camera_structure_allowed=camera_structure_allowed,
         mode_options=mode_options,
+        selected_characters=selected_characters,
     )

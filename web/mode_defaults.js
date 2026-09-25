@@ -142,7 +142,7 @@ I step ahead and speak my name`,
 
   // --- Anima (image) -------------------------------------------------------
   AnimaTextToImage: {
-    brief: "An anime girl with long silver hair and red eyes in a school uniform, standing on a rooftop at sunset with wind in her hair. Use tag-style prompting with the recommended quality prefix.",
+    brief: "An anime girl with long silver hair and red eyes in a school uniform, standing on a rooftop at sunset with wind in her hair.",
     prompt: `masterpiece, best quality, score_7, year 2025, newest, highres, 1girl, solo, long hair, silver hair, red eyes, school uniform, navy sailor collar, red ribbon, pleated skirt, standing, rooftop, sunset, orange sky, clouds, wind, hair blowing, looking at viewer, serious expression, from below, dramatic lighting, anime screenshot, detailed background`,
   },
 };

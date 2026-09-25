@@ -33,15 +33,17 @@ that dialect all the way through rather than drifting back into a tag list partw
 When any part of the prompt is written as tags, group them in this order:
 
 ```
-[quality/meta/year/safety tags] [1girl/1boy/1other etc] [character] [series] [artist] [general tags]
+[quality/meta/year/safety tags] [1girl/1boy/1other etc] [character, series] [artist] [general tags]
 ```
 
 - The **order between groups matters**; the order **within** a group does not.
 - The count tag (`1girl`, `1boy`, `2girls`, `1other`, …) comes early, right after the
   quality/meta/year/safety block, because it tells the model up front how many subjects to
   compose.
-- Character name is followed by series name, e.g. `oomuro sakurako, yuru yuri` — character
-  first, then the work it's from.
+- **Character and series are one group, and always come as a pair in that order**:
+  `oomuro sakurako, yuru yuri` — the character's name, then the work it comes from. The
+  series is never omitted, and never placed after the artist or among the general tags.
+  A character written without its series is an incomplete tag.
 - Artist tags come after character/series, general tags (appearance, clothing, pose,
   expression, props, background, composition) come last and can be as long as you like.
 
@@ -257,15 +259,19 @@ prompt actually renders as, so they're worth keeping in mind while you write:
 
 **General anime character shot (Aesthetic or Turbo):**
 ```
-masterpiece, best quality, safe, 1girl, [character], [series], solo, [appearance tags],
+masterpiece, best quality, [safety tag], 1girl, [character], [series], solo, [appearance tags],
 [clothing tags], [pose/expression], [background], [lighting/composition tags]
 ```
 
 **Anima-Base, aiming for a specific illustrator look:**
 ```
-masterpiece, best quality, score_7, safe, @[artist], 1girl, [character], [series],
+masterpiece, best quality, score_7, [safety tag], @[artist], 1girl, [character], [series],
 [appearance], [clothing], [pose], [background]
 ```
+The `[safety tag]` slot is the rating selected for the prompt (`safe`, `sensitive`, `nsfw` or
+`explicit`). **If no rating was requested, or the rating is None, drop the slot entirely** - do not
+default it to `safe`. The quality prefix is independent of the rating and is always present.
+
 Negative: `worst quality, low quality, score_1, score_2, score_3, artist name, blurry, jpeg artifacts, chromatic aberration`
 
 **Natural-language, multi-character scene:**
@@ -279,12 +285,15 @@ masterpiece, best quality. Digital artwork of [Character A], with [hair/eyes/bui
 
 ## 13. Checklist before you submit a prompt
 
-- [ ] Exactly one safety tag from the trained set (`safe`, `sensitive`, `nsfw`, `explicit`) is in
-      the positive prompt, matching the rating the image is meant to have
+- [ ] A safety tag from the trained set (`safe`, `sensitive`, `nsfw`, `explicit`) is in the positive
+      prompt **only when a rating was requested**, and matches that rating. With no rating
+      requested, or with the rating set to None, no safety tag belongs in the prompt at all.
 - [ ] The whole prompt stays in one dialect (tags, natural language, or hybrid) rather than
       drifting between them
-- [ ] Tag groups are in the correct order (quality/meta/year/safety → count → character →
-      series → artist → general)
+- [ ] Tag groups are in the correct order (quality/meta/year/safety → count → **character+series
+      as one pair** → artist → general)
+- [ ] Every character is followed by its series, e.g. `hatsune miku, vocaloid` - never the name
+      alone, and never the series separated from its character
 - [ ] Artist tags are prefixed with `@`
 - [ ] Character name is followed by series name
 - [ ] Multiple characters each get their own appearance description, not just a name

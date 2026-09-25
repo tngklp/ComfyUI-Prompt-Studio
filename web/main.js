@@ -66,7 +66,7 @@ const LAUNCHER_SCHEMA_VERSION = "2";
 // The version this bundle was built as. Kept in sync with `backend/version.py` by
 // `tests/frontend_regressions.mjs`, so a stale module can be detected at load time
 // by comparing it with the version the backend reports.
-const EXTENSION_VERSION = "1.1.0";
+const EXTENSION_VERSION = "1.1.1";
 const VRAM_HANDOFF_SUPPORTED = typeof app?.queuePrompt === "function";
 const HOST_CAPABILITIES = { windowed: true, comfyMemory: VRAM_HANDOFF_SUPPORTED, workflowMedia: true, ...app.psHost };
 const vramHandoffCoordinator = createVramHandoffCoordinator();
