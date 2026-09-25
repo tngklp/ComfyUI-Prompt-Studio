@@ -14,6 +14,8 @@ guides/
     edit.md    Image Edit
   krea_2/
     t2i.md     T2I
+  anima/
+    t2i.md     T2I
 ```
 
 `targets.json` declares each guide's `id`, `title`, `filename` (relative to this
@@ -26,8 +28,15 @@ A non-null `source_sha256` means the guide is **vendored verbatim** from an
 upstream document and must not be edited. Editing it fails the integrity check at
 load time.
 
-A `null` `source_sha256` means the guide is **Prompt Studio-authored** and free to
-change; no digest needs updating after an edit.
+A `null` `source_sha256` means the guide is not digest-checked. That covers two
+different situations, which the descriptor distinguishes:
+
+- `source_url: null` — the guide is **Prompt Studio-authored** and free to change.
+- `source_url` set and `"adapted": true` — the guide is **adapted from an upstream
+document**. It keeps provenance and a resolvable source link, but it is rewritten
+  in-repo (structure, coverage and prose added), so it can never match the upstream
+  bytes. The `adapted` flag exists precisely so provenance and a verbatim pin are
+  not conflated: declaring both is a registry error.
 
 | Guide | Origin | Pin |
 | --- | --- | --- |

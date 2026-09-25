@@ -30,6 +30,14 @@ export const probeApiProvider = (payload) => post("/api-provider/probe", payload
 export const getApiProviderModels = (connectionId) => post("/api-provider/models", { connection_id: connectionId });
 export const disconnectApiProvider = (connectionId) => post("/api-provider/disconnect", { connection_id: connectionId });
 export const getGuides = () => request("/guides");
+export const searchCharacters = (query, limit = 24) => request(
+  `/characters?q=${encodeURIComponent(query)}&limit=${encodeURIComponent(limit)}`,
+);
+export const resolveCharacters = (names) => post("/characters/resolve", { names });
+// The dataset is fetched automatically on first launch. This exists for the case
+// where that attempt failed - offline, or a proxy not yet up - so the user can
+// trigger it again without restarting.
+export const refreshCharacters = () => post("/characters/refresh");
 export const getGuide = (mode) => request(`/guides/${encodeURIComponent(mode)}`);
 export const getSystemPrompt = (mode) => request(`/system-prompt/${encodeURIComponent(mode)}`);
 export const assemble = (payload) => post("/assemble", payload);
@@ -59,6 +67,20 @@ export function uploadMedia(sessionId, mode, files, replaceAssetId = null) {
 }
 
 export const listMedia = (sessionId) => request(`/media?session_id=${encodeURIComponent(sessionId)}`);
+// Declare a reference slot without a file, so a prompt can be written before the
+// media exists. The user's description is the only thing the prompt model is told.
+export const createMediaPlaceholder = (sessionId, mode, kind, description) => post(
+  "/media/placeholder",
+  { session_id: sessionId, mode, kind, description },
+);
+export const updateMediaPlaceholder = (sessionId, assetId, description) => request(
+  `/media/${encodeURIComponent(assetId)}/placeholder`,
+  {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session_id: sessionId, description }),
+  },
+);
 export async function editMedia(sessionId, assetId, options) {
   const response = await api.fetchApi(`${PREFIX}/media/${encodeURIComponent(assetId)}/edit`, {
     method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({session_id:sessionId,...options}),

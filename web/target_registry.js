@@ -120,6 +120,43 @@ const BUILT_IN = [
       { id: "Krea2TextToImage", label: "T2I", title: "Text to Image", hint: "Describe the image to generate from scratch.", guide: "base", system_prompt: "base", requires_media: false, limits: {}, output_only: false },
     ],
   },
+  {
+    id: "anima",
+    label: "Anima",
+    category: "image",
+    workspace: "image",
+    default_mode: "AnimaTextToImage",
+    default_aspect_ratio: "1:1",
+    aspect_ratios: ["1:1", "3:2", "2:3", "4:3", "3:4", "16:9", "9:16"],
+    durations: null,
+    media_capabilities: [],
+    output_contract: {
+      profile: "image_description",
+      brief_limit: 8000,
+      requires_duration: false,
+      requires_aspect_ratio: true,
+      shot_numbering: false,
+      timestamp_syntax: false,
+      lyrics_limit: null,
+      edit_instruction_limit: null,
+    },
+    modes: [
+      { id: "AnimaTextToImage", label: "T2I", title: "Text to Image", hint: "Describe the image to generate from scratch.", guide: "base", system_prompt: "base", requires_media: false, limits: {}, output_only: false, options: [
+        { id: "content_rating", label: "Content rating", hint: "The safety tag Anima was trained on. None omits it, so the tag is only present when you choose it.", default: null, scope: "prompt", choices: [
+          { id: "none", label: "None", hint: "Omit the safety tag", prompt_tag: null },
+          { id: "safe", label: "Safe", hint: "Safe for work", prompt_tag: "safe" },
+          { id: "sensitive", label: "Sensitive", hint: "Suggestive, not explicit", prompt_tag: "sensitive" },
+          { id: "nsfw", label: "NSFW", hint: "Explicit adult content", prompt_tag: "nsfw" },
+          { id: "explicit", label: "Explicit", hint: "Strongest rating tag", prompt_tag: "explicit" },
+        ] },
+        { id: "prompt_style", label: "Prompt style", hint: "Anima accepts tags, natural-language captions, or a mixture of the two.", default: "tags", scope: "prompt", choices: [
+          { id: "tags", label: "Tags", hint: "Danbooru-style comma-separated tags only", prompt_tag: "tags" },
+          { id: "natural_language", label: "Natural language", hint: "Descriptive English prose, at least two sentences", prompt_tag: "natural language" },
+          { id: "hybrid", label: "Hybrid", hint: "Quality and artist tags, then prose", prompt_tag: "a mixture of tags and natural language" },
+        ] },
+      ] },
+    ],
+  },
 ];
 
 function indexTargets(targets) {

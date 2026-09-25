@@ -113,6 +113,9 @@ def estimate_visual_tokens(
     assembled: dict[str, Any],
     model_info: dict[str, Any],
 ) -> tuple[int, list[dict[str, Any]], bool]:
+    # `media_inputs` never contains a placeholder: assembly filters them out because
+    # a declared-but-absent slot has no visual payload. The type filter is therefore
+    # the whole guard, and a placeholder cannot silently consume vision budget.
     visual_inputs = [
         item for item in assembled.get("media_inputs", [])
         if item.get("type") in {"image", "video"}

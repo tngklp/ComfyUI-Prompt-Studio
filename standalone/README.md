@@ -2,9 +2,9 @@
 
 Use Prompt Studio without ComfyUI.
 
-Current Standalone version: **1.1.0**
+Current Standalone version: **1.2.0**
 
-[Download Prompt Studio Standalone v1.1.0](../../../releases/download/standalone-v1.1.0/Prompt-Studio-Standalone-Windows-v1.1.0.zip)
+[Download Prompt Studio Standalone v1.2.0](../../../releases/download/standalone-v1.2.0/Prompt-Studio-Standalone-Windows-v1.2.0.zip)
 
 ## This is the Standalone version
 
@@ -91,10 +91,13 @@ PS_PROJECTOR="/path/to/mmproj.gguf" \
 Python 3.10 or newer is required. The Linux launcher has been tested on WSL2. Managed
 Local GGUF is Windows-only, so on Linux use External llama.cpp or Ollama instead.
 
-## What's new in v1.1.0
+## What's new in v1.2.0
 
-- Fixed video trimming and cropping failing because NumPy was missing.
-- Existing Windows environments now install missing dependencies on launch.
+- Added the **Anima** text-to-image target, with content rating and prompt style options, character references, and per-region tag highlighting.
+- Added **declared references** and **media-blind mode**, so a prompt can reference a picture that is not attached or keep attached media away from the prompt model.
+- Settings is now tabbed, separating prompts, media handling and Anima characters.
+- The Anima character catalogue is downloaded on first launch and cached locally.
+- Fixed needing a hard refresh before new features appeared after an update.
 
 See [Sequence usage](../docs/USAGE.md#sequence) for media scope, refinement, and limitations. Media Composer, Media Editor, themes, and provider settings remain available.
 
@@ -197,7 +200,7 @@ From the repository root, build the portable package with:
 powershell -ExecutionPolicy Bypass -File scripts\build_standalone.ps1
 ```
 
-The result is `dist\Prompt-Studio-Standalone-Windows-v1.1.0.zip`. It records the
+The result is `dist\Prompt-Studio-Standalone-Windows-v1.2.0.zip`. It records the
 repository commit in `upstream\UPSTREAM_SNAPSHOT.txt` and excludes local settings,
 logs, models, `llama-server`, CUDA libraries, and test artifacts.
 

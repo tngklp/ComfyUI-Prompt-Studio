@@ -55,3 +55,21 @@
 .ps-empty-drop:hover { border-color: rgba(167,139,250,.42); }
 .ps-empty-icon { display: grid; place-items: center; width: calc(31px * var(--ps-interface-scale)); height: calc(31px * var(--ps-interface-scale)); margin-bottom: 7px; border-radius: 8px; background: rgba(167,139,250,.1); color: var(--ps-accent); }
 .ps-empty-drop strong { font-size: var(--ps-font-body-sm); }.ps-empty-drop small { margin-top: 2px; color: var(--ps-muted); font-size: var(--ps-font-label); }
+
+/* Plan-a-reference: declare a slot before its file exists. */
+.ps-placeholder-actions { display: flex; flex-wrap: wrap; gap: calc(6px * var(--ps-interface-scale)); margin-top: 8px; }
+.ps-plan-reference { display: inline-flex; align-items: center; gap: calc(5px * var(--ps-interface-scale)); height: calc(27px * var(--ps-interface-scale)); padding: 0 calc(9px * var(--ps-interface-scale)); border: 1px dashed var(--ps-border-input); border-radius: 7px; background: transparent; color: var(--ps-muted); font-size: var(--ps-font-caption); cursor: pointer; }
+.ps-plan-reference:hover:not(:disabled) { border-color: rgba(167,139,250,.42); color: var(--ps-text-hover); }
+.ps-plan-reference:disabled { opacity: .5; cursor: default; }
+/* A declared slot is deliberately not styled as media: no thumbnail, dashed edge. */
+.ps-asset.is-placeholder { border-style: dashed; border-color: rgba(167,139,250,.34); background: var(--ps-surface-subtle); }
+.ps-asset-preview.ps-placeholder { display: grid; place-items: center; background: rgba(167,139,250,.08); color: var(--ps-accent); }
+.ps-placeholder-note { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ps-muted); font-style: italic; }
+.ps-edit-placeholder { position: absolute; top: calc(6px * var(--ps-interface-scale)); right: calc(26px * var(--ps-interface-scale)); display: grid; place-items: center; width: calc(18px * var(--ps-interface-scale)); height: calc(18px * var(--ps-interface-scale)); border: 0; border-radius: 5px; background: var(--ps-control-selected); color: var(--ps-muted); cursor: pointer; opacity: 0; }
+.ps-asset:hover .ps-edit-placeholder, .ps-edit-placeholder:focus-visible { opacity: 1; }
+.ps-edit-placeholder:hover { color: var(--ps-text-hover); }
+
+/* Note explaining how the prompt model will actually receive these references. */
+.ps-media-mode-note { display: flex; align-items: flex-start; gap: calc(6px * var(--ps-interface-scale)); margin: 8px 0 0; color: var(--ps-muted); font-size: var(--ps-font-caption); line-height: 1.5; }
+.ps-media-mode-note svg { flex: 0 0 auto; margin-top: 1px; color: var(--ps-accent); }
+.ps-media-mode-note span { min-width: 0; }

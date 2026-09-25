@@ -10,9 +10,9 @@ Prompt Studio is a multimodal prompt-writing workspace for ComfyUI. Pick a gener
 
 It is a ComfyUI UI extension, not a workflow node. It writes prompt text for your existing workflow and helps prepare reference media. The optional Media panel can add media loaders to your workflow. Prompt Studio does not run the generation models themselves and does not queue renders.
 
-**ComfyUI extension**: **1.0.0** · [Download ZIP](../../releases/download/v1.0.0/Prompt-Studio-ComfyUI-v1.0.0.zip) · [Installation](docs/INSTALLATION.md)
+**ComfyUI extension**: **1.1.0** · [Download ZIP](../../releases/download/v1.1.0/Prompt-Studio-ComfyUI-v1.1.0.zip) · [Installation](docs/INSTALLATION.md)
 
-**Standalone for Windows**: **1.1.0** · [Download ZIP](../../releases/download/standalone-v1.1.0/Prompt-Studio-Standalone-Windows-v1.1.0.zip) · [Setup guide](standalone/README.md)
+**Standalone for Windows**: **1.2.0** · [Download ZIP](../../releases/download/standalone-v1.2.0/Prompt-Studio-Standalone-Windows-v1.2.0.zip) · [Setup guide](standalone/README.md)
 
 ## Supported generation targets
 
@@ -30,6 +30,7 @@ A generation target is the model a prompt is written *for*. Targets are grouped 
 | --- | --- |
 | Qwen Image 2.1 | `T2I` · `Edit` |
 | Krea 2 | `T2I` |
+| Anima | `T2I` |
 
 ### Audio
 
@@ -75,12 +76,15 @@ Prompt Studio sends your brief, selected mode, prepared references, and the sele
 - MiniMax H3 video modes: T2VA, I2VA, FL2VA, L2VA, and Reference.
 - Up to 9 images, 3 videos, and 3 audio references in H3 Reference mode.
 - Clear `<Picture N>`, `<Video N>`, and `<Audio N>` labels for assigning identity, wardrobe, setting, motion, camera, sound, or other roles.
+- Declared reference slots: reserve a reference tag for media that does not exist yet, describe it in your own words, and write the prompt before the file is ready — no vision model required.
+- Media-blind mode: keep attached pictures and videos in the workspace but withhold them from the prompt model, so a text-only model can generate and image bytes never leave your machine.
 - Qwen Image 2.1 text-to-image and instruction-driven image editing, with `<imageN>` references.
 - Krea 2 text-to-image prompts, using Krea's minimal-prompt guidance rather than a section schema.
+- Anima text-to-image prompts in Danbooru-style tags, natural-language captions, or a mixture of the two, following Anima's own tag order, quality prefix and `@artist` convention, with a content-rating and prompt-style choice per generation.
 - MiniMax Music 3 structured captions and lyrics.
 - In-place Reference media replacement from the card action or by dropping one file directly on a card, without rebuilding the surrounding asset order.
 - Ordered video contact sheets with visible frame-sampling controls, so you can inspect what the prompt model sees.
-- Official guides included and pinned for MiniMax H3, Qwen Image 2.1, and Krea 2, so a prompt is written against the upstream contract.
+- Official guides included and pinned for MiniMax H3, Qwen Image 2.1, and Krea 2, so a prompt is written against the upstream contract. Anima ships a guide adapted from the official CircleStone Labs model card, credited with its source and deliberately unpinned because it is edited in-repo.
 - Editable prompts, **Refine**, **Copy prompt**, and a separate saved draft for every mode.
 - Automatic context planning and clear controls for releasing local prompt models and ComfyUI VRAM.
 

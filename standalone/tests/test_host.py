@@ -116,6 +116,51 @@ class StandaloneHostTest(unittest.IsolatedAsyncioTestCase):
         self.assertGreater(len(payload["setup"]), 0)
         self.assertTrue(all(item.get("model_url") for item in payload["setup"]))
 
+    async def test_character_routes_report_an_offline_catalogue_without_failing(self) -> None:
+        # The character catalogue is downloaded, not shipped. A host with no dataset
+        # must still answer, because the picker renders from this status.
+        response = await self.client.get("/promptstudio/characters")
+        self.assertEqual(response.status, 200)
+        payload = await response.json()
+        self.assertIn("status", payload)
+        self.assertEqual(payload["results"], [])
+        status = payload["status"]
+        for key in ("count", "source", "downloaded", "bundled_is_sample", "dataset_url"):
+            self.assertIn(key, status)
+        self.assertTrue(status["dataset_url"].startswith("https://"))
+
+        # The removed file-import endpoint must be gone. `/characters` exists, so a
+        # request to the old path is a method mismatch rather than a 404 - the point
+        # is that no handler accepts it.
+        response = await self.client.post("/promptstudio/characters/import", json={"csv": "x"})
+        self.assertIn(response.status, (404, 405))
+        response = await self.client.delete("/promptstudio/characters/import")
+        self.assertIn(response.status, (404, 405))
+        # Refresh exists, but only for POST - a GET must not trigger a 9 MB download.
+        response = await self.client.get("/promptstudio/characters/refresh")
+        self.assertEqual(response.status, 404)
+        response = await self.client.post("/promptstudio/characters/refresh", json={})
+        self.assertIn(response.status, (200, 502))
+
+    async def test_a_character_refresh_failure_is_reported_as_a_json_error(self) -> None:
+        # The download needs the network, so an offline host must produce the normal
+        # error envelope rather than an HTML error page the frontend cannot read.
+        from unittest import mock
+
+        from backend import character_data
+
+        with mock.patch.object(
+            character_data,
+            "refresh_cache",
+            side_effect=character_data.CharacterDownloadError(
+                "CHARACTER_DOWNLOAD_FAILED", "The AnimaDex character dataset could not be downloaded."
+            ),
+        ):
+            response = await self.client.post("/promptstudio/characters/refresh")
+        self.assertEqual(response.status, 502)
+        payload = await response.json()
+        self.assertEqual(payload["error"]["code"], "CHARACTER_DOWNLOAD_FAILED")
+
     async def test_sequence_routes_exist_without_a_comfy_graph(self) -> None:
         response = await self.client.post("/promptstudio/sequence", json={})
         self.assertEqual(response.status, 400)

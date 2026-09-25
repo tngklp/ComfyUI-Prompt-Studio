@@ -24,7 +24,16 @@ Generating a prompt does not change or queue your workflow. To add media loaders
 
 The **Creative Brief** limit, the available modes, and the media limits all come from the selected
 target. A text-only prompt model can still run every mode that does not require media — the video target's text-to-video
-and the music modes, for example.
+and the music modes, for example. It can also run a media mode whose slots are all **declared references**
+rather than attached files, because a declaration is text the model can read; see
+[Images and video](#images-and-video). Attaching a real file to a text-only prompt model restores the usual
+requirement for a vision projector, unless **Media-blind mode** is on.
+
+Some targets ask a question before they generate. Anima, for example, offers a **Content rating**
+(None, Safe, Sensitive, NSFW, Explicit) and a **Prompt style** (Tags, Natural language, Hybrid).
+These controls appear with the mode's other fields, are remembered per mode, and are included in the
+saved text draft. Changing one does not rewrite an already-generated prompt, so generate again to
+apply it.
 
 Use the fullscreen button in the Prompt Studio header when you want the workspace to fill the browser. Press Escape to leave fullscreen.
 
@@ -182,6 +191,35 @@ In Reference mode, select **Replace** on an asset card or drop one new file on t
 
 For video, Prompt Studio prepares an ordered contact sheet. Open a video card to inspect **What the model sees** and choose the available frame-sampling options. The contact sheet still represents the same `<Video N>` reference; it does not create extra `<Picture N>` tags.
 
+### Declared references (media you have not made yet)
+
+You can plan a reference before the file exists. In any mode that accepts media, use **Plan a picture** (or **Plan a video**) beside the drop box, then describe what the reference will contain. The slot takes the next tag — `<Picture 1>`, `<Video 1>` — so you can write it in the Creative Brief immediately.
+
+A declared slot is written from **your description**, not from an image. The prompt model is told the media is not attached and is instructed not to invent anything beyond what you wrote, so the result stays honest about what will be there. Nothing is sent to a vision model, so you can generate with a text-only prompt model — the request does not need a vision projector.
+
+Edit the description at any time with the pencil on the card. Attach the real file with **Replace**: the slot keeps its tag and position, so everything already written around it stays valid.
+
+A declared slot counts against the mode's media limits, exactly like a real file, because it occupies a tag.
+
+### Attaching media without a vision model
+
+**Settings → Media handling → Media-blind mode** lets you attach pictures and videos while the prompt
+model is not shown them. The files stay in the workspace and keep their reference tags, so your brief
+still reads `<Picture 1>` and still works; the prompt model is simply told that the reference exists
+and that it has not seen it, and it is instructed not to invent the contents.
+
+Use it when:
+
+- your prompt model cannot see images and you do not want to load a vision projector;
+- your prompt model is a remote API and you would rather not upload the image bytes.
+
+The trade is that the model writes each reference's role from your brief alone. Say what each tag
+contributes, exactly as you would for a declared reference. The media box shows a note whenever a
+reference is being withheld, so it is never ambiguous what the model was given.
+
+This is separate from a **declared reference**: a declared slot has no file at all and needs no vision
+model whether the switch is on or off.
+
 Local providers and remote API providers use the prepared contact sheet instead of the original encoded video stream. API providers can receive the derived sheet, but not the original video bytes.
 
 ## Media Editor
@@ -282,6 +320,8 @@ resolves one from the generation-target registry:
 | MiniMax Music 3 | Lyrics | Music 3 Lyrics |
 | Qwen Image 2.1 | Text to Image | Image |
 | Qwen Image 2.1 | Image Edit | Image Edit |
+| Krea 2 | T2I | Image |
+| Anima | T2I | Image |
 
 The prompt fixes the output *shape*; the target's guide supplies the format
 detail. Guides live under `guides/`, one folder per target, and are listed in

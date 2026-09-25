@@ -308,6 +308,129 @@
           "limits": {}
         }
       ]
+    },
+    {
+      "id": "anima",
+      "label": "Anima",
+      "category": "image",
+      "workspace": "image",
+      "description": "Anima Danbooru-style tag and natural-language text-to-image prompts.",
+      "strategy": "backend.targets.anima",
+      "output_tokens": 2048,
+      "aspect_ratios": [
+        "1:1",
+        "3:2",
+        "2:3",
+        "4:3",
+        "3:4",
+        "16:9",
+        "9:16"
+      ],
+      "durations": null,
+      "default_mode": "AnimaTextToImage",
+      "default_aspect_ratio": "1:1",
+      "media_capabilities": [],
+      "guide_revision": "f7382c4bf9d7ffe4ceea593a0adbb470c56dd79b",
+      "guide_source_root": "https://huggingface.co/circlestone-labs/Anima/raw/f7382c4bf9d7ffe4ceea593a0adbb470c56dd79b",
+      "guides": [
+        {
+          "id": "base",
+          "title": "Anima Prompt Writing Guide",
+          "filename": "anima/t2i.md",
+          "source_filename": "README.md",
+          "source_sha256": null,
+          "adapted": true
+        }
+      ],
+      "system_prompts": {
+        "AnimaTextToImage": "base"
+      },
+      "output_contract": {
+        "profile": "image_description",
+        "brief_limit": 8000,
+        "requires_duration": false,
+        "requires_aspect_ratio": true,
+        "shot_numbering": false,
+        "timestamp_syntax": false
+      },
+      "modes": [
+        {
+          "id": "AnimaTextToImage",
+          "label": "T2I",
+          "title": "Text to Image",
+          "hint": "Describe the image to generate from scratch",
+          "guide": "base",
+          "system_prompt": "base",
+          "requires_media": false,
+          "limits": {},
+          "options": [
+            {
+              "id": "content_rating",
+              "label": "Content rating",
+              "hint": "The safety tag Anima was trained on. None omits it, so the tag is only present when you choose it.",
+              "default": null,
+              "choices": [
+                {
+                  "id": "none",
+                  "label": "None",
+                  "hint": "Omit the safety tag",
+                  "prompt_tag": null
+                },
+                {
+                  "id": "safe",
+                  "label": "Safe",
+                  "hint": "Safe for work",
+                  "prompt_tag": "safe"
+                },
+                {
+                  "id": "sensitive",
+                  "label": "Sensitive",
+                  "hint": "Suggestive, not explicit",
+                  "prompt_tag": "sensitive"
+                },
+                {
+                  "id": "nsfw",
+                  "label": "NSFW",
+                  "hint": "Explicit adult content",
+                  "prompt_tag": "nsfw"
+                },
+                {
+                  "id": "explicit",
+                  "label": "Explicit",
+                  "hint": "Strongest rating tag",
+                  "prompt_tag": "explicit"
+                }
+              ]
+            },
+            {
+              "id": "prompt_style",
+              "label": "Prompt style",
+              "hint": "Anima accepts tags, natural-language captions, or a mixture of the two.",
+              "default": "tags",
+              "choices": [
+                {
+                  "id": "tags",
+                  "label": "Tags",
+                  "hint": "Danbooru-style comma-separated tags only",
+                  "prompt_tag": "tags"
+                },
+                {
+                  "id": "natural_language",
+                  "label": "Natural language",
+                  "hint": "Descriptive English prose, at least two sentences",
+                  "prompt_tag": "natural language"
+                },
+                {
+                  "id": "hybrid",
+                  "label": "Hybrid",
+                  "hint": "Quality and artist tags, then prose",
+                  "prompt_tag": "a mixture of tags and natural language"
+                }
+              ]
+            }
+          ]
+        }
+      ]
     }
   ]
 }

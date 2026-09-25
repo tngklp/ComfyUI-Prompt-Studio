@@ -90,6 +90,31 @@
 .ps-editor-highlight mark.is-shot { background: rgba(255,178,71,.13); box-shadow: inset 0 0 0 1px rgba(255,178,71,.13); }
 .ps-editor-highlight mark.is-time { background: rgba(90,196,218,.12); }
 .ps-editor-highlight mark.is-dialogue { background: rgba(218,121,176,.11); }
+/* Anima tag regions. Five visually distinct hues, because an Anima prompt is a flat
+   tag list: colour is the only thing telling the user which group a tag belongs to,
+   and Anima's correctness depends on that grouping. Kept clear of the lilac brand
+   accent and of each other. The character pair shares one hue so "hatsune miku,
+   vocaloid" reads as the single unit the guide asks for. */
+.ps-editor-highlight mark.is-character {
+  background: rgba(232,132,92,.16);
+  box-shadow: inset 0 0 0 1px rgba(232,132,92,.22);
+}
+.ps-editor-highlight mark.is-quality {
+  background: rgba(120,150,235,.15);
+  box-shadow: inset 0 0 0 1px rgba(120,150,235,.2);
+}
+.ps-editor-highlight mark.is-safety {
+  background: rgba(228,102,118,.15);
+  box-shadow: inset 0 0 0 1px rgba(228,102,118,.2);
+}
+.ps-editor-highlight mark.is-artist {
+  background: rgba(214,166,80,.15);
+  box-shadow: inset 0 0 0 1px rgba(214,166,80,.2);
+}
+.ps-editor-highlight mark.is-count {
+  background: rgba(112,196,190,.15);
+  box-shadow: inset 0 0 0 1px rgba(112,196,190,.2);
+}
 .ps-output-panel.is-refining [data-refine-toggle] { display: none; }
 .ps-editor { position: relative; z-index: 1; width: 100%; height: 100%; min-height: 310px; resize: none; padding: calc(17px * var(--ps-interface-scale)) calc(18px * var(--ps-interface-scale)) 64px; border: 0; outline: 0; background: transparent; color: var(--ps-text-control); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace !important; font-size: var(--ps-font-body-sm) !important; line-height: 1.68 !important; scrollbar-color: var(--ps-nav-border) transparent; }
 .ps-reference-peek { position: absolute; z-index: 5; display: flex; align-items: center; gap: calc(8px * var(--ps-interface-scale)); width: 182px; height: calc(54px * var(--ps-interface-scale)); padding: calc(5px * var(--ps-interface-scale)); border: 1px solid var(--ps-border-selection); border-radius: 7px; background: var(--ps-menu-surface); box-shadow: 0 10px 25px rgba(0,0,0,.48); pointer-events: none; }

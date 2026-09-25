@@ -13,6 +13,7 @@ import folder_paths
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 from . import targets
+from .placeholders import PLACEHOLDER_STATUS, is_placeholder
 from .targets import TargetError
 
 
@@ -32,6 +33,37 @@ def mode_limits(mode: str) -> dict[str, int]:
         return targets.mode_limits(mode)
     except TargetError as error:
         raise MediaError("INVALID_MODE", "The selected mode is not supported.") from error
+
+
+def build_placeholder(
+    session_id: str,
+    mode: str,
+    kind: str,
+    description: str,
+) -> dict[str, Any]:
+    """Construct the stored record for a declared-but-absent media slot.
+
+    Kept here rather than in :mod:`backend.placeholders` so the record shape stays
+    beside the real asset shape it has to imitate. The description lives in a
+    private key so it never leaks into the public payload as a to-be-rendered
+    field, and so an edit to the wording cannot masquerade as a media change.
+    """
+    placeholder_id = str(uuid4())
+    return {
+        "id": placeholder_id,
+        "session_id": session_id,
+        "mode": mode,
+        "type": kind,
+        "status": PLACEHOLDER_STATUS,
+        "filename": f"{kind} reference (declared, not attached)",
+        "size": 0,
+        "mime_type": "",
+        "description": description,
+        # No `_original_path`: every filesystem operation on a placeholder is
+        # guarded by `is_placeholder()`, and the absence of the key is the clearest
+        # signal that there is nothing on disk to clean up.
+        "_placeholder": True,
+    }
 
 
 def _reset_cache() -> None:
@@ -150,6 +182,12 @@ class MediaStore:
 
     def public(self, asset: dict[str, Any]) -> dict[str, Any]:
         result = {key: value for key, value in asset.items() if not key.startswith("_")}
+        # A placeholder has no file behind it, so it publishes no content, source,
+        # preview or prepared URL. Emitting an empty one would make the frontend
+        # render a broken thumbnail for a slot that is deliberately empty.
+        if is_placeholder(asset):
+            result["frames"] = []
+            return result
         result["content_url"] = f"/promptstudio/media/{asset['id']}/content?session_id={asset['session_id']}"
         content_revision = asset.get("content_revision", asset.get("sample_index", 0))
         result["source_url"] = f"{result['content_url']}&kind=source&revision={asset.get('_source_revision', 0)}"
@@ -196,6 +234,78 @@ class MediaStore:
         assets.append(base)
         self._renumber(assets, mode)
         return self.public(base)
+
+    def commit_placeholder(self, session_id: str, mode: str, base: dict[str, Any]) -> dict[str, Any]:
+        """Append a declared-but-absent media slot.
+
+        Capacity still applies, because a placeholder occupies a real reference
+        slot and its tag must resolve. Duration validation does not, because there
+        is no file to measure.
+        """
+        assets = self.assets(session_id)
+        validate_capacity(mode, assets, base["type"])
+        assets.append(base)
+        self._renumber(assets, mode)
+        return self.public(base)
+
+    def resolve_placeholder(
+        self,
+        session_id: str,
+        asset_id: str,
+        filename: str,
+        content_type: str | None,
+        stored_path: Path,
+    ) -> dict[str, Any]:
+        """Turn a placeholder into a real asset when the user finally adds the file.
+
+        The asset id is preserved so the reference tag the user already wrote keeps
+        pointing at the same slot.
+        """
+        placeholder = self._get_asset(session_id, asset_id)
+        if not is_placeholder(placeholder):
+            raise MediaError("NOT_A_PLACEHOLDER", "Only a declared reference slot can be filled this way.")
+        assets = list(self.sessions[session_id])
+        kind = media_type(filename, content_type)
+        if kind is None:
+            raise MediaError("UNSUPPORTED_MEDIA", "This file type is not supported.")
+        if kind != placeholder["type"]:
+            raise MediaError(
+                "PLACEHOLDER_KIND_MISMATCH",
+                f"This slot was declared as {placeholder['type']}; supply a {placeholder['type']} file.",
+            )
+        remaining = [asset for asset in assets if asset is not placeholder]
+        validate_capacity(placeholder["mode"], remaining, kind)
+        return self._prepare_asset(
+            session_id,
+            placeholder["mode"],
+            filename,
+            content_type,
+            stored_path,
+            remaining,
+        )
+
+    def commit_resolve_placeholder(
+        self,
+        session_id: str,
+        asset_id: str,
+        prepared: dict[str, Any],
+    ) -> dict[str, Any]:
+        placeholder = self.get(session_id, asset_id)
+        if not is_placeholder(placeholder):
+            raise MediaError("NOT_A_PLACEHOLDER", "Only a declared reference slot can be filled this way.")
+        assets = self.sessions[session_id]
+        if prepared["mode"] != placeholder["mode"]:
+            raise MediaError("INVALID_REPLACEMENT", "The prepared file no longer matches the selected slot.")
+        remaining = [asset for asset in assets if asset is not placeholder]
+        validate_capacity(placeholder["mode"], remaining, prepared["type"])
+        if prepared.get("status") != "needs_edit":
+            validate_reference_durations(remaining, prepared)
+        index = assets.index(placeholder)
+        prepared["id"] = placeholder["id"]
+        prepared["description"] = placeholder.get("description", "")
+        assets[index] = prepared
+        self._renumber(assets, placeholder["mode"])
+        return self.public(prepared)
 
     def _prepare_asset(
         self,
@@ -299,7 +409,9 @@ class MediaStore:
         asset = self.get(session_id, asset_id)
         assets = self.sessions[session_id]
         assets.remove(asset)
-        shutil.rmtree(Path(asset["_original_path"]).parent, ignore_errors=True)
+        # A placeholder never created a directory, so there is nothing to delete.
+        if not is_placeholder(asset):
+            shutil.rmtree(Path(asset["_original_path"]).parent, ignore_errors=True)
         self._renumber(assets, asset["mode"])
 
     def clear(self, session_id: str) -> None:
@@ -446,7 +558,14 @@ class MediaStore:
     def manifest(self, session_id: str, mode: str) -> dict[str, Any]:
         if session_id in self.sessions:
             self.touch(session_id)
-        assets = [asset for asset in self.sessions.get(session_id, []) if asset["mode"] == mode and asset.get("status") != "needs_edit"]
+        # Placeholders are kept: they own a reference tag the brief may already use,
+        # so dropping them here would fail reference-tag validation. `needs_edit`
+        # assets are still dropped, because their tag is explicitly not assigned yet.
+        assets = [
+            asset
+            for asset in self.sessions.get(session_id, [])
+            if asset["mode"] == mode and asset.get("status") != "needs_edit"
+        ]
         violations: list[dict[str, str]] = []
         if mode == "Reference":
             types = {asset["type"] for asset in assets}
@@ -460,11 +579,14 @@ class MediaStore:
             "mode": mode,
             "assets": [self.public(asset) for asset in assets],
             "counts": {kind: len([asset for asset in assets if asset["type"] == kind]) for kind in ("image", "video", "audio")},
+            "placeholders": [self.public(asset) for asset in assets if is_placeholder(asset)],
+            "unresolved_count": len([asset for asset in assets if is_placeholder(asset)]),
             "violations": violations,
             "valid": not violations,
             "warnings": [{"code": "REFERENCE_VIDEO_TOTAL", "message": "Reference videos exceed 15 seconds in total."}]
             if mode == "Reference" and sum(asset.get("duration", 0) or 0 for asset in assets if asset["type"] == "video") > 15 else [],
         }
+
 
     @staticmethod
     def _renumber(assets: list[dict[str, Any]], mode: str) -> None:
@@ -473,6 +595,9 @@ class MediaStore:
             if asset.get("status") == "needs_edit":
                 asset["reference"] = None
                 continue
+            # A placeholder consumes a number exactly like a real asset: the tag the
+            # user wrote must resolve, and adding the file later must not renumber
+            # the other references out from under an already-written brief.
             per_type[asset["type"]] += 1
             if mode == "Reference":
                 names = {"image": "Picture", "video": "Video", "audio": "Audio"}

@@ -14,6 +14,13 @@ folder_paths.add_model_folder_path("LLM", str(LLM_MODELS_DIRECTORY), is_default=
 # Importing the route module registers the extension endpoints with ComfyUI.
 from .backend import routes as _routes  # noqa: E402,F401
 
+# The Anima character catalogue is downloaded rather than shipped, so a first launch
+# fetches it. This has to happen off the import path: ComfyUI is starting up, the
+# user may be offline, and a 9 MB download must never gate the node registration.
+# A detached thread leaves the studio fully usable while it runs, and the picker
+# reports the offline state if it fails.
+_routes.character_data.start_background_fetch()
+
 NODE_CLASS_MAPPINGS = {}
 NODE_DISPLAY_NAME_MAPPINGS = {}
 

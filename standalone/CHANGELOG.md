@@ -1,7 +1,12 @@
 # Standalone changelog
 
-## Unreleased
+## 1.2.0 - 2026-09-25
 
+- Added the **Anima** text-to-image target, with content rating and prompt style options, character references, and per-region tag highlighting.
+- Added **declared references**, so a prompt can reference a picture that is not attached, and **media-blind mode**, which keeps attached media out of the prompt model.
+- Settings is now tabbed: prompts, media handling, and Anima characters.
+- The Anima character catalogue is downloaded on first launch from AnimaDex and cached locally, instead of shipping a sample inside the package.
+- Fixed needing a hard refresh before new features appeared after an update: assets now revalidate and the interface reloads itself once when it is older than the backend.
 - Open Prompt Studio as an installed browser app with its own window and taskbar icon. Run `start.bat` first; the installed app needs the local server running at the same address.
 - Save and load text drafts for Single and Sequence from **Actions**.
 - Extract and download audio from a selected video interval.
@@ -9,6 +14,7 @@
 - Keep Single Reference labels in sync after deleting or reordering media.
 - Write longer Creative Briefs without a character limit or scroll jumps.
 - Choose a vision projector manually when several compatible ones share a model folder.
+- Requires Prompt Studio core `1.1.0`.
 
 ## 1.1.0 - 2026-09-24
 

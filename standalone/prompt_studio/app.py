@@ -13,6 +13,7 @@ from aiohttp import web
 
 from . import __version__ as STANDALONE_VERSION
 from .config import PACKAGE_ROOT, Settings, load_settings, validate_upstream
+from .static_serving import register_static
 
 
 LOCALHOST = "127.0.0.1"
@@ -49,6 +50,7 @@ def create_app(settings: Settings) -> web.Application:
     _prepare_environment(settings)
 
     from backend import routes as upstream_routes  # noqa: PLC0415
+    from backend import character_data  # noqa: PLC0415
     from backend.context import CONTEXT_PROFILES, estimate_text_tokens  # noqa: PLC0415
     from backend.gguf_metadata import classify_gguf_file, read_gguf_metadata  # noqa: PLC0415
     from backend.models.contract import ModelError  # noqa: PLC0415
@@ -104,6 +106,15 @@ def create_app(settings: Settings) -> web.Application:
     app[MANAGED_CONTROLLER_KEY] = controller
     app[MANAGED_BACKEND_KEY] = managed_backend
     app.add_routes(upstream_routes.routes)
+
+    async def _fetch_character_dataset(_app: web.Application) -> None:
+        # The Anima character catalogue is downloaded rather than shipped, so the
+        # first launch needs it fetched. It runs as a detached thread: a slow or
+        # unreachable mirror must not delay the window appearing, and the studio is
+        # fully usable without characters.
+        await asyncio.to_thread(character_data.start_background_fetch)
+
+    app.on_startup.append(_fetch_character_dataset)
 
     web_root = settings.upstream_repo / "web"
     static_root = Path(__file__).resolve().parent / "static"
@@ -223,7 +234,6 @@ def create_app(settings: Settings) -> web.Application:
 
     app.router.add_get("/", index)
     app.router.add_get("/manifest.json", manifest)
-    app.router.add_static("/app-icons/", PACKAGE_ROOT / "ui" / "icons")
     app.router.add_get("/healthz", health)
     app.router.add_get("/standalone/gguf/state", managed_state)
     app.router.add_post("/standalone/gguf/config", managed_config)
@@ -234,8 +244,13 @@ def create_app(settings: Settings) -> web.Application:
     app.router.add_post("/standalone/gguf/start", start_managed)
     app.router.add_post("/standalone/gguf/stop", stop_managed)
     app.router.add_post("/free", free_vram)
-    app.router.add_static("/scripts/", static_root)
-    app.router.add_static("/", web_root)
+    # Static assets are served with an explicit revalidation policy rather than
+    # `add_static`. aiohttp's static handler sends no `Cache-Control`, so browsers
+    # applied heuristic freshness and a changed stylesheet or module kept being
+    # served from cache until the user hard-refreshed. See `static_serving`.
+    register_static(app, "/app-icons/", PACKAGE_ROOT / "ui" / "icons")
+    register_static(app, "/scripts/", static_root)
+    register_static(app, "/", web_root)
     app.on_cleanup.append(cleanup)
     return app
 

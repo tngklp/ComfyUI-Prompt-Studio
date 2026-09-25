@@ -139,6 +139,12 @@ I step ahead and speak my name`,
     brief: "A solitary white lighthouse on a rocky cliff at night, with its beam sweeping across low fog and dark waves catching cold moonlight.",
     prompt: `A medium-format photograph capturing a solitary white lighthouse situated on a rugged, rocky cliff at night. The lighthouse's brilliant beam sweeps across low fog that blankets the turbulent, dark waves below. The scene is illuminated by cold moonlight, which catches the reflective wetness of the dark rocks and the spray of the incoming waves. Wide shot composition, deep focus, long-exposure technique to capture the ethereal glow of the sweeping light through the dense fog bank. The color palette consists of deep indigos, slate greys, and bright, cool white accents, emphasizing the contrast between the solid structure and the moody, restless water and atmosphere.`,
   },
+
+  // --- Anima (image) -------------------------------------------------------
+  AnimaTextToImage: {
+    brief: "An anime girl with long silver hair and red eyes in a school uniform, standing on a rooftop at sunset with wind in her hair. Use tag-style prompting with the recommended quality prefix.",
+    prompt: `masterpiece, best quality, score_7, safe, year 2025, newest, highres, 1girl, solo, long hair, silver hair, red eyes, school uniform, navy sailor collar, red ribbon, pleated skirt, standing, rooftop, sunset, orange sky, clouds, wind, hair blowing, looking at viewer, serious expression, from below, dramatic lighting, anime screenshot, detailed background`,
+  },
 };
 
 /** Draft for one mode, resolved from the registry-backed key. */

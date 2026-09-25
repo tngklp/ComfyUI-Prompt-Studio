@@ -16,11 +16,20 @@ from aiohttp import web
 from server import PromptServer
 
 from .assembly import AssemblyError, assemble_lyrics_request, assemble_refinement, assemble_request
+from . import character_data, characters
 from .catalog import discover_models_with_diagnostics, find_model, model_setup_catalog, resolve_projector
 from .comfy_state import comfyui_runtime_snapshot
 from .devlog import DEVELOPER_MODE, LOG_PATH, PeakVRAMMonitor, gpu_memory_snapshot, write_event
 from .guides import guide_catalog, guide_for_mode
-from .media import CACHE_ROOT, MAX_FILE_BYTES, STORE, MediaError, mode_limits, parse_session_id
+from .media import (
+    CACHE_ROOT,
+    MAX_FILE_BYTES,
+    STORE,
+    MediaError,
+    build_placeholder,
+    mode_limits,
+    parse_session_id,
+)
 from .media_editor import browser_source, commit_edit, prepare_edit, video_frame
 from .memory import assess_free_vram
 from .models.gguf_backend import BACKEND as GGUF_BACKEND
@@ -28,6 +37,7 @@ from .models.external_server_backend import BACKEND as EXTERNAL_SERVER_BACKEND
 from .models.ollama_backend import BACKEND as OLLAMA_BACKEND, normalize_ollama_url
 from .models.api_provider_backend import BACKEND as API_PROVIDER_BACKEND
 from .models.contract import ModelError
+from .placeholders import PlaceholderError, is_placeholder, validate_placeholder
 from .runtime_diagnostics import get_gguf_runtime_diagnostics
 from .system_prompts import SystemPromptError, system_prompt_for_mode, system_prompt_profile
 from . import targets as target_registry
@@ -546,6 +556,25 @@ def target_descriptor(target: Any) -> dict[str, Any]:
                 "instruction_field": mode.instruction_field,
                 "instruction_limit": mode.instruction_limit,
                 "output_only": mode.output_only,
+                "options": [
+                    {
+                        "id": option.id,
+                        "label": option.label,
+                        "hint": option.hint,
+                        "default": option.default,
+                        "scope": option.scope,
+                        "choices": [
+                            {
+                                "id": choice.id,
+                                "label": choice.label,
+                                "hint": choice.hint,
+                                "prompt_tag": choice.prompt_tag,
+                            }
+                            for choice in option.choices
+                        ],
+                    }
+                    for option in mode.options
+                ],
             }
             for mode in target.modes
         ],
@@ -612,6 +641,9 @@ class _GuardedRouter:
 
     def delete(self, path: str) -> Callable[[Any], Any]:
         return self._register("delete")(path)
+
+    def patch(self, path: str) -> Callable[[Any], Any]:
+        return self._register("patch")(path)
 
     def __iter__(self) -> Any:
         return iter(self._router)
@@ -771,6 +803,51 @@ async def disconnect_api_provider(request: web.Request) -> web.Response:
 async def get_targets(_request: web.Request) -> web.Response:
     """Generation targets, their modes, limits and guide metadata."""
     return web.json_response({"targets": [target_descriptor(item) for item in target_registry.targets()]})
+
+
+@routes.get(f"{ROUTE_PREFIX}/characters")
+async def search_characters(request: web.Request) -> web.Response:
+    """Search the Anima character index for the picker."""
+    query = request.query.get("q", "")
+    try:
+        limit = max(1, min(80, int(request.query.get("limit", "24"))))
+    except ValueError:
+        limit = 24
+    return web.json_response({
+        "status": characters.index_status(),
+        "results": characters.search(query, limit) if query.strip() else [],
+    })
+
+
+@routes.post(f"{ROUTE_PREFIX}/characters/resolve")
+async def resolve_characters(request: web.Request) -> web.Response:
+    """Resolve selected character names to their exact Anima triggers."""
+    body = await _json_body(request)
+    if body is None:
+        return _error("INVALID_REQUEST", "Expected a JSON object.", status=400)
+    names = body.get("names")
+    if not isinstance(names, list) or not all(isinstance(name, str) for name in names):
+        return _error("INVALID_REQUEST", "names must be a list of strings.", status=400)
+    return web.json_response(characters.resolve(names))
+
+
+@routes.post(f"{ROUTE_PREFIX}/characters/refresh")
+async def refresh_characters(_request: web.Request) -> web.Response:
+    """Re-download the AnimaDex character dataset.
+
+    The download is 9 MB and blocks, so it runs on a worker thread. The dataset is
+    fetched automatically on first launch; this exists for the case where that first
+    attempt failed (offline, proxy, DNS not up yet) and the user wants it now.
+    """
+    try:
+        index = await asyncio.to_thread(character_data.refresh_cache)
+    except character_data.CharacterDownloadError as error:
+        return _error(error.code, error.message, status=502, details=error.detail or None)
+    characters.reset_cache()
+    return web.json_response({
+        "status": characters.index_status(),
+        "imported": len(index),
+    })
 
 
 @routes.get(f"{ROUTE_PREFIX}/guides")
@@ -1214,6 +1291,23 @@ async def upload_media(request: web.Request) -> web.Response:
                 old_asset = STORE.get(session_id, replace_asset_id)
                 if old_asset["mode"] != mode:
                     raise MediaError("INVALID_REPLACEMENT", "The replacement must stay in the same mode.")
+                # Filling a declared slot keeps its id, so the reference tag the
+                # user already wrote in the brief continues to point at it.
+                if is_placeholder(old_asset):
+                    prepared, cancellation = await _run_thread_worker(
+                        STORE.resolve_placeholder,
+                        session_id,
+                        replace_asset_id,
+                        field.filename,
+                        field.headers.get("Content-Type"),
+                        stored_path,
+                    )
+                    if cancellation is not None:
+                        raise cancellation
+                    pending_replacement = prepared
+                    pending_replacement_dir = asset_dir
+                    asset_dir = None
+                    continue
                 prepared, cancellation = await _run_thread_worker(
                     STORE.prepare_replace,
                     session_id,
@@ -1244,7 +1338,11 @@ async def upload_media(request: web.Request) -> web.Response:
             uploaded_ids.append(asset["id"])
             asset_dir = None
         if replace_asset_id and pending_replacement is not None:
-            asset = STORE.commit_replace(session_id, replace_asset_id, pending_replacement)
+            existing = STORE.get(session_id, replace_asset_id)
+            if is_placeholder(existing):
+                asset = STORE.commit_resolve_placeholder(session_id, replace_asset_id, pending_replacement)
+            else:
+                asset = STORE.commit_replace(session_id, replace_asset_id, pending_replacement)
             uploaded.append(asset)
             pending_replacement = None
             pending_replacement_dir = None
@@ -1287,6 +1385,80 @@ async def media_manifest(request: web.Request) -> web.Response:
     except ValueError:
         return _error("INVALID_SESSION", "The media session ID is invalid.", status=400)
     return web.json_response(STORE.manifest(session_id, mode))
+
+
+@routes.post(f"{ROUTE_PREFIX}/media/placeholder")
+async def create_media_placeholder(request: web.Request) -> web.Response:
+    """Declare a reference slot without attaching a file.
+
+    This exists so a reference-driven prompt can be written before the media is
+    ready: the user reserves the tag, describes what will go there, and the prompt
+    model writes from that description rather than from an image it cannot see.
+    """
+    busy = _generation_busy_error()
+    if busy is not None:
+        return busy
+    body = await _json_body(request)
+    if body is None:
+        return _error("INVALID_REQUEST", "Expected a JSON object.", status=400)
+    mode = body.get("mode")
+    if mode not in MODES:
+        return _error("INVALID_MODE", "The selected mode is not supported.", status=400)
+    if not target_registry.mode(mode).requires_media:
+        return _error(
+            "UNSUPPORTED_MEDIA",
+            f"{mode} does not accept reference media.",
+            status=400,
+        )
+    try:
+        session_id = parse_session_id(body.get("session_id"))
+    except ValueError:
+        return _error("INVALID_SESSION", "The media session ID is invalid.", status=400)
+    try:
+        kind, description = validate_placeholder(
+            body.get("kind"),
+            body.get("description"),
+            body.get("reference"),
+        )
+        asset = STORE.commit_placeholder(
+            session_id,
+            mode,
+            build_placeholder(session_id, mode, kind, description),
+        )
+    except PlaceholderError as error:
+        return _error(error.code, error.message, status=400)
+    except MediaError as error:
+        return _media_error(error)
+    _invalidate_generation_cache(session_id, mode)
+    return web.json_response({"session_id": session_id, "asset": asset, "assets": STORE.list(session_id)}, status=201)
+
+
+@routes.patch(f"{ROUTE_PREFIX}/media/{{asset_id}}/placeholder")
+async def update_media_placeholder(request: web.Request) -> web.Response:
+    """Update the user-authored description of a declared reference slot."""
+    busy = _generation_busy_error()
+    if busy is not None:
+        return busy
+    body = await _json_body(request)
+    if body is None:
+        return _error("INVALID_REQUEST", "Expected a JSON object.", status=400)
+    try:
+        session_id = parse_session_id(body.get("session_id"))
+    except ValueError:
+        return _error("INVALID_SESSION", "The media session ID is invalid.", status=400)
+    asset_id = request.match_info["asset_id"]
+    try:
+        asset = STORE.get(session_id, asset_id)
+        if not is_placeholder(asset):
+            raise PlaceholderError("NOT_A_PLACEHOLDER", "Only a declared reference slot has a description.")
+        _, description = validate_placeholder(asset["type"], body.get("description"), asset.get("reference"))
+        asset["description"] = description
+    except PlaceholderError as error:
+        return _error(error.code, error.message, status=400)
+    except MediaError as error:
+        return _media_error(error, status=404)
+    _invalidate_generation_cache(session_id, asset["mode"])
+    return web.json_response({"session_id": session_id, "asset": STORE.public(asset), "assets": STORE.list(session_id)})
 
 
 @routes.get(f"{ROUTE_PREFIX}/media/{{asset_id}}/content")

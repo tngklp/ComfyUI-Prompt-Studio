@@ -16,6 +16,7 @@ class _FakeRoutes:
 
     post = get
     delete = get
+    patch = get
 
 
 sys.modules["server"] = types.SimpleNamespace(

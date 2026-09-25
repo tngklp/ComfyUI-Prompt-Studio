@@ -374,11 +374,20 @@ class DirectMusicRuntimeTests(unittest.TestCase):
         exercise("Music3", model_info(projector=None))
         self.assertEqual(selections, [("Music3", True), ("T2VA", False), ("T2VA", True), ("Music3", True)])
 
-    def test_text_only_direct_model_rejects_visual_mode_before_load(self):
+    def test_text_only_direct_model_rejects_attached_media_before_load(self):
+        # The gate is driven by what is actually being sent to the model, not by the
+        # mode id alone: a Reference request whose slots are all declared-but-absent
+        # (placeholders) carries no visual payload and must be allowed, because the
+        # user described the media in words the model can read.
         backend = GGUFBackend()
         assembled = {
             "messages": [{"role": "user", "content": "brief"}],
-            "media_inputs": [],
+            "media_inputs": [{
+                "asset_id": "real-image",
+                "reference": "<Picture 1>",
+                "type": "image",
+                "requires_capability": "images",
+            }],
             "input": {"mode": "Reference", "creative_brief": "brief"},
         }
 
@@ -389,8 +398,43 @@ class DirectMusicRuntimeTests(unittest.TestCase):
             )
 
         self.assertEqual(raised.exception.code, "DIRECT_VISION_REQUIRED")
-        self.assertEqual(raised.exception.details["supported_modes"], ["T2VA", "Music3"])
+        self.assertIn("attached media", raised.exception.message)
         self.assertIsNone(backend.model)
+
+    def test_text_only_direct_model_accepts_a_reference_request_with_only_declared_slots(self):
+        # A Reference request whose slots are all declared-but-absent carries no
+        # visual payload, so a text-only model can write the prompt from the user's
+        # own description of the media. This is the "empty media reference" case.
+        backend = GGUFBackend()
+        info = model_info(projector=None)
+        assembled = {
+            "messages": [{"role": "user", "content": "brief"}],
+            "media_inputs": [],
+            "input": {"mode": "Reference", "creative_brief": "brief"},
+        }
+
+        def fake_load(info, plan, *, text_only=False):
+            backend.model = _FakeModel()
+            backend.model_id = info["id"]
+            backend.runtime_signature = (
+                info["id"], plan["context_tokens"], plan["kv_cache"],
+                "text" if text_only else "multimodal",
+            )
+
+        with (
+            patch.object(backend, "load", side_effect=fake_load),
+            patch.object(backend, "_logits_processors", return_value=[]),
+            patch.object(backend, "_console"),
+            patch("backend.models.gguf_backend.run_pipeline", return_value={"prompt": "result"}),
+        ):
+            result = backend.generate(
+                info, assembled, "session",
+                thinking=False, seed=1, unload_after=False, runtime_plan=runtime_plan(),
+            )
+
+        self.assertEqual(result["prompt"], "result")
+        # No media was sent, so nothing spent visual budget.
+        self.assertEqual(result["estimated_visual_tokens"], 0)
 
     def test_direct_model_without_template_control_rejects_thinking_before_load(self):
         backend = GGUFBackend()

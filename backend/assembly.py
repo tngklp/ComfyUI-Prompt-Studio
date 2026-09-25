@@ -3,11 +3,13 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from . import characters
 from .guides import guide_for_mode, load_guide, reference_base_excerpt
 from .media import STORE, MediaError, parse_session_id
+from .placeholders import is_placeholder, placeholder_line
 from .references import canonical_reference_tags
 from .system_prompts import SystemPromptError, resolve_system_prompt
-from .targets import TargetError, target_for_mode, targets
+from .targets import TargetError, resolve_mode_options, target_for_mode, targets
 from .text_normalization import normalize_unicode_text
 
 
@@ -49,6 +51,11 @@ def _required_text(body: dict[str, Any], key: str, label: str) -> str:
 
 
 def _media_line(asset: dict[str, Any]) -> str:
+    # A placeholder is a declared-but-absent slot, not an attached file. It is
+    # described as a declaration so the prompt model writes from the user's own
+    # words and never pretends to have seen media it was not given.
+    if is_placeholder(asset):
+        return placeholder_line(asset)
     detail = asset["type"]
     if asset.get("duration") is not None:
         detail += f", {asset['duration']:g}s"
@@ -59,6 +66,109 @@ def _media_line(asset: dict[str, Any]) -> str:
     elif asset["type"] == "audio":
         detail += ", not analyzed by the local model; role must come only from the user's brief"
     return f"{asset.get('reference', asset['filename'])}: {asset['filename']} ({detail})"
+
+
+def _blind_media_line(asset: dict[str, Any]) -> str:
+    """Describe an attached asset without showing it to the prompt model.
+
+    Used by media-blind mode: the user accepted that the prompt model cannot see
+    the media, so the model is told the slot exists and is forbidden from inventing
+    its contents. The point is that the reference tag stays writable in the brief
+    and the prompt keeps its slot structure, without a vision model being loaded.
+    """
+    reference = asset.get("reference") or asset.get("filename") or "reference"
+    kind = asset.get("type") or "image"
+    description = str(asset.get("description") or "").strip()
+    note = f" The user describes it as: {description}" if description else ""
+    return (
+        f"{reference}: {kind} attached but deliberately not analyzed by the prompt model.{note} "
+        f"Write {reference}'s role from the brief and the user's description only; do not claim to "
+        f"have seen {reference} and do not invent details about it."
+    )
+
+
+def _mode_options_directive(mode: str, resolved: dict[str, str | None]) -> str:
+    """One instruction line per active mode option.
+
+    The option's own vocabulary is quoted verbatim from the registry, so the guide
+    and the instruction can never drift apart.
+    """
+    if not resolved:
+        return ""
+    mode_spec = target_for_mode(mode).mode(mode)
+    lines: list[str] = []
+    for option in mode_spec.options:
+        value = resolved.get(option.id)
+        if value is None:
+            continue
+        choice = option.choice(value)
+        if option.id == "content_rating":
+            if choice.prompt_tag is None:
+                lines.append(
+                    "Content rating: no safety tag was requested. Do not add a safety tag "
+                    "(safe, sensitive, nsfw or explicit) to the prompt."
+                )
+            else:
+                lines.append(
+                    f"Content rating: the prompt must be rated {choice.prompt_tag}. Include the tag "
+                    f"`{choice.prompt_tag}` in the prompt's safety group, and keep everything you "
+                    f"describe consistent with that rating."
+                )
+        elif option.id == "prompt_style":
+            if choice.prompt_tag == "tags":
+                lines.append(
+                    "Prompt style: tags only. Write the entire prompt as a lowercase, "
+                    "comma-separated Danbooru-style tag list. Do not write prose sentences."
+                )
+            elif choice.prompt_tag == "natural language":
+                lines.append(
+                    "Prompt style: natural language. Write the entire prompt as descriptive English "
+                    "prose of at least two sentences. Do not fall back into a comma-separated tag list."
+                )
+            else:
+                lines.append(
+                    "Prompt style: hybrid. Open with the quality, meta and artist tags, then continue "
+                    "in descriptive English prose, mixing the two freely."
+                )
+        else:  # pragma: no cover - a new option needs its own instruction above
+            lines.append(f"{option.label}: {choice.prompt_tag or choice.label}.")
+    return "\n".join(lines)
+
+
+def _character_directive(mode: str, names: Any) -> str:
+    """Instruction block for the characters the user selected.
+
+    Only Anima gets this. Its guide is the one that defines a tag order with a
+    character-and-series position, so the placement rule is meaningful there and
+    meaningless - or actively wrong - for the video and audio targets.
+    """
+    if target_for_mode(mode).id != "anima":
+        return ""
+    if not isinstance(names, list) or not names:
+        return ""
+    resolved = characters.resolve([name for name in names if isinstance(name, str)])
+    found = resolved["characters"]
+    if not found:
+        return ""
+    triggers = [entry["trigger"] for entry in found]
+    lines = [
+        "Characters: the prompt must include these characters, using exactly this spelling.",
+        "Place each character and its series in the tag order between the subject count tag and "
+        "the artist tags:",
+    ]
+    lines.extend(f"- {trigger}" for trigger in triggers)
+    lines.append(
+        "For each one, name the character and then describe their basic appearance, as the guide "
+        "requires. Do not rename them, do not reorder the character before its series, and do not "
+        "add a character that is not listed here."
+    )
+    if resolved["unknown"]:
+        unknown = ", ".join(f"`{name}`" for name in resolved["unknown"])
+        lines.append(
+            f"The following names were not found in the character index, so leave them out rather "
+            f"than guessing a series for them: {unknown}."
+        )
+    return "\n".join(lines)
 
 
 def _effective_system_prompt(body: dict[str, Any], mode: str) -> tuple[str, bool]:
@@ -226,13 +336,31 @@ def assemble_request(body: dict[str, Any]) -> dict[str, Any]:
     except ValueError as error:
         raise AssemblyError("INVALID_SESSION", "The media session ID is invalid.") from error
 
+    try:
+        resolved_options = resolve_mode_options(mode, body.get("mode_options"))
+    except TargetError as error:
+        raise AssemblyError(error.code, error.message) from error
+
     manifest = STORE.manifest(session_id, mode)
     if not manifest["valid"]:
         raise AssemblyError("INVALID_MEDIA_MANIFEST", "The media manifest is not valid.", manifest["violations"])
 
     _validate_reference_tags(brief, manifest, mode, "Creative Brief")
     declared_references = manifest["assets"]
-    eligible = [asset for asset in declared_references if asset["type"] != "audio"]
+    # Media-blind mode: the user explicitly accepted that the prompt model cannot
+    # see the media. The assets stay attached - so their tags keep resolving and
+    # the brief keeps its slot structure - but no image bytes are sent and the
+    # model is told, per asset, that it must not invent what it cannot see.
+    blind_media = body.get("blind_media") is True
+    # A placeholder owns a reference tag but has no file, so it must never become a
+    # media input: doing so would demand a vision capability the user deliberately
+    # does not need and would spend visual tokens on nothing. An attached asset in
+    # blind mode is withheld for the same reason.
+    eligible = [
+        asset
+        for asset in declared_references
+        if asset["type"] != "audio" and not is_placeholder(asset) and not blind_media
+    ]
     media_inputs = [
         {
             "asset_id": asset["id"],
@@ -257,14 +385,31 @@ def assemble_request(body: dict[str, Any]) -> dict[str, Any]:
         }
         for asset in eligible
     ]
-    references = "\n".join(_media_line(asset) for asset in declared_references) or "None"
+    if blind_media:
+        references = "\n".join(_blind_media_line(asset) for asset in declared_references) or "None"
+        manifest_note = (
+            "Reference manifest (media-blind mode: the attached media is NOT shown to you. "
+            "Treat every reference role as declared by the user, never as observed):\n"
+        )
+    else:
+        references = "\n".join(_media_line(asset) for asset in declared_references) or "None"
+        manifest_note = (
+            "Reference manifest (audio is not analyzed by the local model; derive its "
+            "copy/reference role only from the user's words and do not invent its content):\n"
+        )
+    options_directive = _mode_options_directive(mode, resolved_options)
+    character_directive = _character_directive(mode, body.get("characters"))
+    # Options first, then characters: the option lines set the dialect and rating the
+    # character triggers must be written in.
+    directives = "\n\n".join(part for part in (options_directive, character_directive) if part)
     user_content = (
         f"Mode: {mode}\n"
         f"Duration: {duration:g} seconds\n"
         f"Aspect ratio: {aspect_ratio}\n\n"
-        "Reference manifest (audio is not analyzed by the local model; derive its copy/reference role only from the user's words and do not invent its content):\n"
+        f"{manifest_note}"
         f"{references}\n\n"
-        f"Creative brief:\n{brief}\n\n"
+        + (f"{directives}\n\n" if directives else "")
+        + f"Creative brief:\n{brief}\n\n"
         f"{_final_contract(mode, brief)}"
     )
     guide = guide_for_mode(mode)
@@ -277,6 +422,13 @@ def assemble_request(body: dict[str, Any]) -> dict[str, Any]:
             "aspect_ratio": aspect_ratio,
             "creative_brief": brief,
             "media_manifest": manifest,
+            "blind_media": blind_media,
+            "mode_options": resolved_options,
+            "characters": [
+                entry["character"] for entry in characters.resolve(
+                    [name for name in (body.get("characters") or []) if isinstance(name, str)]
+                )["characters"]
+            ],
         },
         "media_inputs": media_inputs,
         # Resolved through the target, not by bare id: several targets now declare
@@ -359,7 +511,12 @@ def assemble_refinement(
     _validate_reference_tags(instruction, manifest, mode, "Revision instruction")
     if mode == "Reference":
         _validate_reference_tags(current_prompt, manifest, mode, "Current prompt")
+    try:
+        resolved_options = resolve_mode_options(mode, body.get("mode_options"))
+    except TargetError as error:
+        raise AssemblyError(error.code, error.message) from error
     references = "\n".join(_media_line(asset) for asset in manifest["assets"]) or "None"
+    options_directive = _mode_options_directive(mode, resolved_options)
     guide = guide_for_mode(mode)
     user_content = (
         "Rewrite the current prompt according to the revision instruction. "
@@ -368,7 +525,8 @@ def assemble_refinement(
         f"Original duration: {duration:g} seconds\n"
         f"Original aspect ratio: {aspect_ratio}\n"
         f"Original Creative Brief:\n{creative_brief}\n\n"
-        f"Reference manifest (text only; media is intentionally not attached):\n{references}\n\n"
+        + (f"{options_directive}\n\n" if options_directive else "")
+        + f"Reference manifest (text only; media is intentionally not attached):\n{references}\n\n"
         f"Current prompt:\n{current_prompt}\n\n"
         f"Revision instruction:\n{instruction}\n\n"
         "Reference revision rule: preserve each existing <Audio N> that is absent from the Revision instruction. "
@@ -388,6 +546,7 @@ def assemble_refinement(
             "current_prompt": current_prompt,
             "instruction": instruction,
             "media_manifest": manifest,
+            "mode_options": resolved_options,
         },
         "media_inputs": [],
         "supporting_guides": ([{

@@ -1,27 +1,33 @@
-# Prompt Studio Standalone v1.1.0
+# Prompt Studio Standalone v1.2.0
 
 Standalone Windows version. ComfyUI is not required.
 
 ## Download
 
-Download **Prompt-Studio-Standalone-Windows-v1.1.0.zip** from the release assets below.
+Download **Prompt-Studio-Standalone-Windows-v1.2.0.zip** from the release assets below.
 
 Do not download **Source code (zip)** or **Source code (tar.gz)** for normal use.
 Do not install this package into ComfyUI `custom_nodes`.
 
 ## What's new
 
-- Rebranded to **Prompt Studio**. The package, launch scripts, environment variables, and
-  interface now use the Prompt Studio name. Environment variables renamed from `H3_*` to
-  `PS_*`, and the upstream checkout is now expected in a folder named `prompt-studio`.
-- Added generation-target support: video, music, and image prompts from one workspace,
-  driven by `targets.json`.
-- Added Qwen Image 2.1 text-to-image and image-edit prompts, plus Krea 2 and MiniMax
-  Music 3 caption and lyrics writing.
-- Fixed the Windows ZIP shipping without the generation-target registry. The release
-  build no longer keeps a private copy list that can drift from the project, so the
-  package starts correctly instead of failing with `REGISTRY_MISSING`.
-- Requires Prompt Studio core `1.0.0`.
+- Added the **Anima** text-to-image target, with the guide's own content rating and
+  prompt style options.
+- Added **character references**: type `miku` and it becomes `hatsune miku, vocaloid` in
+  the right position of the tag list. Multi-select, backed by the AnimaDex catalogue.
+- Added **per-region tag highlighting**, so the five regions of an Anima tag list are
+  colour-coded and a mis-ordered prompt is visible at a glance.
+- Added **declared references** (**Plan a picture**), so you can write a prompt for a
+  picture that is not attached, and **media-blind mode**, which keeps attached media out
+  of the prompt model.
+- Settings is now tabbed, separating prompts, media handling and Anima characters.
+- The Anima character catalogue is downloaded on first launch and cached locally,
+  instead of shipping a sample inside the package.
+- Fixed needing a hard refresh before new features appeared after an update: assets now
+  revalidate and the interface reloads itself once when it is older than the backend.
+- Added text drafts, a manual Ollama generation budget, an explicit vision projector, and
+  no Creative Brief character limit.
+- Requires Prompt Studio core `1.1.0`.
 
 ComfyUI-only controls, including Auto VRAM management and Add to workflow, are not
 shown in Standalone.

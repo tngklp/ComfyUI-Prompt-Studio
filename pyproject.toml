@@ -1,6 +1,6 @@
 [project]
 name = "prompt-studio"
-version = "1.0.0"
+version = "1.1.0"
 description = "A multimodal prompt studio for ComfyUI with local and API providers, supporting multiple generation-target models."
 license = { file = "LICENSE" }
 requires-python = ">=3.10"

@@ -1,0 +1,42 @@
+/* Single-field text prompt, used by the reference-slot flows. */
+.ps-text-prompt-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(4, 4, 5, .72);
+  animation: ps-fade var(--ps-motion-fast) ease-out;
+}
+.ps-text-prompt {
+  display: flex;
+  flex-direction: column;
+  gap: calc(10px * var(--ps-interface-scale));
+  width: min(520px, 100%);
+  padding: calc(16px * var(--ps-interface-scale));
+  border: 1px solid var(--ps-border-shell);
+  border-radius: var(--ps-radius-lg);
+  background: var(--ps-surface-2);
+  box-shadow: var(--ps-shadow);
+}
+.ps-text-prompt-head { display: flex; flex-direction: column; gap: 3px; }
+.ps-text-prompt-head strong { color: var(--ps-text); font-size: var(--ps-font-body); font-weight: 640; }
+.ps-text-prompt-head small { color: var(--ps-muted); font-size: var(--ps-font-label); line-height: 1.45; }
+.ps-text-prompt-field {
+  width: 100%;
+  min-height: calc(84px * var(--ps-interface-scale));
+  padding: calc(9px * var(--ps-interface-scale));
+  resize: vertical;
+  border: 1px solid var(--ps-border-input);
+  border-radius: var(--ps-radius-md);
+  background: var(--ps-surface);
+  color: var(--ps-text);
+  font: inherit;
+  font-size: var(--ps-font-body-sm);
+  line-height: 1.5;
+}
+.ps-text-prompt-field:focus { outline: none; border-color: rgba(167, 139, 250, .55); box-shadow: 0 0 0 2px rgba(167, 139, 250, .12); }
+.ps-text-prompt-actions { display: flex; align-items: center; gap: calc(8px * var(--ps-interface-scale)); }
+.ps-text-prompt-count { margin-right: auto; color: var(--ps-dim); font-size: var(--ps-font-caption); }
+.ps-text-prompt button[disabled] { opacity: .5; cursor: default; }

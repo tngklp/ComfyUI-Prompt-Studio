@@ -3,6 +3,7 @@ import {
   allModeIds,
   describesAudio,
   modeBriefLimit,
+  modeDescriptor,
   modeHasLyrics,
   modeLyricsLimit,
   outputOnlyModeFor,
@@ -21,6 +22,9 @@ export const DEFAULT_OLLAMA_HOST = "http://127.0.0.1:11434";
 export const API_PROVIDER_STORAGE_KEY = "ps-api-provider-v1";
 export const USER_PREFERENCES_STORAGE_KEY = "ps-preferences-v1";
 export const MODE_DRAFTS_STORAGE_KEY = "ps-mode-drafts-v1";
+// A scene rarely needs more than a handful of characters, and the cap keeps a
+// corrupted or hand-edited draft from storing an unbounded list.
+const MAX_STORED_CHARACTERS = 24;
 export const INTERFACE_SIZES = ["100", "110", "120", "125"];
 
 const PROVIDERS = ["direct", "external", "ollama", "api"];
@@ -84,7 +88,8 @@ export function isModeDraftDirty(mode, draft, defaults) {
     && Boolean(draft)
     && (draft.brief !== defaults.brief
       || draft.prompt !== defaults.prompt
-      || (modeHasLyrics(mode) && draft.lyrics !== defaults.lyrics));
+      || (modeHasLyrics(mode) && draft.lyrics !== defaults.lyrics)
+      || JSON.stringify(draft.options || null) !== JSON.stringify(defaults.options || null));
 }
 
 export function resetModeDraft(drafts, mode) {
@@ -132,7 +137,51 @@ function normalizeModeDraft(mode, draft) {
   if (modeHasLyrics(mode)) {
     normalized.lyrics = typeof draft.lyrics === "string" ? draft.lyrics.slice(0, modeLyricsLimit(mode)) : "";
   }
+  // Option selections live with the draft, so switching mode and coming back
+  // restores the rating and style the user had chosen for that mode.
+  const options = normalizeModeOptionSelection(mode, draft.options);
+  if (options) normalized.options = options;
+  // Character selections are Anima-only, and only a well-formed entry is kept: the
+  // slug is what the backend resolves, and the trigger is what the highlighter
+  // matches, so both must be present for the entry to be usable.
+  if (typeof mode === "string") {
+    const characters = (Array.isArray(draft.characters) ? draft.characters : [])
+      .filter((entry) => entry && typeof entry.character === "string" && entry.character
+        && typeof entry.trigger === "string" && entry.trigger)
+      .slice(0, MAX_STORED_CHARACTERS)
+      .map((entry) => ({
+        character: entry.character,
+        trigger: entry.trigger,
+        display_name: typeof entry.display_name === "string" ? entry.display_name : entry.trigger,
+      }));
+    if (characters.length) normalized.characters = characters;
+  }
   return normalized;
+}
+
+/**
+ * Keep only option ids the registry still declares for this mode, with a value
+ * that is still one of that option's choices. A stored value from an older
+ * registry is dropped rather than forwarded to a backend that would reject it.
+ *
+ * Returns `undefined` (not `{}`) for a mode with no options, so a mode that gains
+ * no options never writes an empty object into every stored draft.
+ */
+export function normalizeModeOptionSelection(mode, selection) {
+  const declared = modeDescriptor(mode)?.options;
+  if (!Array.isArray(declared) || !declared.length) return undefined;
+  const source = selection && typeof selection === "object" ? selection : {};
+  const values = {};
+  for (const option of declared) {
+    if (!option || typeof option.id !== "string") continue;
+    const value = source[option.id];
+    const valid = Array.isArray(option.choices) && option.choices.some((choice) => choice?.id === value);
+    // `null` is a legal value for an opt-in option ("no rating").
+    if (valid) values[option.id] = value;
+    else if (value === null && option.default === null) values[option.id] = null;
+    else if (option.default !== undefined) values[option.id] = option.default;
+  }
+  return values;
 }
 
 export function loadModeDrafts(storage = globalThis.localStorage) {
@@ -176,6 +225,7 @@ export function loadUserPreferences(storage = globalThis.localStorage) {
       ollama_generation_budget_tokens: Number.isInteger(value.ollama_generation_budget_tokens) && value.ollama_generation_budget_tokens > 0 ? value.ollama_generation_budget_tokens : null,
       direct_reasoning_effort: typeof value.direct_reasoning_effort === "string" && value.direct_reasoning_effort ? value.direct_reasoning_effort : "auto",
       music_lyrics_use_brief: value.music_lyrics_use_brief !== false,
+      blind_media: value.blind_media === true,
       fullscreen: value.fullscreen === true,
       vram_handoff: value.vram_handoff === true,
       theme: value.theme === "light" ? "light" : "dark",
@@ -203,6 +253,7 @@ export function saveUserPreferences(storage, state) {
     ollama_generation_budget_tokens: Number.isInteger(state.ollamaGenerationBudgetTokens) && state.ollamaGenerationBudgetTokens > 0 ? state.ollamaGenerationBudgetTokens : null,
     direct_reasoning_effort: typeof state.directReasoningEffort === "string" && state.directReasoningEffort ? state.directReasoningEffort : "auto",
     music_lyrics_use_brief: state.musicLyricsUseBrief !== false,
+    blind_media: state.blindMedia === true,
     fullscreen: state.fullscreen === true,
     vram_handoff: state.vramHandoff === true,
     theme: state.theme === "light" ? "light" : "dark",
@@ -421,6 +472,30 @@ function sharedInferencePayload(state) {
   };
 }
 
+/**
+ * The per-mode option selections the active mode declares.
+ *
+ * Selections live in the mode's own draft, so switching mode and returning
+ * restores that mode's rating and style. Only ids the registry declares for this
+ * mode are sent, so a stale stored value for a removed option cannot reach the
+ * backend and be rejected. `null` is meaningful: it is an opt-in option the user
+ * has not chosen, and the backend treats it as "emit nothing".
+ */
+export function currentModeOptions(state) {
+  const declared = modeDescriptor(state.mode)?.options;
+  if (!Array.isArray(declared) || !declared.length) return undefined;
+  const selected = state.modeDrafts?.[state.mode]?.options || {};
+  const payload = {};
+  for (const option of declared) {
+    if (!option || typeof option.id !== "string") continue;
+    const value = selected[option.id];
+    if (typeof value === "string" && value) payload[option.id] = value;
+    else if (value === null) payload[option.id] = null;
+    else payload[option.id] = option.default ?? null;
+  }
+  return payload;
+}
+
 export function buildGeneratePayload(state, { creativeBrief, lyrics = "", seed }) {
   const payload = {
     ...sharedInferencePayload(state),
@@ -430,6 +505,14 @@ export function buildGeneratePayload(state, { creativeBrief, lyrics = "", seed }
     seed,
   };
   if (modeHasLyrics(state.mode)) payload.lyrics = lyrics;
+  const options = currentModeOptions(state);
+  if (options) payload.mode_options = options;
+  // Anima character triggers. Only the slug is sent; the backend resolves it against
+  // its own index, so the prompt cannot receive a trigger the index never held.
+  if (state.characters?.length) payload.characters = state.characters.map((entry) => entry.character);
+  // Media-blind mode withholds attached media from the prompt model, so it needs
+  // to travel with the request rather than being a UI-only display preference.
+  if (state.blindMedia === true) payload.blind_media = true;
   return payload;
 }
 
@@ -444,6 +527,8 @@ export function buildRefinePayload(state, { currentPrompt, instruction, creative
     seed,
   };
   if (modeHasLyrics(state.mode)) payload.lyrics = lyrics;
+  const options = currentModeOptions(state);
+  if (options) payload.mode_options = options;
   return payload;
 }
 
@@ -485,6 +570,9 @@ export function createStudioState({ sessionId, storage = globalThis.localStorage
     keepModelLoaded: false,
     vramHandoff: preferences?.vram_handoff === true,
     settingsProvider: preferences?.active_provider || "ollama",
+    // Which Settings tab is open. Session-only: a reload should not land the user
+    // in a sub-tab they did not choose.
+    settingsTab: "model",
     preferencesRestoring: true,
     preferredProvider: preferences?.active_provider || "ollama",
     preferredDirectModelId: preferences?.direct_model_id || null,
@@ -497,6 +585,7 @@ export function createStudioState({ sessionId, storage = globalThis.localStorage
     directGenerationBudgetTokens: preferences?.direct_generation_budget_tokens || null,
     directReasoningEffort: preferences?.direct_reasoning_effort || "auto",
     musicLyricsUseBrief: preferences?.music_lyrics_use_brief !== false,
+    blindMedia: preferences?.blind_media === true,
     fullscreen: preferences?.fullscreen === true,
     theme: preferences?.theme === "light" ? "light" : "dark",
     interfaceSize: INTERFACE_SIZES.includes(preferences?.interface_size) ? preferences.interface_size : "100",

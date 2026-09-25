@@ -45,12 +45,18 @@ def audit_prompt(
     mode: str = "Reference",
     duration_seconds: float | None = None,
     camera_structure_allowed: bool = True,
+    mode_options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Audit a prompt using the strategy of the mode that produced it."""
+    """Audit a prompt using the strategy of the mode that produced it.
+
+    ``mode_options`` carries the user's per-mode selections, so an audit can judge
+    the output against what was actually requested rather than against a default.
+    """
     strategy = target_for_mode(mode).strategy
     return strategy.audit_prompt(
         prompt,
         mode,
         duration_seconds=duration_seconds,
         camera_structure_allowed=camera_structure_allowed,
+        mode_options=mode_options,
     )

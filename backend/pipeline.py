@@ -157,6 +157,7 @@ def _audit(
         assembled["input"]["mode"],
         duration_seconds,
         camera_structure_allowed,
+        mode_options=assembled["input"].get("mode_options"),
     )
     policy = reference_policy(assembled["input"])
     actual_reference_tags = reference_tags(prompt)
@@ -183,19 +184,29 @@ def _audit(
 
 
 def validate_media_capabilities(model_info: dict[str, Any], assembled: dict[str, Any]) -> None:
+    # A text-only Direct GGUF cannot analyse media, but it can still *write* a prompt
+    # for media it is not shown: a placeholder is described by the user's own words,
+    # and media-blind mode withholds attached assets from the model on purpose.
+    #
+    # The older form of this check keyed on the mode id alone, which blocked every
+    # Reference request for a text-only model even when nothing was attached. The
+    # gate is now driven by what is actually being sent to the model, which is the
+    # only thing the capability can honestly speak to.
+    attached_visual = any(
+        item.get("type") in {"image", "video"} for item in assembled.get("media_inputs", [])
+    )
     mode = assembled.get("input", {}).get("mode")
     if (
         model_info.get("family") == "gguf"
         and model_info.get("capabilities", {}).get("images") is False
-        and mode not in {"T2VA", "Music3"}
+        and attached_visual
     ):
         raise ModelError(
             "DIRECT_VISION_REQUIRED",
-            "This Direct GGUF model is running without a compatible vision projector. T2VA and Music3 are available.",
+            "This Direct GGUF model is running without a compatible vision projector and cannot analyze the attached media.",
             {
                 "mode": mode,
-                "supported_modes": ["T2VA", "Music3"],
-                "suggestion": "Switch to T2VA or Music3, or add the matching mmproj GGUF beside the model.",
+                "suggestion": "Remove the attached media, add the matching mmproj GGUF beside the model, or turn on Media-blind mode in Settings.",
             },
         )
     required = {item["requires_capability"] for item in assembled["media_inputs"]}
@@ -405,6 +416,7 @@ def run_pipeline(
             assembled["input"]["mode"],
             duration_seconds,
             camera_structure_allowed,
+            mode_options=assembled["input"].get("mode_options"),
         )
         repaired_tags = reference_tags(repaired)
         repaired_audit["missing_reference_tags"] = sorted(expected_reference_tags - repaired_tags)

@@ -293,13 +293,35 @@ class GuideIntegrityTests(unittest.TestCase):
                 )
 
     def test_authored_guides_are_marked_unpinned(self):
-        """An unpinned guide is authored in-repo, so it has no upstream source."""
+        """An unpinned guide is either authored in-repo, or adapted from upstream.
+
+        A *pinned* guide is byte-identical to the upstream file, so it must carry a
+        source URL. An *adapted* guide carries provenance without a verbatim pin, so
+        it may legitimately keep a source URL. A guide that is neither pinned nor
+        adapted is Prompt Studio-authored and has no upstream source at all.
+        """
         for target in targets.targets():
             for spec in target.guides:
-                if spec.source_sha256 is None:
+                if spec.source_sha256 is None and not spec.adapted:
                     self.assertIsNone(spec.source_url, f"{target.id}/{spec.id}")
                 else:
                     self.assertIsNotNone(spec.source_url, f"{target.id}/{spec.id}")
+
+    def test_adapted_guides_are_provenanced_but_unpinned(self):
+        """Adapted guides rewrite an upstream document and cannot be pinned."""
+        adapted = [
+            (target, spec)
+            for target in targets.targets()
+            for spec in target.guides
+            if spec.adapted
+        ]
+        self.assertTrue(adapted, "at least one guide is adapted from an upstream document")
+        for target, spec in adapted:
+            self.assertIsNone(
+                spec.source_sha256,
+                f"{target.id}/{spec.id} is adapted, so it cannot carry a verbatim pin",
+            )
+            self.assertIsNotNone(spec.source_url, f"{target.id}/{spec.id}")
 
     def test_guide_for_mode_follows_the_registry_mapping(self):
         for target in targets.targets():
@@ -634,6 +656,153 @@ class Krea2TargetTests(unittest.TestCase):
             self.strategy.final_contract("NotAMode", "a brief")
 
 
+class AnimaTargetTests(unittest.TestCase):
+    """Anima is a tag-first text-to-image model with no input media."""
+
+    def setUp(self):
+        self.target = targets.target("anima")
+        self.strategy = self.target.strategy
+
+    def test_it_declares_only_text_to_image(self):
+        self.assertEqual(set(self.target.mode_ids), {"AnimaTextToImage"})
+        self.assertEqual(self.target.default_mode, "AnimaTextToImage")
+        self.assertEqual(self.target.category, "image")
+
+    def test_it_takes_no_input_media_and_has_no_edit_field(self):
+        self.assertEqual(tuple(self.target.media_capabilities), ())
+        mode = self.target.mode("AnimaTextToImage")
+        self.assertFalse(mode.requires_media)
+        self.assertIsNone(mode.instruction_field)
+
+    def test_it_has_no_video_contract_features(self):
+        contract = self.target.output_contract
+        self.assertIsNone(self.target.durations)
+        self.assertFalse(contract.requires_duration)
+        self.assertFalse(contract.shot_numbering)
+        self.assertFalse(contract.timestamp_syntax)
+
+    def test_its_mode_id_does_not_collide_with_another_image_target(self):
+        # Mode ids are global API keys, so a third image target still needs its own.
+        for other in ("qwen_image_2.1", "krea_2"):
+            self.assertNotIn("AnimaTextToImage", targets.target(other).mode_ids)
+        self.assertEqual(self.target.mode("AnimaTextToImage").label, "T2I")
+
+    def test_it_resolves_a_guide_and_a_system_prompt(self):
+        guide = guide_for_mode(self.target.default_mode)
+        self.assertEqual(guide["filename"], "anima/t2i.md")
+        self.assertTrue(str(guide["content"]).strip())
+        # Adapted from the official model card, so provenanced but not verbatim.
+        spec = self.target.guide("base")
+        self.assertTrue(spec.adapted)
+        self.assertIsNone(spec.source_sha256)
+        self.assertIsNotNone(spec.source_url)
+        self.assertTrue(system_prompt_for_mode(self.target.default_mode).strip())
+
+    def test_its_guide_id_does_not_shadow_another_target(self):
+        # Anima, Krea 2 and H3 all declare a guide called "base", so a guide must
+        # always be resolved through its owning target.
+        anima = guide_for_mode("AnimaTextToImage")
+        krea = guide_for_mode("Krea2TextToImage")
+        h3 = guide_for_mode("T2VA")
+        self.assertEqual(anima["filename"], "anima/t2i.md")
+        self.assertNotEqual(anima["content"], krea["content"])
+        self.assertNotEqual(anima["content"], h3["content"])
+
+    def test_the_guide_documents_the_models_own_prompting_rules(self):
+        content = str(guide_for_mode("AnimaTextToImage")["content"])
+        for required in (
+            "Tag order",
+            "Quality tags",
+            "Artist tags",
+            "Dataset tags",
+            "Tag dropout",
+            "Natural-language prompting",
+            "Limitations",
+        ):
+            self.assertIn(required, content, required)
+
+    def test_video_section_schema_triggers_a_repair(self):
+        leaky = "[Shot 1] At 00:01.000 1girl, overall_soundscape: quiet, non_diegetic_music: N/A"
+        audit = self.strategy.audit_prompt(leaky, "AnimaTextToImage")
+        self.assertTrue(audit["repair_required"])
+        self.assertIn("[Shot 1]", audit["video_contract_leakage"])
+        self.assertTrue(self.strategy.narrow_repair_messages(prompt=leaky))
+
+    def test_a_clean_tag_prompt_needs_no_repair(self):
+        clean = (
+            "masterpiece, best quality, score_7, safe, 1girl, solo, long hair, "
+            "silver hair, red eyes, school uniform, rooftop, sunset, looking at viewer"
+        )
+        audit = self.strategy.audit_prompt(clean, "AnimaTextToImage")
+        self.assertFalse(audit["repair_required"])
+        self.assertEqual(audit["video_contract_leakage"], [])
+        self.assertTrue(audit["is_tag_list"])
+        self.assertTrue(audit["coverage_signals"]["count_tag"])
+
+    def test_a_caption_without_a_subject_count_is_not_treated_as_a_tag_list(self):
+        # The count-tag warning only makes sense for a tag list. A prose caption
+        # legitimately names its subject in a sentence instead.
+        caption = (
+            "Digital artwork of Fern from Sousou no Frieren, with long purple hair and purple "
+            "eyes, wearing a black coat over a white dress with puffy sleeves, walking through a "
+            "sunlit meadow of tall grass."
+        )
+        audit = self.strategy.audit_prompt(caption, "AnimaTextToImage")
+        self.assertFalse(audit["is_tag_list"])
+        self.assertFalse(audit["repair_required"])
+
+    def test_underscore_tags_are_flagged_but_score_tags_are_not(self):
+        audit = self.strategy.audit_prompt(
+            "masterpiece, 1girl, long_hair, score_7, safe", "AnimaTextToImage"
+        )
+        self.assertIn("long_hair", audit["underscore_tags"])
+        self.assertNotIn("score_7", audit["underscore_tags"])
+        self.assertIn(
+            "tags should use spaces instead of underscores, except score tags",
+            audit["quality_warnings"],
+        )
+
+    def test_a_realism_request_is_reported_as_a_warning_not_a_repair(self):
+        audit = self.strategy.audit_prompt(
+            "photorealistic portrait of a woman, 1girl, safe", "AnimaTextToImage"
+        )
+        self.assertFalse(audit["repair_required"])
+        self.assertTrue(audit["realism_request"])
+        self.assertIn(
+            "Anima is an anime and illustration model and does not render realism well",
+            audit["quality_warnings"],
+        )
+
+    def test_an_artist_tag_is_only_recognised_with_the_at_prefix(self):
+        without = self.strategy.audit_prompt("1girl, by nnn yryr, safe", "AnimaTextToImage")
+        self.assertFalse(without["coverage_signals"]["artist"])
+        with_prefix = self.strategy.audit_prompt("1girl, @nnn yryr, safe", "AnimaTextToImage")
+        self.assertTrue(with_prefix["coverage_signals"]["artist"])
+
+    def test_dataset_tags_are_surfaced_so_they_stay_deliberate(self):
+        audit = self.strategy.audit_prompt(
+            "ye-pop\nFor Sale: Others by Arun Prem\nAbstract, oil painting of three figures.",
+            "AnimaTextToImage",
+        )
+        self.assertTrue(audit["dataset_tags"])
+        self.assertFalse(audit["repair_required"])
+
+    def test_the_recommended_negative_vocabulary_is_available(self):
+        audit = self.strategy.audit_prompt("1girl, safe", "AnimaTextToImage")
+        self.assertIn("chromatic aberration", audit["recommended_negative"])
+
+    def test_the_mode_contract_forbids_a_json_answer(self):
+        contract = self.strategy.final_contract("AnimaTextToImage", "a brief")
+        self.assertIn("JSON", contract)
+
+    def test_repair_messages_exist_only_when_there_is_leakage(self):
+        self.assertEqual(self.strategy.narrow_repair_messages(prompt="1girl, safe"), [])
+
+    def test_an_unknown_mode_is_rejected_by_the_contract(self):
+        with self.assertRaises(ValueError):
+            self.strategy.final_contract("NotAMode", "a brief")
+
+
 class VideoTargetRegressionTests(unittest.TestCase):
     """H3 keeps its official contract through the registry."""
 
@@ -755,13 +924,56 @@ class ExtensibilityTests(unittest.TestCase):
         ``Ref2VA``/``T2I``/``Edit`` while the registry used
         ``Reference``/``TextToImage``/``ImageEdit``, so those modes sent a mode id
         the backend rejected with INVALID_MODE.
+
+        The check now scans only the mode-id positions. Option and choice ids also
+        use ``id:``, and treating those as mode ids would report every declared
+        option value as an invented mode.
         """
         source = (ROOT / "web" / "target_registry.js").read_text(encoding="utf-8")
         known = set(targets.mode_ids())
-        invented = sorted({value for value in re.findall(r'\bid:\s*"([^"]+)"', source) if value not in known})
-        # Target ids legitimately use "id:" too, so drop those before judging.
-        invented = [value for value in invented if value not in set(targets.target_ids())]
+        # `id: "x", label: ..., title: ...` is the mode shape; option and choice
+        # entries carry their own ids in nested objects.
+        mode_ids = set(re.findall(r'\bid:\s*"([^"]+)",\s*label:\s*"[^"]*",\s*title:', source))
+        invented = sorted(value for value in mode_ids if value not in known)
         self.assertEqual(invented, [], "snapshot declares mode ids the registry does not know")
+        # And the snapshot must still carry every real mode id in that position.
+        self.assertEqual(mode_ids, known, "snapshot mode ids drifted from the registry")
+
+    def test_frontend_snapshot_carries_every_mode_option(self):
+        """Options are rendered from the snapshot, so their ids and values must match.
+
+        A choice id the snapshot invents would be posted to the backend and rejected
+        with INVALID_OPTION, which the user would see as an unexplained failure to
+        generate.
+        """
+        source = (ROOT / "web" / "target_registry.js").read_text(encoding="utf-8")
+        for target in targets.targets():
+            for mode in target.modes:
+                for option in mode.options:
+                    self.assertIn(
+                        f'id: "{option.id}"',
+                        source,
+                        f"option {option.id} ({mode.id}) missing from the snapshot",
+                    )
+                    for choice in option.choices:
+                        self.assertIn(
+                            f'id: "{choice.id}"',
+                            source,
+                            f"choice {choice.id} of {option.id} ({mode.id}) missing from the snapshot",
+                        )
+
+    def test_frontend_snapshot_option_defaults_match(self):
+        """A drifted default would change what is sent without the user choosing."""
+        source = (ROOT / "web" / "target_registry.js").read_text(encoding="utf-8")
+        for target in targets.targets():
+            for mode in target.modes:
+                for option in mode.options:
+                    default = "null" if option.default is None else f'"{option.default}"'
+                    self.assertIn(
+                        f'default: {default},',
+                        source,
+                        f"option {option.id} ({mode.id}) default mismatch",
+                    )
 
     def test_frontend_snapshot_guide_and_prompt_names_match(self):
         """Guide ids and prompt profiles are addressed by name at runtime."""

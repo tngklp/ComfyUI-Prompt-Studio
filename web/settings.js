@@ -12,11 +12,20 @@ export function settingsMarkup(icon) {
   return `
     <section class="ps-settings-view" data-settings-view hidden>
       <header class="ps-settings-heading">
-        <span><strong>Settings</strong><em>Inference, runtime and prompt behavior</em></span>
+        <span><strong>Settings</strong><em data-settings-subtitle>Inference, runtime and prompt behavior</em></span>
         <button class="ps-secondary-button" type="button" data-close-settings>${icon("chevron", 14)} Back to Generate</button>
       </header>
 
-      <div class="ps-settings-content">
+      <nav class="ps-settings-tabs" role="tablist" aria-label="Settings section">
+        <button type="button" role="tab" aria-selected="true" data-settings-tab="model">
+          ${icon("grid", 15)}<span><strong>Prompt model</strong><small>Providers, models and runtime</small></span>
+        </button>
+        <button type="button" role="tab" aria-selected="false" data-settings-tab="media">
+          ${icon("image", 15)}<span><strong>Media handling</strong><small>How references reach the prompt model</small></span>
+        </button>
+      </nav>
+
+      <div class="ps-settings-content" data-settings-panel="model">
         <section class="ps-settings-card ps-provider-settings">
           <header><span><small>Inference</small><strong>Provider</strong></span></header>
           <div class="ps-provider-selector" role="tablist" aria-label="Inference provider">
@@ -92,6 +101,38 @@ export function settingsMarkup(icon) {
           <header><span><small>Notifications</small></span></header>
           <label class="ps-toggle-control"><input type="checkbox" data-desktop-notifications><span></span>Desktop notifications</label>
           <p class="ps-field-help" data-desktop-notifications-hint></p>
+        </section>
+      </div>
+
+      <div class="ps-settings-content" data-settings-panel="media" hidden>
+        <section class="ps-settings-card ps-media-handling-settings">
+          <header><span><small>References</small><strong>Attach media without a vision model</strong></span></header>
+          <label class="ps-toggle-control"><input type="checkbox" data-blind-media><span></span>Media-blind mode</label>
+          <p class="ps-field-help" data-blind-media-hint>
+            Attached pictures and videos stay in the workspace and keep their reference tags, but are
+            <strong>not sent to the prompt model</strong>. The model is told each reference exists, that it has not
+            seen it, and that it must not invent its contents, so it writes that reference's role from your brief
+            alone. Use it to generate with a text-only prompt model, or to keep image bytes off a remote provider.
+          </p>
+          <ul class="ps-field-notes">
+            <li>A <strong>declared reference</strong> you added with <em>Plan a picture</em> is already text-only and needs no vision model whether this is on or off.</li>
+            <li>With this on, reference roles depend entirely on your brief. Describe what each tag contributes.</li>
+            <li>Turning it off restores the normal requirement: every attached picture or video needs a vision-capable prompt model.</li>
+          </ul>
+        </section>
+
+        <section class="ps-settings-card ps-character-settings">
+          <header><span><small>Anima</small><strong>Characters</strong></span></header>
+          <p class="ps-field-help" data-character-source>Checking character data…</p>
+          <div class="ps-character-import">
+            <button class="ps-secondary-button" type="button" data-character-refresh>Download character data</button>
+          </div>
+          <p class="ps-field-help">
+            The Anima character catalogue is downloaded once from
+            <strong>animadex.net</strong> and cached on this computer, so it is only fetched
+            on the first launch or when the copy on disk is old. Characters are then resolved
+            to the exact <code>&lt;character&gt;, &lt;series&gt;</code> pair Anima expects.
+          </p>
         </section>
       </div>
     </section>`;

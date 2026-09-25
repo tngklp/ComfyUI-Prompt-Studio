@@ -1,12 +1,12 @@
 import { createDesktopNotifications } from "./desktop_notifications.js";
 import { promptHighlightMarkup } from "./prompt_highlights.js";
 import { MODE_DEFAULT_DRAFTS, defaultModeDraftFor } from "./mode_defaults.js";
-import { fitTextarea, generationButtonMarkup, sequenceNotificationOptions, aspectRatioMarkup, bindAspectRatio, splitMenuMarkup, setSplitMenuOpen, copyButtonMarkup } from "./writer_controls.js";
+import { fitTextarea, generationButtonMarkup, sequenceNotificationOptions, aspectRatioMarkup, bindAspectRatio, modeOptionsMarkup, bindModeOptions, selectedModeOptionChoice, splitMenuMarkup, setSplitMenuOpen, copyButtonMarkup } from "./writer_controls.js";
 import { mediaVisualDescriptor } from "./media_visual.js";
 import { createSequenceWorkspace } from "./sequence_workspace.js";
 import { generateSequence, cancelSequence } from "./api/sequence.js";
 import { app } from "/scripts/app.js";
-import { cancel, clearMedia, diagnoseGGUFRuntime, disconnectApiProvider, freeComfyVram, generate, getApiProviderModels, getApiProviderPresets, getModels, getOllamaStatus, getStatus, getTargets, probeApiProvider, probeExternalServer, refine, removeMedia, reorderMedia, selectProjector, unloadModel, uploadMedia } from "./api/prompt_studio.js";
+import { cancel, clearMedia, createMediaPlaceholder, diagnoseGGUFRuntime, disconnectApiProvider, freeComfyVram, generate, getApiProviderModels, getApiProviderPresets, getModels, getOllamaStatus, getStatus, getTargets, probeApiProvider, probeExternalServer, refine, refreshCharacters, removeMedia, reorderMedia, resolveCharacters, searchCharacters, selectProjector, unloadModel, updateMediaPlaceholder, uploadMedia } from "./api/prompt_studio.js";
 import { comfyVramIsAlreadyEmpty, createSessionId, fileCountFromDataTransfer, insertReferenceAtCaret, isChoiceMenuInteraction, isRuntimeMenuInteraction, moveOntoTarget, replacementTargetForFileDrop, replaceEventListener, vramReleaseReachedTarget } from "./compat.js";
 import { generateModelSummaryMarkup, settingsMarkup } from "./settings.js";
 import { targetSelectionMarkup } from "./target_selection.js";
@@ -25,6 +25,7 @@ import {
   loadOllamaModel,
   loadOllamaHost,
   loadUserPreferences,
+  normalizeModeOptionSelection,
   normalizeOllamaHost,
   saveApiProviderConfig,
   saveExternalServerConfig,
@@ -39,6 +40,10 @@ import { autoVramControlMarkup, createVramHandoffCoordinator, installVramHandoff
 import { draftFile, draftFilename, parseDraft } from "./draft_files.js";
 import { referenceTextRemapper } from "./reference_labels.js";
 import { createLazyMediaTool } from "./media_tools.js";
+import { promptForText } from "./text_prompt.js";
+import { guardAgainstStaleBundle } from "./bundle_guard.js";
+import { characterPickerMarkup, createCharacterPicker } from "./character_picker.js";
+import { escapeHtml as escapeHtmlShared } from "./html.js";
 
 import { editMedia } from "./api/prompt_studio.js";
 import {
@@ -58,6 +63,10 @@ import {
 
 const EXTENSION_NAME = "prompt.studio";
 const LAUNCHER_SCHEMA_VERSION = "2";
+// The version this bundle was built as. Kept in sync with `backend/version.py` by
+// `tests/frontend_regressions.mjs`, so a stale module can be detected at load time
+// by comparing it with the version the backend reports.
+const EXTENSION_VERSION = "1.1.0";
 const VRAM_HANDOFF_SUPPORTED = typeof app?.queuePrompt === "function";
 const HOST_CAPABILITIES = { windowed: true, comfyMemory: VRAM_HANDOFF_SUPPORTED, workflowMedia: true, ...app.psHost };
 const vramHandoffCoordinator = createVramHandoffCoordinator();
@@ -423,7 +432,12 @@ function renderPromptHighlights() {
   const editor = studio.root.querySelector("[data-output]");
   const layer = studio.root.querySelector("[data-prompt-highlights]");
   if (!editor || !layer) return;
-  layer.innerHTML = promptHighlightMarkup(editor.value) + "\n";
+  // The Anima highlighter needs the resolved character triggers to tell a character
+  // tag from an ordinary one, and the target id to know which projection to use.
+  layer.innerHTML = promptHighlightMarkup(editor.value, "official", {
+    targetId: targetForMode(studio.mode)?.id || null,
+    characters: (studio.characters || []).map((entry) => entry.trigger),
+  }) + "\n";
   layer.scrollTop = editor.scrollTop;
   layer.scrollLeft = editor.scrollLeft;
 }
@@ -457,15 +471,49 @@ const STYLE_MODULES = [
   "target_select",
   "responsive",
   "sequence",
+  "text_prompt",
+  "characters",
 ];
+
+/**
+ * Cache-busting token for assets this module injects by URL.
+ *
+ * ComfyUI serves the extension's `WEB_DIRECTORY` through its own static handler
+ * with no `Cache-Control`, so a browser may reuse a cached stylesheet or module
+ * until the user hard-refreshes. An injected `<link>` is fetched by our own code,
+ * so we can append a token and sidestep the browser cache entirely; the extension
+ * version is the natural token because it changes exactly when the files do.
+ *
+ * `main.js` itself is imported by the host and cannot be cache-busted from inside,
+ * so an out-of-date *module* is caught by `bundle_guard.js` instead.
+ */
+let assetToken = null;
+
+function setAssetToken(token) {
+  assetToken = typeof token === "string" && token ? token : null;
+}
+
+function brandedAssetUrl(relative) {
+  const url = new URL(relative, import.meta.url);
+  if (assetToken) url.searchParams.set("v", assetToken);
+  return url.href;
+}
 
 function injectStyles() {
   for (const name of STYLE_MODULES) {
-    if (document.querySelector(`link[data-ps-style="${name}"]`)) continue;
+    const existing = document.querySelector(`link[data-ps-style="${name}"]`);
+    const href = brandedAssetUrl(`./styles/${name}.css`);
+    // Replace a link whose URL predates the current token. Without this the first
+    // render of a session would pin the old stylesheet for the whole session.
+    if (existing) {
+      if (existing.dataset.psStyleHref === href) continue;
+      existing.remove();
+    }
     const link = document.createElement("link");
     link.rel = "stylesheet";
-    link.href = new URL(`./styles/${name}.css`, import.meta.url).href;
+    link.href = href;
     link.dataset.psStyle = name;
+    link.dataset.psStyleHref = href;
     document.head.appendChild(link);
   }
 }
@@ -493,14 +541,45 @@ function icon(name, size = 16) {
     grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
     download: '<path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M5 19h14"/>',
     crop: '<path d="M6 2v14a2 2 0 0 0 2 2h14M18 22V8a2 2 0 0 0-2-2H2"/>',
+    edit: '<path d="M4 20h4L20 8a2.83 2.83 0 0 0-4-4L4 16v4Z"/><path d="m14.5 5.5 4 4"/>',
   };
   return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" style="--ps-icon-size:${size}px" aria-hidden="true">${paths[name] || paths.info}</svg>`;
+}
+
+function isPlaceholderAsset(asset) {
+  return Boolean(asset) && asset.status === "placeholder";
+}
+
+/** Collect a reference description through the shared text prompt. */
+function promptForReferenceDescription(options) {
+  return promptForText({
+    root: studio.root,
+    multiline: true,
+    limit: 1000,
+    placeholder: "e.g. a red delivery bicycle leaning against a brick wall",
+    ...options,
+  });
 }
 
 function renderAsset(asset, index) {
   const destructiveDisabled = studio.requestBusy ? "disabled" : "";
   const tagDisabled = studio.requestBusy ? "disabled" : "";
   const draggable = studio.requestBusy ? "false" : "true";
+  // A declared slot has no file, so it renders as a prompt card rather than a
+  // broken thumbnail: the description IS the content.
+  if (isPlaceholderAsset(asset)) {
+    return `
+    <div class="ps-asset is-placeholder" tabindex="0" role="group" aria-label="Declared reference slot" draggable="${draggable}" data-asset-index="${index}" data-asset-id="${asset.id}" data-replace-label="Add the file for ${escapeHtml(asset.reference || asset.filename)}">
+      <span class="ps-asset-preview ps-placeholder" aria-hidden="true">${icon("plus", 18)}</span>
+      <span class="ps-asset-copy">
+        <strong>${asset.reference ? `<button type="button" class="ps-media-tag is-${asset.type}" data-media-tag="${escapeHtml(asset.reference)}" ${tagDisabled} title="Insert reference at text cursor">${escapeHtml(asset.reference)}</button>` : escapeHtml(asset.type)}</strong>
+        <small class="ps-placeholder-note">Not attached yet · ${escapeHtml(asset.description || "no description")}</small>
+      </span>
+      <button class="ps-edit-placeholder" type="button" data-edit-placeholder="${asset.id}" title="Edit the description of ${escapeHtml(asset.reference || asset.filename)}" aria-label="Edit the description of ${escapeHtml(asset.reference || asset.filename)}" ${destructiveDisabled}>${icon("edit", 12)}</button>
+      <button class="ps-replace-asset" type="button" data-replace-asset="${asset.id}" title="Attach the real file for ${escapeHtml(asset.reference || asset.filename)}" aria-label="Attach the real file for ${escapeHtml(asset.reference || asset.filename)}" ${destructiveDisabled}>${icon("refresh", 12)}</button>
+      <button class="ps-remove-asset" type="button" data-remove-asset="${asset.id}" title="Remove ${escapeHtml(asset.reference || asset.filename)}" aria-label="Remove ${escapeHtml(asset.reference || asset.filename)}" ${destructiveDisabled}>${icon("close", 12)}</button>
+    </div>`;
+  }
   const visual = asset.type === "audio"
     ? `<div class="ps-wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>`
     : asset.preview_url
@@ -519,6 +598,57 @@ function renderAsset(asset, index) {
       <button class="ps-replace-asset" type="button" data-replace-asset="${asset.id}" title="Replace ${escapeHtml(asset.reference || asset.filename)}" aria-label="Replace ${escapeHtml(asset.reference || asset.filename)}" ${destructiveDisabled}>${icon("refresh", 12)}</button>
       <button class="ps-remove-asset" type="button" data-remove-asset="${asset.id}" title="Remove ${escapeHtml(asset.reference || asset.filename)}" aria-label="Remove ${escapeHtml(asset.reference || asset.filename)}" ${destructiveDisabled}>${icon("close", 12)}</button>
     </div>`;
+}
+
+/**
+ * Declare a reference slot with no file attached.
+ *
+ * This is the escape hatch for "I know there will be images here": the user gets
+ * the tag, writes what the media will contain, and the prompt model writes from
+ * that description instead of refusing until a vision model is loaded.
+ */
+async function addMediaPlaceholder(kind = "image") {
+  if (studio.requestBusy) return;
+  const mode = studio.sequence?.mediaMode(studio.mode) ?? studio.mode;
+  if (!modeDescriptor(mode)?.requires_media) return;
+  const description = await promptForReferenceDescription({
+    title: `Plan a ${kind === "video" ? "Video" : "Picture"} reference`,
+    detail: "Describe what this reference will contain. The prompt model writes from your words, so nothing about it is invented.",
+    confirm: "Declare reference",
+  });
+  if (description === null) return;
+  try {
+    const result = await createMediaPlaceholder(studio.sessionId, mode, kind, description);
+    studio.sessionId = result.session_id;
+    acceptMediaAssets(result.assets);
+    renderMedia(studio.mode);
+    showToast(
+      `${result.asset.reference} declared`,
+      "Write the tag in your brief, then attach the file when you have it.",
+      null, null, { dismissOnWorkspaceClick: true },
+    );
+  } catch (error) {
+    showToast(error.code || "Could not declare the reference", error.message, error.details);
+  }
+}
+
+async function editMediaPlaceholder(assetId) {
+  const asset = studio.assets.find((item) => item.id === assetId);
+  if (!asset || studio.requestBusy) return;
+  const description = await promptForReferenceDescription({
+    title: `Describe ${asset.reference || "this reference"}`,
+    detail: "The prompt model writes from this description and is told it has not seen the media.",
+    confirm: "Save description",
+    value: asset.description || "",
+  });
+  if (description === null || description === (asset.description || "")) return;
+  try {
+    const result = await updateMediaPlaceholder(studio.sessionId, assetId, description);
+    acceptMediaAssets(result.assets);
+    renderMedia(studio.mode);
+  } catch (error) {
+    showToast(error.code || "Could not update the description", error.message, error.details);
+  }
 }
 
 function referenceComposerAssets() {
@@ -582,6 +712,27 @@ function notifyMediaCompatibility() {
   if(pending.length)messages.push("Trim the video source to 2–15 seconds and Apply to use it as a reference.");
   if(total>15)messages.push("Reference videos exceed 15 seconds in total. Prompt generation is still available; check the target model's limits.");
   if(messages.length)showToast("Reference media",messages.join(" "),null,null,{dismissOnWorkspaceClick:true});
+}
+
+/**
+ * A one-line note under the media box when media handling changes what the prompt
+ * model will actually receive. Both states change the meaning of an attached
+ * reference, and neither is visible from the cards alone.
+ */
+function mediaModeNoticeMarkup(mode) {
+  const assets = studio.assets.filter((asset) => asset.mode === mode);
+  if (!assets.length) return "";
+  const declared = assets.filter(isPlaceholderAsset).length;
+  const attached = assets.length - declared;
+  const notes = [];
+  if (declared) {
+    notes.push(`${declared} declared reference${declared === 1 ? "" : "s"} written from your description, not from media.`);
+  }
+  if (attached && studio.blindMedia) {
+    notes.push(`${attached} attached file${attached === 1 ? "" : "s"} withheld from the prompt model by Media-blind mode.`);
+  }
+  if (!notes.length) return "";
+  return `<p class="ps-media-mode-note" data-media-mode-note>${icon("info", 12)}<span>${notes.join(" ")}</span></p>`;
 }
 
 /**
@@ -669,11 +820,21 @@ function renderMedia(mode) {
       </div>` : "";
     const addLabel = !isReference || filter === "image" ? "Add image" : filter === "video" ? "Add video" : filter === "audio" ? "Add audio" : "Add media";
     const canAdd = isReference || assets.length < data.limit;
+    // A slot can be declared before its file exists, so a prompt can be written
+    // while the media is still being produced. Only offered where media is.
+    const planMarkup = usesMedia
+      ? `<div class="ps-placeholder-actions">
+          <button type="button" class="ps-plan-reference" data-add-placeholder="image" ${studio.requestBusy ? "disabled" : ""} title="Reserve a reference tag and describe what will go there">${icon("image", 13)}<span>Plan a picture</span></button>
+          ${isReference ? `<button type="button" class="ps-plan-reference" data-add-placeholder="video" ${studio.requestBusy ? "disabled" : ""} title="Reserve a reference tag for a video you have not attached yet">${icon("video", 13)}<span>Plan a video</span></button>` : ""}
+        </div>`
+      : "";
     media.innerHTML = `
       ${filters}
       <div class="ps-assets ${isReference ? "is-reference" : ""}">${visibleAssets.map((asset) => renderAsset(asset, assets.indexOf(asset))).join("")}
         ${canAdd ? `<button class="${assets.length ? "ps-add-asset" : "ps-empty-drop"}" type="button" data-add-media ${studio.requestBusy ? "disabled" : ""}>${icon("plus", 18)}<span>${addLabel}</span><small>Drop files here</small></button>` : ""}
-      </div>`;
+      </div>
+      ${planMarkup}
+      ${mediaModeNoticeMarkup(mode)}`;
   }
   notifyMediaCompatibility();
   bindMediaActions(mode);
@@ -750,6 +911,15 @@ function bindMediaActions(mode) {
   });
   studio.root.querySelectorAll("[data-add-media]").forEach((button) => {
     button.addEventListener("click", () => chooseMedia(mode));
+  });
+  studio.root.querySelectorAll("[data-add-placeholder]").forEach((button) => {
+    button.addEventListener("click", () => addMediaPlaceholder(button.dataset.addPlaceholder));
+  });
+  studio.root.querySelectorAll("[data-edit-placeholder]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      editMediaPlaceholder(button.dataset.editPlaceholder);
+    });
   });
   studio.root.querySelectorAll("[data-asset-id]").forEach((card) => {
     card.addEventListener("dragstart", (event) => {
@@ -929,6 +1099,9 @@ function currentDraftFields() {
     brief: currentBriefTextarea().value,
     lyrics: studio.root.querySelector("[data-music-lyrics]")?.value ?? "",
     prompt: studio.root.querySelector("[data-output]").value,
+    // Character selection rides with the draft, so switching mode and returning
+    // restores it alongside the brief and prompt.
+    ...(studio.characters?.length ? { characters: studio.characters } : {}),
   };
 }
 
@@ -1146,6 +1319,10 @@ function restoreModeDraft(mode) {
   currentBriefTextarea().value = draft.brief;
   if (isAudioMode(mode)) studio.root.querySelector("[data-music-lyrics]").value = draft.lyrics || "";
   output.value = draft.prompt;
+  // Restore the stored characters for this mode and clear any that the index no
+  // longer knows, so a stale selection cannot survive a mode switch.
+  studio.characters = Array.isArray(draft.characters) ? draft.characters : [];
+  studio.characterPicker?.restore(studio.characters);
   studio.lastModelPrompt = draft.prompt;
   studio.lastModelMeta = promptLengthMeta(draft.prompt);
   studio.refineRestore = null;
@@ -1233,6 +1410,80 @@ function syncWorkspace() {
   syncModeAvailability();
 }
 
+/**
+ * Render the active mode's declared options into the image panel.
+ *
+ * The container is rebuilt only when the option set changes, because a rebuild
+ * would close an open menu mid-interaction. Options are registry data, so a mode
+ * that declares none leaves the container empty and hidden.
+ */
+function syncModeOptions() {
+  if (!studio?.root) return;
+  const host = studio.root.querySelector("[data-mode-options]");
+  if (!host) return;
+  const declared = targetForMode(studio.mode)?.modes?.find((mode) => mode.id === studio.mode)?.options;
+  const options = Array.isArray(declared) ? declared : [];
+  const signature = JSON.stringify(options.map((option) => option.id));
+  if (!options.length) {
+    host.innerHTML = "";
+    host.hidden = true;
+    studio.renderedModeOptions = null;
+    return;
+  }
+  host.hidden = false;
+  const selected = studio.modeDrafts?.[studio.mode]?.options || {};
+  if (studio.renderedModeOptions !== `${studio.mode}:${signature}`) {
+    studio.renderedModeOptions = `${studio.mode}:${signature}`;
+    host.innerHTML = modeOptionsMarkup(icon, options, selected);
+    bindModeOptions(host, options, selected, (optionId, choiceId) => {
+      setModeOption(optionId, choiceId);
+    });
+    return;
+  }
+  // Same option set: only refresh the labels, so an open menu is left alone.
+  syncModeOptionLabels(host, options, selected);
+}
+
+function syncModeOptionLabels(host, options, selected) {
+  for (const option of options) {
+    const field = host.querySelector(`[data-mode-option="${option.id}"]`);
+    if (!field) continue;
+    // Resolved through the same helper the markup uses, so the label and the
+    // highlighted choice cannot disagree about which value is active.
+    const chosen = selectedModeOptionChoice(option, selected);
+    const label = field.querySelector("[data-option-label]");
+    const description = field.querySelector("[data-option-description]");
+    if (label) label.textContent = chosen.label;
+    if (description) description.textContent = chosen.hint || "";
+    field.querySelectorAll("[data-mode-option-value]").forEach((choice) => {
+      choice.setAttribute("aria-pressed", String(choice.dataset.modeOptionValue === chosen.id));
+    });
+  }
+}
+
+/** Record one option selection on the active mode's draft and persist it. */
+function setModeOption(optionId, choiceId) {
+  const mode = studio.mode;
+  const draft = studio.modeDrafts[mode] || defaultModeDraft(mode);
+  const declared = targetForMode(mode)?.modes?.find((entry) => entry.id === mode)?.options || [];
+  const options = normalizeModeOptionSelection(mode, { ...(draft.options || {}), [optionId]: choiceId }) || {};
+  studio.modeDrafts[mode] = { ...draft, options };
+  const option = declared.find((entry) => entry.id === optionId);
+  const choice = option?.choices?.find((entry) => entry.id === choiceId);
+  // The selection feeds the prompt, so a stale generated prompt no longer matches
+  // the settings shown. Surface that rather than leaving the editor silently wrong.
+  if (studio.lastModelPrompt) {
+    showToast(
+      `${option?.label || "Option"} set to ${choice?.label || choiceId}`,
+      "Generate again to apply it to the prompt.",
+      null, null, { dismissOnWorkspaceClick: true },
+    );
+  }
+  saveModeDrafts(localStorage, studio.modeDrafts);
+  syncModeOptionLabels(studio.root.querySelector("[data-mode-options]"), declared, options);
+  syncModifiedState();
+}
+
 /** Title, brief, and edit fields for the image panel, from the mode descriptor. */
 function syncImagePanel() {
   if (!studio?.root) return;
@@ -1246,6 +1497,24 @@ function syncImagePanel() {
   if (instruction) instruction.hidden = !edits;
   const imageBrief = studio.root.querySelector(".ps-image-brief");
   if (imageBrief) imageBrief.hidden = edits;
+  syncModeOptions();
+  studio.characterPicker?.syncVisibility(targetForMode(studio.mode)?.id || null);
+}
+
+/**
+ * Fetch the character index status once at startup.
+ *
+ * Only Anima uses it, but the status is also what tells the user whether the bundled
+ * index is a sample, so it is worth having before they open the picker.
+ */
+async function loadCharacterStatus() {
+  try {
+    const payload = await searchCharacters("");
+    studio.characterPicker?.renderStatus(payload?.status);
+  } catch {
+    // A missing character index is not fatal: the picker simply finds nothing.
+    studio.characterPicker?.renderStatus(null);
+  }
 }
 
 function syncModeAvailability() {
@@ -1620,6 +1889,10 @@ async function startGenerationPreview() {
     return;
   }
   if (!generationModeIsAvailable()) return;
+  // Drop any character the index no longer knows before it reaches the prompt, so a
+  // stale selection cannot contribute a trigger the index never held.
+  if (studio.characterPicker) await studio.characterPicker.validate();
+  saveCurrentModeDraft();
   if (!await prepareWriterRequest()) return;
   const modelName = studio.selectedModel.name.split("/").pop();
   const external = studio.selectedModel.family === "external";
@@ -2580,6 +2853,92 @@ function syncRuntimeSummary(result = null) {
   });
 }
 
+function setSettingsTab(tab) {
+  if (!studio?.root) return;
+  const target = tab === "media" ? "media" : "model";
+  studio.settingsTab = target;
+  studio.root.querySelectorAll("[data-settings-tab]").forEach((button) => {
+    button.setAttribute("aria-selected", String(button.dataset.settingsTab === target));
+  });
+  studio.root.querySelectorAll("[data-settings-panel]").forEach((panel) => {
+    panel.hidden = panel.dataset.settingsPanel !== target;
+  });
+  const subtitle = studio.root.querySelector("[data-settings-subtitle]");
+  if (subtitle) {
+    subtitle.textContent = target === "media"
+      ? "How references reach the prompt model"
+      : "Inference, runtime and prompt behavior";
+  }
+  if (target === "media") syncMediaSettings();
+}
+
+/** Keep the media-handling controls in step with the stored setting. */
+function syncMediaSettings() {
+  if (!studio?.root) return;
+  const toggle = studio.root.querySelector("[data-blind-media]");
+  if (toggle) toggle.checked = studio.blindMedia === true;
+  syncCharacterSettings();
+}
+
+/** Reflect the active character index in Settings. */
+function syncCharacterSettings() {
+  if (!studio?.root) return;
+  const label = studio.root.querySelector("[data-character-source]");
+  const refreshButton = studio.root.querySelector("[data-character-refresh]");
+  const status = studio.characterPicker?.status || null;
+  if (label) {
+    if (!status) {
+      label.textContent = "Character data is not available.";
+    } else {
+      const count = Number(status.count || 0).toLocaleString();
+      if (status.downloaded) {
+        label.textContent = `${count} characters available from the downloaded AnimaDex catalogue.`;
+      } else if (status.count > 0) {
+        label.textContent = `Waiting for the AnimaDex catalogue. ${count} placeholder characters are available offline.`;
+      } else {
+        label.textContent = "The AnimaDex catalogue has not been downloaded yet.";
+      }
+    }
+  }
+  if (refreshButton) {
+    // Offered whenever the full catalogue is not on disk, which covers both a failed
+    // first fetch and a build that has never been online.
+    refreshButton.hidden = Boolean(status?.downloaded);
+    refreshButton.disabled = studio.characterRefreshBusy === true;
+    refreshButton.textContent = studio.characterRefreshBusy
+      ? "Downloading…"
+      : "Download character data";
+  }
+}
+
+/**
+ * Download the AnimaDex character dataset.
+ *
+ * The download is automatic on first launch. This is the manual retry for when that
+ * attempt failed, so it reports progress and the outcome rather than staying silent.
+ */
+async function downloadCharacterDataset() {
+  if (studio.characterRefreshBusy) return;
+  studio.characterRefreshBusy = true;
+  syncCharacterSettings();
+  try {
+    const result = await refreshCharacters();
+    // The cached index changed on disk, so the picker has to re-read the status
+    // rather than keep showing the placeholder count.
+    await loadCharacterStatus();
+    syncCharacterSettings();
+    showToast(
+      "Characters ready",
+      `${Number(result.imported || 0).toLocaleString()} characters are now searchable.`,
+    );
+  } catch (error) {
+    showToast("Could not download characters", error.message, error.details);
+  } finally {
+    studio.characterRefreshBusy = false;
+    syncCharacterSettings();
+  }
+}
+
 function setSettingsOpen(open) {
   if (!studio) return;
   setOtherModelsPopover(false);
@@ -2594,6 +2953,8 @@ function setSettingsOpen(open) {
   studio.root.classList.toggle("is-settings-open", open);
   if (open) {
     if (selectedProvider) studio.settingsProvider = selectedProvider;
+    setSettingsTab(studio.settingsTab || "model");
+    syncMediaSettings();
     renderInferenceSettings();
     syncRuntimeSummary();
   }
@@ -3232,7 +3593,7 @@ function setFullscreen(fullscreen) {
 function createStudio() {
   if (studio) return studio;
   injectStyles();
-  const studioBrandIcon = new URL("./assets/prompt-studio-launcher.svg", import.meta.url).href;
+  const studioBrandIcon = brandedAssetUrl("./assets/prompt-studio-launcher.svg");
   const root = document.createElement("div");
   root.className = "ps-root";
   root.setAttribute("aria-hidden", "true");
@@ -3364,6 +3725,10 @@ function createStudio() {
             <div class="ps-control-grid ps-image-controls">
               ${aspectRatioMarkup(icon, "image-aspect")}
             </div>
+
+            ${characterPickerMarkup()}
+
+            <div class="ps-control-grid ps-mode-options" data-mode-options></div>
           </div>
           </div>
 
@@ -3429,6 +3794,27 @@ function createStudio() {
   studio.modeLimits = Object.fromEntries(
     selectableModes().map((mode) => [mode.id, { ...(mode.limits || {}) }]),
   );
+  // Anima character selection. `studio.characters` holds the resolved entries (slug,
+  // trigger, display name) so both the payload and the highlighter read one list.
+  studio.characters = [];
+  studio.characterPicker = createCharacterPicker({
+    root,
+    search: (query) => searchCharacters(query),
+    resolve: (names) => resolveCharacters(names),
+    onChange: ({ characters, triggers }) => {
+      studio.characters = triggers.map((trigger, index) => ({
+        character: characters[index],
+        trigger,
+        display_name: trigger.split(",")[0].trim() || characters[index],
+      }));
+      // The trigger list changed, so the character regions in an existing prompt may
+      // no longer match. Repaint rather than leaving stale colours behind.
+      renderPromptHighlights();
+      saveCurrentModeDraft();
+    },
+  });
+  studio.characterPicker.attach();
+  loadCharacterStatus();
   root.querySelector("[data-comfy-memory-action]").hidden = !HOST_CAPABILITIES.comfyMemory;
   if (!HOST_CAPABILITIES.windowed) {
     studio.fullscreen = true;
@@ -3541,6 +3927,25 @@ function createStudio() {
   root.querySelector("[data-open-settings-header]").addEventListener("click", () => setSettingsOpen(true));
   root.querySelector("[data-open-settings]").addEventListener("click", () => setSettingsOpen(true));
   root.querySelector("[data-close-settings]").addEventListener("click", () => setSettingsOpen(false));
+  root.querySelectorAll("[data-settings-tab]").forEach((tab) => tab.addEventListener("click", () => setSettingsTab(tab.dataset.settingsTab)));
+  root.querySelector("[data-character-refresh]")?.addEventListener("click", () => downloadCharacterDataset());
+  const blindMediaToggle = root.querySelector("[data-blind-media]");
+  if (blindMediaToggle) {
+    blindMediaToggle.addEventListener("change", () => {
+      studio.blindMedia = blindMediaToggle.checked;
+      saveUserPreferences(localStorage, studio);
+      // The workspace hint is derived from this setting, so refresh it now rather
+      // than waiting for the next media change.
+      renderMedia(studio.mode);
+      showToast(
+        blindMediaToggle.checked ? "Media-blind mode on" : "Media-blind mode off",
+        blindMediaToggle.checked
+          ? "Attached media stays in the workspace but is not sent to the prompt model."
+          : "Attached media is sent to the prompt model again; a vision model is required.",
+        null, null, { dismissOnWorkspaceClick: true },
+      );
+    });
+  }
   root.querySelector("[data-save-draft]").addEventListener("click", () => {
     setClearMenuOpen(false);
     saveTextDraft();
@@ -3986,7 +4391,7 @@ function installLauncher() {
   launcher.dataset.psLauncherVersion = LAUNCHER_SCHEMA_VERSION;
   launcher.setAttribute("aria-label", "Open Prompt Studio");
   launcher.title = "Open Prompt Studio · drag to move";
-  const launcherIcon = new URL("./assets/prompt-studio-launcher.svg", import.meta.url).href;
+  const launcherIcon = brandedAssetUrl("./assets/prompt-studio-launcher.svg");
   launcher.innerHTML = `<img src="${launcherIcon}" alt="Prompt Studio">`;
   document.body.appendChild(launcher);
 
@@ -4142,6 +4547,14 @@ app.registerExtension({
   menuCommands: [{ path: ["Extensions", "Prompt Studio"], commands: ["prompt-studio.open", "prompt-studio.media"] }],
   async setup() {
     injectStyles();
+    // A host that cached the previous bundle would otherwise keep running old code
+    // until a manual hard refresh. Check once, before the studio is built, so a
+    // stale bundle never renders a stale interface first.
+    await guardAgainstStaleBundle({
+      builtVersion: EXTENSION_VERSION,
+      fetchVersion: async () => (await getStatus()).version,
+      reload: () => location.reload(),
+    });
     installVramHandoff(app, {
       isEnabled: vramHandoffIsEnabled,
       onQueueRequested: () => vramHandoffCoordinator.invalidateWriterAttempts(),

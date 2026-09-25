@@ -18,3 +18,9 @@ standalone/data/tmp/
 /data/
 /tmp/
 /derived_*/
+
+# The Anima character catalogue is downloaded on first launch, not shipped. It is
+# 9 MB of CSV and 4 MB of index, it changes independently of this repository, and
+# every install would otherwise carry a copy that goes stale silently. Deleting this
+# file makes the next launch fetch it again.
+backend/data/anima_characters.cache.json

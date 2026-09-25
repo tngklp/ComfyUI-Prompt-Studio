@@ -41,6 +41,55 @@ class TargetError(ValueError):
 
 
 @dataclass(frozen=True)
+class ModeOptionChoice:
+    """One selectable value of a mode option.
+
+    ``prompt_tag`` is the exact vocabulary the target's own guide uses, so the
+    registry can validate a stored selection without importing the strategy.
+    """
+
+    id: str
+    label: str
+    hint: str = ""
+    prompt_tag: str | None = None
+
+
+@dataclass(frozen=True)
+class ModeOption:
+    """A per-mode choice the user makes before generating.
+
+    Options exist because some targets have a small, closed set of settings that
+    change the *content* of the prompt rather than its framing - Anima's content
+    rating and prompt style, for example. They are declared as data so the
+    interface renders them without hardcoding a target, and so the backend can
+    reject an unknown value instead of silently ignoring it.
+
+    A ``default`` of ``None`` is meaningful: it means "no default, let the user
+    opt in", which is how an optional tag stays absent until it is asked for.
+    """
+
+    id: str
+    label: str
+    hint: str
+    choices: tuple[ModeOptionChoice, ...]
+    default: str | None = None
+    scope: str = "prompt"
+
+    def choice(self, choice_id: str) -> ModeOptionChoice:
+        for candidate in self.choices:
+            if candidate.id == choice_id:
+                return candidate
+        raise TargetError(
+            "INVALID_OPTION",
+            f"{choice_id!r} is not a value of {self.id!r}.",
+        )
+
+    @property
+    def choice_ids(self) -> tuple[str, ...]:
+        return tuple(candidate.id for candidate in self.choices)
+
+
+@dataclass(frozen=True)
 class Mode:
     """One selectable input mode of a target (for example MiniMax H3 ``T2VA``)."""
 
@@ -56,6 +105,7 @@ class Mode:
     instruction_field: str | None = None
     instruction_limit: int | None = None
     output_only: bool = False
+    options: tuple[ModeOption, ...] = ()
 
     @property
     def total_limit(self) -> int | None:
@@ -64,6 +114,16 @@ class Mode:
     def limit_for(self, media_type: str) -> int | None:
         """Per-type limit, falling back to the combined total when unset."""
         return self.limits.get(media_type, self.limits.get("total"))
+
+    def option(self, option_id: str) -> ModeOption:
+        for candidate in self.options:
+            if candidate.id == option_id:
+                return candidate
+        raise TargetError("INVALID_OPTION", f"{option_id!r} is not an option of {self.id!r}.")
+
+    @property
+    def option_ids(self) -> tuple[str, ...]:
+        return tuple(candidate.id for candidate in self.options)
 
 
 @dataclass(frozen=True)
@@ -239,6 +299,54 @@ def _parse_guide(raw: dict[str, Any], target: dict[str, Any], where: str) -> Gui
     )
 
 
+def _parse_mode_option(raw: dict[str, Any], where: str) -> ModeOption:
+    option_id = _require(raw, "id", where, str)
+    choices_raw = _require(raw, "choices", where, list)
+    if not choices_raw:
+        raise TargetError("MALFORMED_TARGET", f"{where}.choices must be a non-empty list.")
+    choices: list[ModeOptionChoice] = []
+    for index, entry in enumerate(choices_raw):
+        choice_where = f"{where}.choices[{index}]"
+        if not isinstance(entry, dict):
+            raise TargetError("MALFORMED_TARGET", f"{choice_where} must be an object.")
+        prompt_tag = entry.get("prompt_tag")
+        if prompt_tag is not None and not isinstance(prompt_tag, str):
+            raise TargetError("MALFORMED_TARGET", f"{choice_where}.prompt_tag must be a string or null.")
+        choices.append(
+            ModeOptionChoice(
+                id=_require(entry, "id", choice_where, str),
+                label=entry.get("label") or _require(entry, "id", choice_where, str),
+                hint=entry.get("hint", ""),
+                prompt_tag=prompt_tag,
+            )
+        )
+    choice_ids = [choice.id for choice in choices]
+    duplicates = [value for value in dict.fromkeys(choice_ids) if choice_ids.count(value) > 1]
+    if duplicates:
+        raise TargetError("MALFORMED_TARGET", f"{where} declares duplicate choice ids: {duplicates}.")
+
+    default = raw.get("default")
+    # `None` is a legitimate default: it means the option is opt-in and its tag is
+    # omitted until the user chooses a value.
+    if default is not None:
+        if not isinstance(default, str):
+            raise TargetError("MALFORMED_TARGET", f"{where}.default must be a string or null.")
+        if default not in choice_ids:
+            raise TargetError(
+                "MALFORMED_TARGET",
+                f"{where}.default {default!r} is not one of its choices.",
+            )
+
+    return ModeOption(
+        id=option_id,
+        label=_require(raw, "label", where, str),
+        hint=raw.get("hint", ""),
+        choices=tuple(choices),
+        default=default,
+        scope=raw.get("scope", "prompt"),
+    )
+
+
 def _parse_mode(raw: dict[str, Any], target: dict[str, Any], where: str) -> Mode:
     limits = raw.get("limits") or {}
     if not isinstance(limits, dict) or not all(
@@ -246,6 +354,17 @@ def _parse_mode(raw: dict[str, Any], target: dict[str, Any], where: str) -> Mode
         for key, value in limits.items()
     ):
         raise TargetError("MALFORMED_TARGET", f"{where}.limits must map media types to integers.")
+    options_raw = raw.get("options") or []
+    if not isinstance(options_raw, list):
+        raise TargetError("MALFORMED_TARGET", f"{where}.options must be a list.")
+    options = tuple(
+        _parse_mode_option(entry, f"{where}.options[{index}]")
+        for index, entry in enumerate(options_raw)
+    )
+    option_ids = [option.id for option in options]
+    duplicate_options = [value for value in dict.fromkeys(option_ids) if option_ids.count(value) > 1]
+    if duplicate_options:
+        raise TargetError("MALFORMED_TARGET", f"{where} declares duplicate option ids: {duplicate_options}.")
     return Mode(
         id=_require(raw, "id", where, str),
         label=raw.get("label") or _require(raw, "id", where, str),
@@ -259,6 +378,7 @@ def _parse_mode(raw: dict[str, Any], target: dict[str, Any], where: str) -> Mode
         instruction_field=raw.get("instruction_field"),
         instruction_limit=raw.get("instruction_limit"),
         output_only=bool(raw.get("output_only", False)),
+        options=options,
     )
 
 
@@ -452,6 +572,65 @@ def mode_ids() -> tuple[str, ...]:
 def mode_limits(mode_id: str) -> dict[str, int]:
     """Per-mode media limits, retained for the media store's call shape."""
     return dict(mode(mode_id).limits)
+
+
+def mode_options(mode_id: str) -> tuple[ModeOption, ...]:
+    """Declared options of a mode, in display order."""
+    return mode(mode_id).options
+
+
+def resolve_mode_options(mode_id: str, requested: Any) -> dict[str, str | None]:
+    """Validate a caller-supplied option selection against the registry.
+
+    Returns every declared option id mapped to its value, so a caller can rely on
+    the full key set.
+
+    ``None`` means *no selection*, which is different from a choice whose
+    ``prompt_tag`` is null. ``none`` on the rating option is an explicit decision to
+    omit the tag and must be reported as such; an unset option simply defers to the
+    guide. Both are kept distinguishable by returning the choice id for the former
+    and ``None`` for the latter.
+    """
+    declared = mode(mode_id).options
+    if not declared:
+        # A mode with no options accepts none; a stray value is a caller error
+        # rather than something to silently drop.
+        if requested:
+            raise TargetError("INVALID_OPTION", f"{mode_id} does not accept mode options.")
+        return {}
+    if requested is None:
+        requested = {}
+    if not isinstance(requested, dict):
+        raise TargetError("INVALID_OPTION", "Mode options must be an object.")
+
+    unknown = sorted(key for key in requested if key not in {option.id for option in declared})
+    if unknown:
+        raise TargetError(
+            "INVALID_OPTION",
+            f"{unknown[0]!r} is not an option of {mode_id}.",
+        )
+
+    resolved: dict[str, str | None] = {}
+    for option in declared:
+        if option.id not in requested:
+            resolved[option.id] = option.default
+            continue
+        value = requested[option.id]
+        if value is None or value == "":
+            # An explicit null or empty value clears the selection. That is only
+            # meaningful for an opt-in option; a required option must be given a
+            # value rather than being silently defaulted.
+            if option.default is None:
+                resolved[option.id] = None
+                continue
+            raise TargetError(
+                "INVALID_OPTION",
+                f"{option.id} requires one of {', '.join(option.choice_ids)}.",
+            )
+        if not isinstance(value, str):
+            raise TargetError("INVALID_OPTION", f"{option.id} must be a string.")
+        resolved[option.id] = option.choice(value).id
+    return resolved
 
 
 def supports_media_mode(mode_id: str) -> bool:

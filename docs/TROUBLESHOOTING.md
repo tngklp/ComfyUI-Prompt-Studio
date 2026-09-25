@@ -145,7 +145,7 @@ Put the model under `ComfyUI/models/LLM`. To enable I2VA, FL2VA, L2VA, or Refere
 
 Do not reuse a projector from another model class just because its filename looks compatible.
 
-Without an unambiguous compatible projector, the model remains available for T2VA and Refine. Prompt Studio disables the visual modes and Music 3 instead of blocking all Direct work.
+Without an unambiguous compatible projector, the model remains available for T2VA and Refine. Prompt Studio disables the visual modes and Music 3 instead of blocking all Direct work. A media mode whose slots are all declared references, with no file attached, is also allowed: the prompt model writes from your description of the media rather than from the image itself. Attaching a real file brings the projector requirement back.
 
 **Verify**
 

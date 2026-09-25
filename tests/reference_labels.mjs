@@ -32,8 +32,9 @@ test("Reference media updates remap Single text and leave Sequence labels alone"
 test("Single Reference remapping is wired into every media mutation path",async()=>{
   const source=await readFile(new URL("../web/main.js",import.meta.url),"utf8");
   assert.match(source,/function acceptMediaAssets\(next\)/);
-  // Upload, remove, reorder, clear and editor-Apply all funnel through the one
-  // seam; a direct studio.assets assignment would silently skip the remap.
-  assert.equal((source.match(/acceptMediaAssets\(/g)||[]).length,6);
+  // Upload, remove, reorder, clear, editor-Apply, declared-slot creation and
+  // declared-slot description update all funnel through the one seam; a direct
+  // studio.assets assignment would silently skip the remap.
+  assert.equal((source.match(/acceptMediaAssets\(/g)||[]).length,8);
   assert.doesNotMatch(source,/studio\.assets = result\.assets;/);
 });
