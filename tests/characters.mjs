@@ -20,6 +20,7 @@ const settingsSource = await read("../web/settings.js");
 const apiSource = await read("../web/api/prompt_studio.js");
 const workbenchCss = await read("../web/styles/workbench.css");
 const charactersCss = await read("../web/styles/characters.css");
+const responsiveCss = await read("../web/styles/responsive.css");
 const stateSource = await read("../web/studio_state.js");
 
 const { animaHighlightMarkup } = await import("../web/prompt_highlights.js");
@@ -264,6 +265,23 @@ test("the picker sits after the mode options in the image panel", () => {
   assert.ok(options >= 0, "the mode options must be in the image panel");
   assert.ok(characters >= 0, "the character picker must be in the image panel");
   assert.ok(options < characters, "characters must come after the mode options");
+});
+
+test("the picker is spaced away from the mode options above it", () => {
+  // Both are grid items in the image panel, so without an explicit margin the
+  // characters label sits flush against the content-rating row.
+  const base = charactersCss.match(/\.ps-characters \{([^}]*)\}/)?.[1] || "";
+  assert.match(base, /margin-top: 13px/, "the picker needs a top margin");
+  // It must track .ps-control-grid, which is the element directly above it, at every
+  // responsive breakpoint - otherwise the gap changes with the window size.
+  const gridMargins = [...responsiveCss.matchAll(/\.ps-control-grid \{[^}]*margin-top: (\d+)px/g)].map((m) => m[1]);
+  const pickerMargins = [...responsiveCss.matchAll(/\.ps-characters \{ margin-top: (\d+)px/g)].map((m) => m[1]);
+  assert.deepEqual(
+    pickerMargins,
+    gridMargins,
+    "the picker must follow the control grid's responsive margins",
+  );
+  assert.ok(gridMargins.length >= 2, "expected the small and large breakpoints");
 });
 
 test("the picker controller is evaluable without a DOM", () => {

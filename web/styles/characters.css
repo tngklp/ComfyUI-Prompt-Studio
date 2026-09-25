@@ -1,10 +1,13 @@
-/* Anima character picker.
-
-   The picker is a `.ps-field`, so its label, gap and control height come from the same
+/* The picker is a `.ps-field`, so its label, gap and control height come from the same
    rules as the aspect-ratio, content-rating and prompt-style selectors beside it. It
    only overrides what is genuinely different: the control is a grid of bubbles plus a
-   results list rather than a single button. */
-.ps-characters { margin-top: 0; }
+   results list rather than a single button.
+
+   The top margin separates it from the mode-options grid above, which would otherwise
+   sit flush against it. It deliberately does NOT scale with --ps-interface-scale, to
+   match `.ps-control-grid`, whose own base margin is a flat 13px - the two are
+   adjacent, so a scaled value here would drift from the grid at every size but 100%. */
+.ps-characters { margin-top: 13px; }
 .ps-characters[hidden] { display: none; }
 .ps-characters > span {
   color: var(--ps-text-label-strong);

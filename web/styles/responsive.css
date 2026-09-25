@@ -47,6 +47,8 @@
   .ps-add-asset span { font-size: var(--ps-font-label-sm); }
   .ps-add-asset small { font-size: var(--ps-font-caption-xs); }
   .ps-control-grid { gap: calc(8px * var(--ps-interface-scale)); margin-top: 9px; }
+  /* The picker follows the mode-options grid, so it tracks its top margin. */
+  .ps-characters { margin-top: 9px; }
   .ps-field { gap: calc(4px * var(--ps-interface-scale)); }
   .ps-field > button, .ps-duration-field > div { height: calc(32px * var(--ps-interface-scale)); }
   .ps-brief { margin-top: 9px; }
@@ -168,6 +170,8 @@
   .ps-add-asset span { font-size: var(--ps-font-body); }
   .ps-add-asset small { font-size: var(--ps-font-control-sm); }
   .ps-control-grid { gap: calc(14px * var(--ps-interface-scale)); margin-top: 17px; }
+  /* The picker follows the mode-options grid, so it tracks its top margin. */
+  .ps-characters { margin-top: 17px; }
   .ps-field { gap: calc(8px * var(--ps-interface-scale)); }
   .ps-field > span, .ps-brief > span strong { font-size: var(--ps-font-body-sm); }
   .ps-field > button, .ps-duration-field > div { height: calc(42px * var(--ps-interface-scale)); padding-inline: calc(13px * var(--ps-interface-scale)); }
