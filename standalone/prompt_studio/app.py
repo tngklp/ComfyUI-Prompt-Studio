@@ -108,10 +108,11 @@ def create_app(settings: Settings) -> web.Application:
     app.add_routes(upstream_routes.routes)
 
     async def _fetch_character_dataset(_app: web.Application) -> None:
-        # The Anima character catalogue is downloaded rather than shipped, so the
-        # first launch needs it fetched. It runs as a detached thread: a slow or
-        # unreachable mirror must not delay the window appearing, and the studio is
-        # fully usable without characters.
+        # The Anima character catalogue is downloaded rather than shipped. The normal
+        # path is start.bat, which fetches it before this app starts so the wait is
+        # visible and one-off; this is the fallback for launching the module directly,
+        # or from start-linux.sh. It is a no-op when the cache is already current, and
+        # it runs on a thread so a slow mirror cannot delay the window appearing.
         await asyncio.to_thread(character_data.start_background_fetch)
 
     app.on_startup.append(_fetch_character_dataset)

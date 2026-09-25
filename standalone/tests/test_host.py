@@ -20,6 +20,9 @@ from prompt_studio.external_backend import _ManagedChatHandler, standalone_exter
 from prompt_studio.managed_gguf import ManagedGGUFBackend, ManagedGGUFController, managed_runtime_diagnostics
 from prompt_studio.managed_runtime import ManagedLlamaServer
 
+# The standalone package root, so tests can assert on shipped files.
+PACKAGE_ROOT = Path(__file__).resolve().parents[1]
+
 
 class StandaloneHostTest(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
@@ -136,30 +139,42 @@ class StandaloneHostTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn(response.status, (404, 405))
         response = await self.client.delete("/promptstudio/characters/import")
         self.assertIn(response.status, (404, 405))
-        # Refresh exists, but only for POST - a GET must not trigger a 9 MB download.
-        response = await self.client.get("/promptstudio/characters/refresh")
-        self.assertEqual(response.status, 404)
-        response = await self.client.post("/promptstudio/characters/refresh", json={})
-        self.assertIn(response.status, (200, 502))
+        # The download is automatic, so there is no manual trigger route at all.
+        for method in ("get", "post", "delete"):
+            response = await getattr(self.client, method)("/promptstudio/characters/refresh")
+            self.assertIn(response.status, (404, 405), method)
 
-    async def test_a_character_refresh_failure_is_reported_as_a_json_error(self) -> None:
-        # The download needs the network, so an offline host must produce the normal
-        # error envelope rather than an HTML error page the frontend cannot read.
-        from unittest import mock
+    async def test_the_character_dataset_is_fetched_by_the_launcher_script(self) -> None:
+        # start.bat owns the first-launch download so the wait is visible and one-off.
+        # It has to exist, ship, and be idempotent.
+        script = PACKAGE_ROOT / "scripts" / "fetch_characters.py"
+        self.assertTrue(script.is_file(), "the launcher fetch script must ship")
+        source = script.read_text(encoding="utf-8")
+        self.assertIn("cache_is_stale", source)
+        self.assertIn("refresh_cache", source)
+        # A failure must be non-fatal: the app runs without characters.
+        self.assertIn("return 1", source)
 
-        from backend import character_data
+        bat = (PACKAGE_ROOT / "start.bat").read_text(encoding="utf-8")
+        self.assertIn("scripts\\fetch_characters.py", bat)
+        # The fetch must run before the app is launched on the normal path. `-m
+        # prompt_studio` also appears earlier in the portable-runtime branch, so
+        # compare against the last occurrence - the actual launch.
+        self.assertLess(
+            bat.rindex("fetch_characters.py"),
+            bat.rindex("-m prompt_studio"),
+            "the fetch must happen before the app starts",
+        )
 
-        with mock.patch.object(
-            character_data,
-            "refresh_cache",
-            side_effect=character_data.CharacterDownloadError(
-                "CHARACTER_DOWNLOAD_FAILED", "The AnimaDex character dataset could not be downloaded."
-            ),
-        ):
-            response = await self.client.post("/promptstudio/characters/refresh")
-        self.assertEqual(response.status, 502)
+    async def test_an_offline_first_launch_still_serves_the_picker(self) -> None:
+        # The launcher download needs the network. When it fails the studio has to
+        # start and answer anyway, falling back to the committed sample.
+        response = await self.client.get("/promptstudio/characters")
+        self.assertEqual(response.status, 200)
         payload = await response.json()
-        self.assertEqual(payload["error"]["code"], "CHARACTER_DOWNLOAD_FAILED")
+        self.assertIn("status", payload)
+        self.assertIn("count", payload["status"])
+        self.assertIn("downloaded", payload["status"])
 
     async def test_sequence_routes_exist_without_a_comfy_graph(self) -> None:
         response = await self.client.post("/promptstudio/sequence", json={})

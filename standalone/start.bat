@@ -36,6 +36,19 @@ if errorlevel 1 (
   )
 )
 
+rem Fetch the Anima character catalogue on the first run.
+rem
+rem This is deliberately here rather than in the app: the download is 9 MB and has to
+rem happen once, and doing it in the launcher means the console can show progress and
+rem the wait happens before the window opens, rather than in the background behind a
+rem picker that appears to be missing characters. The script itself is idempotent -
+rem it exits immediately when the cache is already present - so repeat launches are
+rem unaffected, and a failure is a warning rather than an error: the studio runs
+rem without characters.
+echo Checking character data...
+".venv\Scripts\python.exe" "scripts\fetch_characters.py"
+if errorlevel 1 echo Character data will be fetched on the next launch.
+
 ".venv\Scripts\python.exe" -m prompt_studio %*
 goto :done
 

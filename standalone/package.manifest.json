@@ -11,7 +11,7 @@
 
   "app": {
     "source_root": "standalone",
-    "trees": ["prompt_studio", "ui"],
+    "trees": ["prompt_studio", "ui", "scripts"],
     "files": [
       "start.bat",
       "requirements.txt",

@@ -349,8 +349,7 @@ def _load_source() -> CharacterIndex:
     Order matters. An override exists for tests and for an operator who points the
     studio at a hand-built index. The downloaded cache is next because it is the real
     catalogue. The committed sample is the last resort for a first launch with no
-    network, and is small enough that the picker says so rather than implying the
-    user's character is missing by mistake.
+    network - small, but enough that a well-known character still resolves.
     """
     if _OVERRIDE is not None:
         return _OVERRIDE
@@ -385,7 +384,14 @@ def use_index(candidate: CharacterIndex | None) -> None:
 
 
 def index_status() -> dict[str, Any]:
-    """What the picker tells the user about the active character data."""
+    """Diagnostics for the active character data.
+
+    The interface no longer renders any of this - the catalogue is fetched
+    automatically, so there is no user action to prompt for and no state worth
+    surfacing. It is kept because it is the only way to tell, from the API, whether a
+    deployment is running on the real catalogue or the offline fallback, which is
+    exactly what you want to know when a character does not appear in search.
+    """
     from . import character_data
 
     active = index()
@@ -397,8 +403,8 @@ def index_status() -> dict[str, Any]:
         # True when the real catalogue is on disk, as opposed to the offline sample.
         "downloaded": cached,
         "usable_threshold": BUNDLED_USEFUL_THRESHOLD,
-        # The sample is stated as such rather than presented as the catalogue, so a
-        # user is not left thinking a character genuinely does not exist.
+        # With no cache the committed sample is all there is, and it holds only a
+        # handful of characters - worth distinguishing a small index from a bad one.
         "bundled_is_sample": not cached and count < BUNDLED_USEFUL_THRESHOLD,
         "dataset_url": character_data.DATASET_URL,
     }

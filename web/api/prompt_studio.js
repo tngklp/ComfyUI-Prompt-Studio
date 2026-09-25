@@ -34,10 +34,6 @@ export const searchCharacters = (query, limit = 24) => request(
   `/characters?q=${encodeURIComponent(query)}&limit=${encodeURIComponent(limit)}`,
 );
 export const resolveCharacters = (names) => post("/characters/resolve", { names });
-// The dataset is fetched automatically on first launch. This exists for the case
-// where that attempt failed - offline, or a proxy not yet up - so the user can
-// trigger it again without restarting.
-export const refreshCharacters = () => post("/characters/refresh");
 export const getGuide = (mode) => request(`/guides/${encodeURIComponent(mode)}`);
 export const getSystemPrompt = (mode) => request(`/system-prompt/${encodeURIComponent(mode)}`);
 export const assemble = (payload) => post("/assemble", payload);

@@ -95,8 +95,8 @@ Local GGUF is Windows-only, so on Linux use External llama.cpp or Ollama instead
 
 - Added the **Anima** text-to-image target, with content rating and prompt style options, character references, and per-region tag highlighting.
 - Added **declared references** and **media-blind mode**, so a prompt can reference a picture that is not attached or keep attached media away from the prompt model.
-- Settings is now tabbed, separating prompts, media handling and Anima characters.
-- The Anima character catalogue is downloaded on first launch and cached locally.
+- Settings is now tabbed, separating prompts and media handling.
+- The Anima character catalogue is downloaded once by `start.bat` on the first launch.
 - Fixed needing a hard refresh before new features appeared after an update.
 
 See [Sequence usage](../docs/USAGE.md#sequence) for media scope, refinement, and limitations. Media Composer, Media Editor, themes, and provider settings remain available.

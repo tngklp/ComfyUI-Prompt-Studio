@@ -6,7 +6,7 @@ import { mediaVisualDescriptor } from "./media_visual.js";
 import { createSequenceWorkspace } from "./sequence_workspace.js";
 import { generateSequence, cancelSequence } from "./api/sequence.js";
 import { app } from "/scripts/app.js";
-import { cancel, clearMedia, createMediaPlaceholder, diagnoseGGUFRuntime, disconnectApiProvider, freeComfyVram, generate, getApiProviderModels, getApiProviderPresets, getModels, getOllamaStatus, getStatus, getTargets, probeApiProvider, probeExternalServer, refine, refreshCharacters, removeMedia, reorderMedia, resolveCharacters, searchCharacters, selectProjector, unloadModel, updateMediaPlaceholder, uploadMedia } from "./api/prompt_studio.js";
+import { cancel, clearMedia, createMediaPlaceholder, diagnoseGGUFRuntime, disconnectApiProvider, freeComfyVram, generate, getApiProviderModels, getApiProviderPresets, getModels, getOllamaStatus, getStatus, getTargets, probeApiProvider, probeExternalServer, refine, removeMedia, reorderMedia, resolveCharacters, searchCharacters, selectProjector, unloadModel, updateMediaPlaceholder, uploadMedia } from "./api/prompt_studio.js";
 import { comfyVramIsAlreadyEmpty, createSessionId, fileCountFromDataTransfer, insertReferenceAtCaret, isChoiceMenuInteraction, isRuntimeMenuInteraction, moveOntoTarget, replacementTargetForFileDrop, replaceEventListener, vramReleaseReachedTarget } from "./compat.js";
 import { generateModelSummaryMarkup, settingsMarkup } from "./settings.js";
 import { targetSelectionMarkup } from "./target_selection.js";
@@ -1501,22 +1501,6 @@ function syncImagePanel() {
   studio.characterPicker?.syncVisibility(targetForMode(studio.mode)?.id || null);
 }
 
-/**
- * Fetch the character index status once at startup.
- *
- * Only Anima uses it, but the status is also what tells the user whether the bundled
- * index is a sample, so it is worth having before they open the picker.
- */
-async function loadCharacterStatus() {
-  try {
-    const payload = await searchCharacters("");
-    studio.characterPicker?.renderStatus(payload?.status);
-  } catch {
-    // A missing character index is not fatal: the picker simply finds nothing.
-    studio.characterPicker?.renderStatus(null);
-  }
-}
-
 function syncModeAvailability() {
   if (!studio?.root) return;
   const textOnlyDirect = isTextOnlyDirectModel(studio.selectedModel);
@@ -2877,66 +2861,6 @@ function syncMediaSettings() {
   if (!studio?.root) return;
   const toggle = studio.root.querySelector("[data-blind-media]");
   if (toggle) toggle.checked = studio.blindMedia === true;
-  syncCharacterSettings();
-}
-
-/** Reflect the active character index in Settings. */
-function syncCharacterSettings() {
-  if (!studio?.root) return;
-  const label = studio.root.querySelector("[data-character-source]");
-  const refreshButton = studio.root.querySelector("[data-character-refresh]");
-  const status = studio.characterPicker?.status || null;
-  if (label) {
-    if (!status) {
-      label.textContent = "Character data is not available.";
-    } else {
-      const count = Number(status.count || 0).toLocaleString();
-      if (status.downloaded) {
-        label.textContent = `${count} characters available from the downloaded AnimaDex catalogue.`;
-      } else if (status.count > 0) {
-        label.textContent = `Waiting for the AnimaDex catalogue. ${count} placeholder characters are available offline.`;
-      } else {
-        label.textContent = "The AnimaDex catalogue has not been downloaded yet.";
-      }
-    }
-  }
-  if (refreshButton) {
-    // Offered whenever the full catalogue is not on disk, which covers both a failed
-    // first fetch and a build that has never been online.
-    refreshButton.hidden = Boolean(status?.downloaded);
-    refreshButton.disabled = studio.characterRefreshBusy === true;
-    refreshButton.textContent = studio.characterRefreshBusy
-      ? "Downloading…"
-      : "Download character data";
-  }
-}
-
-/**
- * Download the AnimaDex character dataset.
- *
- * The download is automatic on first launch. This is the manual retry for when that
- * attempt failed, so it reports progress and the outcome rather than staying silent.
- */
-async function downloadCharacterDataset() {
-  if (studio.characterRefreshBusy) return;
-  studio.characterRefreshBusy = true;
-  syncCharacterSettings();
-  try {
-    const result = await refreshCharacters();
-    // The cached index changed on disk, so the picker has to re-read the status
-    // rather than keep showing the placeholder count.
-    await loadCharacterStatus();
-    syncCharacterSettings();
-    showToast(
-      "Characters ready",
-      `${Number(result.imported || 0).toLocaleString()} characters are now searchable.`,
-    );
-  } catch (error) {
-    showToast("Could not download characters", error.message, error.details);
-  } finally {
-    studio.characterRefreshBusy = false;
-    syncCharacterSettings();
-  }
 }
 
 function setSettingsOpen(open) {
@@ -3726,9 +3650,9 @@ function createStudio() {
               ${aspectRatioMarkup(icon, "image-aspect")}
             </div>
 
-            ${characterPickerMarkup()}
-
             <div class="ps-control-grid ps-mode-options" data-mode-options></div>
+
+            ${characterPickerMarkup()}
           </div>
           </div>
 
@@ -3814,7 +3738,6 @@ function createStudio() {
     },
   });
   studio.characterPicker.attach();
-  loadCharacterStatus();
   root.querySelector("[data-comfy-memory-action]").hidden = !HOST_CAPABILITIES.comfyMemory;
   if (!HOST_CAPABILITIES.windowed) {
     studio.fullscreen = true;
@@ -3928,7 +3851,6 @@ function createStudio() {
   root.querySelector("[data-open-settings]").addEventListener("click", () => setSettingsOpen(true));
   root.querySelector("[data-close-settings]").addEventListener("click", () => setSettingsOpen(false));
   root.querySelectorAll("[data-settings-tab]").forEach((tab) => tab.addEventListener("click", () => setSettingsTab(tab.dataset.settingsTab)));
-  root.querySelector("[data-character-refresh]")?.addEventListener("click", () => downloadCharacterDataset());
   const blindMediaToggle = root.querySelector("[data-blind-media]");
   if (blindMediaToggle) {
     blindMediaToggle.addEventListener("change", () => {

@@ -103,18 +103,21 @@ that exact pair, then the prompt places it in the guide's character-and-series p
 
 Data comes from [AnimaDex](https://animadex.net/?mode=characters), which publishes a CSV whose
 `trigger` column already holds the pair in the spelling the model was trained on. That catalogue is
-**downloaded on first launch** and cached locally (`backend/data/anima_characters.cache.json`,
-about 4 MB, gitignored), so it is not shipped inside the package and no install carries a stale
-copy. The download runs in the background and never blocks startup; a first launch with no network
-falls back to a small committed sample and the picker says so.
+**downloaded automatically on the first launch** and cached locally
+(`backend/data/anima_characters.cache.json`, about 4 MB, gitignored), so it is not shipped inside
+the package and no install carries a stale copy.
 
-To refresh it, use **Download character data** in **Settings → Media handling → Characters**. It is
-only offered while the full catalogue is not on disk. Deleting the cached file makes the next
-launch fetch it again.
+The wait is deliberately visible rather than hidden: the extension fetches it in the background
+while ComfyUI starts, and the standalone launcher fetches it before opening the window. Every later
+launch reads the cache and does no work. A first launch with no network falls back to a small
+committed sample, and the next launch still fetches the full catalogue once a connection is
+available. There is nothing to configure and no manual refresh step - deleting the cached file is
+what forces a re-fetch.
 
-In **Tags** style the editor colour-codes the guide's five tag regions — character and series,
-quality (including time period and meta), safety, artist, and subject count — so a mis-ordered list
-is visible at a glance.
+Characters appear as bubbles in the selector, and are placed in the prompt at the guide's
+character-and-series position. In **Tags** style the editor also colour-codes the guide's five tag
+regions - character and series, quality (including time period and meta), safety, artist, and
+subject count - so a mis-ordered list is visible at a glance.
 
 The selection is judged against the generated prompt, and both a missing requested rating tag and an
 output that ignored the requested style are reported as audit warnings. Option values are validated

@@ -385,7 +385,24 @@ class CharacterDataIntegrityTests(unittest.TestCase):
                 self.assertNotIn(call, source, f"{relative} still calls {call}")
         routes = (ROOT / "backend" / "routes.py").read_text(encoding="utf-8")
         self.assertNotIn("characters/import", routes)
-        self.assertIn("characters/refresh", routes)
+
+    def test_settings_has_no_character_section(self):
+        # The dataset is fetched automatically, so there is nothing for the user to
+        # configure and no reason to show them its state.
+        source = (ROOT / "web" / "settings.js").read_text(encoding="utf-8")
+        for hook in ("data-character-source", "data-character-refresh", "ps-character-settings"):
+            self.assertNotIn(hook, source, f"settings.js still has {hook}")
+
+    def test_there_is_no_manual_refresh_path(self):
+        # The download is unambiguously automatic: no route, no client call, and no
+        # download handler in the interface.
+        routes = (ROOT / "backend" / "routes.py").read_text(encoding="utf-8")
+        self.assertNotIn("characters/refresh", routes)
+        api = (ROOT / "web" / "api" / "prompt_studio.js").read_text(encoding="utf-8")
+        self.assertNotIn("refreshCharacters", api)
+        main = (ROOT / "web" / "main.js").read_text(encoding="utf-8")
+        self.assertNotIn("downloadCharacterDataset", main)
+        self.assertNotIn("refreshCharacters", main)
 
 
 if __name__ == "__main__":

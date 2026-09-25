@@ -61,4 +61,11 @@ os.replace(temporary, path)
 PY
 fi
 
+# Fetch the Anima character catalogue on the first run, mirroring start.bat. The
+# script is idempotent, so repeat launches are unaffected, and a failure is only a
+# warning: the studio runs without characters.
+echo "Checking character data..."
+"$PYTHON" "$APP_ROOT/scripts/fetch_characters.py" \
+  || echo "Character data will be fetched on the next launch."
+
 exec "$PYTHON" -m prompt_studio "$@"

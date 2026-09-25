@@ -14,6 +14,10 @@
  *   request superseded rather than left to race;
  * * selections are the source of truth and are re-resolved on every change, so the
  *   trigger list sent to the backend always matches what is on screen.
+ *
+ * The picker deliberately reports nothing about the dataset itself. The catalogue is
+ * fetched automatically on first launch, so there is no user action to prompt for and
+ * no state worth surfacing: an empty index simply yields no results.
  */
 
 import { escapeHtml } from "./html.js";
@@ -22,18 +26,15 @@ const SEARCH_DEBOUNCE_MS = 180;
 
 export function characterPickerMarkup() {
   return `
-    <section class="ps-characters" data-characters hidden aria-label="Characters">
-      <div class="ps-characters-head">
-        <span><strong>Characters</strong><small data-characters-status>Anima character reference</small></span>
-      </div>
+    <div class="ps-characters ps-field" data-characters hidden aria-label="Characters">
+      <span>Characters</span>
       <div class="ps-character-search">
         <input type="search" data-character-search autocomplete="off" spellcheck="false"
                placeholder="Search a character, e.g. miku" aria-label="Search characters">
       </div>
       <div class="ps-character-picked" data-character-picked></div>
       <div class="ps-character-results" data-character-results role="listbox" aria-label="Character results"></div>
-      <p class="ps-character-hint" data-character-hint hidden></p>
-    </section>`;
+    </div>`;
 }
 
 /** One selectable result row. */
@@ -49,10 +50,16 @@ function resultMarkup(entry, selected) {
   </button>`;
 }
 
-/** One selected character chip. */
+/**
+ * One selected character, as a bubble.
+ *
+ * The bubble shows the display name and carries the full trigger as its title, so the
+ * exact string that will reach the prompt is still discoverable by hovering without
+ * every bubble wrapping onto several lines.
+ */
 function pickedMarkup(entry) {
-  return `<span class="ps-character-chip" data-character-chip="${escapeHtml(entry.character)}">
-    <span><strong>${escapeHtml(entry.display_name)}</strong><small>${escapeHtml(entry.trigger)}</small></span>
+  return `<span class="ps-character-chip" data-character-chip="${escapeHtml(entry.character)}" title="${escapeHtml(entry.trigger)}">
+    <strong>${escapeHtml(entry.display_name)}</strong>
     <button type="button" data-character-remove="${escapeHtml(entry.character)}" aria-label="Remove ${escapeHtml(entry.display_name)}" title="Remove">×</button>
   </span>`;
 }
@@ -73,14 +80,11 @@ export function createCharacterPicker({
   const input = root?.querySelector("[data-character-search]");
   const results = root?.querySelector("[data-character-results]");
   const picked = root?.querySelector("[data-character-picked]");
-  const status = root?.querySelector("[data-characters-status]");
-  const hint = root?.querySelector("[data-character-hint]");
 
   /** Selected characters, keyed by slug so order is stable and duplicates impossible. */
   const selected = new Map();
   let searchTimer = null;
   let searchToken = 0;
-  let statusPayload = null;
 
   function renderPicked() {
     if (!picked) return;
@@ -134,37 +138,6 @@ export function createCharacterPicker({
     });
   }
 
-  function setHint(message, tone = "") {
-    if (!hint) return;
-    hint.textContent = message || "";
-    hint.hidden = !message;
-    hint.classList.toggle("is-warning", tone === "warning");
-  }
-
-  function renderStatus(payload) {
-    statusPayload = payload;
-    if (status) {
-      const count = payload?.count ?? 0;
-      status.textContent = `${count.toLocaleString()} character${count === 1 ? "" : "s"} · ${payload?.source || "unknown source"}`;
-    }
-    // The catalogue is downloaded rather than shipped, so an unavailable index is a
-    // normal first-launch state, not a fault. Say which it is so the user knows
-    // whether to wait or to retry the download in Settings.
-    if (!payload || payload.downloaded === false) {
-      const offline = (payload?.count ?? 0) > 0;
-      setHint(
-        offline
-          ? `The AnimaDex catalogue is still downloading, so only ${payload.count} offline placeholder `
-            + "characters are searchable. It finishes in the background; Settings → Characters has a retry."
-          : "The AnimaDex character catalogue has not been downloaded yet. "
-            + "Download it from Settings → Characters to search characters.",
-        "warning",
-      );
-    } else {
-      setHint("");
-    }
-  }
-
   async function runSearch(query) {
     const token = ++searchToken;
     if (!query.trim()) {
@@ -175,12 +148,10 @@ export function createCharacterPicker({
       const payload = await search(query);
       // A newer keystroke owns the results; a late reply must not overwrite them.
       if (token !== searchToken) return;
-      if (payload?.status) renderStatus(payload.status);
       renderResults(payload?.results || []);
     } catch {
       if (token !== searchToken) return;
       renderResults([]);
-      setHint("Character search is unavailable right now.", "warning");
     }
   }
 
@@ -218,7 +189,6 @@ export function createCharacterPicker({
       for (const key of dropped) selected.delete(key);
       if (dropped.length) {
         renderPicked();
-        setHint(`Removed ${dropped.length} character(s) the index no longer knows.`, "warning");
         emitChange();
       }
       return { characters: [...selected.keys()], dropped };
@@ -231,7 +201,6 @@ export function createCharacterPicker({
   return {
     attach,
     syncVisibility,
-    renderStatus,
     validate,
     toggle,
     /** Restore a persisted selection, in the stored order. */
@@ -243,7 +212,6 @@ export function createCharacterPicker({
       renderPicked();
     },
     get selection() { return [...selected.values()]; },
-    get status() { return statusPayload; },
-    elements: { host, input, results, picked, status, hint },
+    elements: { host, input, results, picked },
   };
 }

@@ -1,71 +1,91 @@
-/* Anima character picker. */
-.ps-characters { display: grid; gap: calc(8px * var(--ps-interface-scale)); margin-top: calc(10px * var(--ps-interface-scale)); }
+/* Anima character picker.
+
+   The picker is a `.ps-field`, so its label, gap and control height come from the same
+   rules as the aspect-ratio, content-rating and prompt-style selectors beside it. It
+   only overrides what is genuinely different: the control is a grid of bubbles plus a
+   results list rather than a single button. */
+.ps-characters { margin-top: 0; }
 .ps-characters[hidden] { display: none; }
-.ps-characters-head { display: flex; align-items: center; justify-content: space-between; }
-.ps-characters-head > span { display: flex; flex-direction: column; }
-.ps-characters-head strong { font-size: var(--ps-font-body-sm); font-weight: 640; }
-.ps-characters-head small { margin-top: 1px; color: var(--ps-muted); font-size: var(--ps-font-caption); }
+.ps-characters > span {
+  color: var(--ps-text-label-strong);
+  font-size: var(--ps-font-label);
+  font-weight: 650;
+  letter-spacing: .035em;
+  text-transform: uppercase;
+}
 
 .ps-character-search input {
+  box-sizing: border-box;
   width: 100%;
-  height: calc(32px * var(--ps-interface-scale));
+  height: calc(34px * var(--ps-interface-scale));
   padding: 0 calc(10px * var(--ps-interface-scale));
-  border: 1px solid var(--ps-border-input);
-  border-radius: var(--ps-radius-md);
+  border: 1px solid var(--ps-border);
+  border-radius: 7px;
   background: var(--ps-field);
-  color: var(--ps-text);
+  color: var(--ps-text-input);
   font: inherit;
   font-size: var(--ps-font-body-sm);
 }
-.ps-character-search input:focus { outline: none; border-color: rgba(167, 139, 250, .55); box-shadow: 0 0 0 2px rgba(167, 139, 250, .12); }
+.ps-character-search input:hover { border-color: var(--ps-border-field-action); }
+.ps-character-search input:focus {
+  outline: none;
+  border-color: var(--ps-border-interactive);
+  box-shadow: 0 0 0 2px var(--ps-accent-soft);
+}
 .ps-character-search input::-webkit-search-cancel-button { filter: invert(.6); }
 
-/* Selected characters. A list rather than inline chips: each carries a full trigger
-   string, which needs its own line to stay readable. */
-.ps-character-picked { display: grid; gap: calc(5px * var(--ps-interface-scale)); }
+/* Selected characters, as bubbles in the accent colour.
+
+   The trigger is long ("hatsune miku, vocaloid"), so each bubble shows only the
+   display name and carries the full trigger as its title. Without that the bubbles
+   would wrap to two or three lines each and stop reading as chips. */
+.ps-character-picked { display: flex; flex-wrap: wrap; gap: calc(5px * var(--ps-interface-scale)); }
 .ps-character-picked[hidden] { display: none; }
 .ps-character-chip {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: calc(8px * var(--ps-interface-scale));
-  padding: calc(6px * var(--ps-interface-scale)) calc(8px * var(--ps-interface-scale));
-  border: 1px solid var(--ps-border-selected);
-  border-radius: var(--ps-radius-md);
-  background: var(--ps-selection);
+  max-width: 100%;
+  gap: calc(5px * var(--ps-interface-scale));
+  padding: calc(3px * var(--ps-interface-scale)) calc(4px * var(--ps-interface-scale)) calc(3px * var(--ps-interface-scale)) calc(10px * var(--ps-interface-scale));
+  border: 1px solid rgba(167, 139, 250, .42);
+  border-radius: 999px;
+  background: var(--ps-accent-soft);
+  color: var(--ps-accent-strong);
 }
-.ps-character-chip > span { display: flex; min-width: 0; flex: 1 1 auto; flex-direction: column; }
-.ps-character-chip strong { font-size: var(--ps-font-control-sm); font-weight: 620; }
-.ps-character-chip small { margin-top: 1px; overflow: hidden; color: var(--ps-muted); font-size: var(--ps-font-caption); text-overflow: ellipsis; white-space: nowrap; }
+.ps-character-chip strong { overflow: hidden; font-size: var(--ps-font-control-sm); font-weight: 620; text-overflow: ellipsis; white-space: nowrap; }
 .ps-character-chip button {
+  display: grid;
   flex: 0 0 auto;
-  width: calc(20px * var(--ps-interface-scale));
-  height: calc(20px * var(--ps-interface-scale));
+  place-items: center;
+  width: calc(17px * var(--ps-interface-scale));
+  height: calc(17px * var(--ps-interface-scale));
   border: 0;
-  border-radius: 5px;
+  border-radius: 50%;
   background: transparent;
-  color: var(--ps-muted);
-  font-size: var(--ps-font-body);
+  color: inherit;
+  font-size: var(--ps-font-control);
   line-height: 1;
   cursor: pointer;
+  opacity: .72;
 }
-.ps-character-chip button:hover { background: var(--ps-control-hover); color: var(--ps-danger-text); }
+.ps-character-chip button:hover { background: rgba(167, 139, 250, .22); color: var(--ps-text); opacity: 1; }
 
-.ps-character-results { display: grid; gap: calc(4px * var(--ps-interface-scale)); max-height: calc(230px * var(--ps-interface-scale)); overflow-y: auto; scrollbar-width: thin; }
+.ps-character-results { display: grid; gap: calc(4px * var(--ps-interface-scale)); margin-top: calc(5px * var(--ps-interface-scale)); max-height: calc(230px * var(--ps-interface-scale)); overflow-y: auto; scrollbar-width: thin; }
 .ps-character-results[hidden] { display: none; }
 .ps-character-result {
   display: flex;
   align-items: center;
   gap: calc(8px * var(--ps-interface-scale));
   padding: calc(6px * var(--ps-interface-scale)) calc(8px * var(--ps-interface-scale));
-  border: 1px solid transparent;
-  border-radius: var(--ps-radius-md);
+  border: 1px solid var(--ps-border);
+  border-radius: 7px;
   background: var(--ps-field);
   color: var(--ps-text);
   text-align: left;
   cursor: pointer;
 }
-.ps-character-result:hover { border-color: var(--ps-border-hover); background: var(--ps-field-hover); }
-.ps-character-result.is-selected { border-color: var(--ps-border-selected-profile); background: var(--ps-selection); }
+.ps-character-result:hover { border-color: var(--ps-border-field-action); background: var(--ps-field-hover); }
+.ps-character-result.is-selected { border-color: rgba(167, 139, 250, .55); background: var(--ps-accent-soft); }
 .ps-character-result-copy { display: flex; min-width: 0; flex: 1 1 auto; flex-direction: column; }
 .ps-character-result-copy strong { font-size: var(--ps-font-control-sm); font-weight: 620; }
 .ps-character-result-copy em { margin-top: 1px; color: var(--ps-muted); font-size: var(--ps-font-caption); font-style: normal; }
@@ -77,13 +97,9 @@
   overflow: hidden;
   padding: calc(2px * var(--ps-interface-scale)) calc(6px * var(--ps-interface-scale));
   border-radius: 5px;
-  background: rgba(232, 132, 92, .13);
-  color: var(--ps-text-icon-bright);
+  background: var(--ps-accent-soft);
+  color: var(--ps-accent-strong);
   font-size: var(--ps-font-caption);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-.ps-character-hint { margin: 0; color: var(--ps-muted); font-size: var(--ps-font-caption); line-height: 1.5; }
-.ps-character-hint[hidden] { display: none; }
-.ps-character-hint.is-warning { color: var(--ps-warning-text, var(--ps-muted)); }

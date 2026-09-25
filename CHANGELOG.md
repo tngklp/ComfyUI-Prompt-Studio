@@ -7,11 +7,11 @@
 - **Anima target (text to image).** A fifth generation target, written from the official Anima prompting guide. Prompts are Danbooru-style tag lists, and the workspace exposes the guide's options directly:
   - **Content rating** - Safe, Sensitive, NSFW, Explicit or None. The chosen safety tag is emitted in the prompt, since Anima is trained on those four tags. The default is None so no tag is added unless you pick one.
   - **Prompt style** - Tags, Natural language or Hybrid. Tags is the default.
-- **Character references for Anima.** Type a name you know (`miku`) and it resolves to the exact pair the model expects (`hatsune miku, vocaloid`), then is placed in the guide's character-and-series position. Multi-select, backed by the AnimaDex catalogue.
+- **Character references for Anima.** Type a name you know (`miku`) and it resolves to the exact pair the model expects (`hatsune miku, vocaloid`), then is placed in the guide's character-and-series position. Multi-select, and the selection shows as bubbles in the selector. The catalogue is downloaded once on the first launch and cached locally, so there is nothing to configure.
 - **Anima tag highlighting.** The guide's five tag regions - character and series, quality (including time period and meta), safety, artist, and subject count - are coloured separately in the editor, so a mis-ordered tag list is visible at a glance.
 - **Declared references.** **Plan a picture** adds a reference slot with no file attached, so a prompt can be written for a picture that does not exist yet or cannot be shared. The model is told the reference exists and is not being shown to it, and is instructed not to invent its contents; describe what it contributes in the brief and the placeholder is filled in from your text.
 - **Media-blind mode.** A Settings switch that keeps attached media in the workspace and keeps their reference tags, but does not send the images to the prompt model. Useful with a text-only prompt model, or when image bytes must not leave the machine. A declared reference needs no vision model either way.
-- **Settings is tabbed.** Prompts, media handling and Anima characters now live in separate sections instead of one long page.
+- **Settings is tabbed.** Prompts and media handling now live in separate sections instead of one long page.
 - **Text drafts.** **Actions > Save text draft** / **Load text draft** writes or opens a JSON backup of the current workspace for Single and Sequence. Drafts include the brief, prompts, writing instructions, duration and aspect ratio; Sequence also keeps chunk directions, output format and copy formatting. Media, model settings and credentials are not included, and loading replaces the target draft and clears its media.
 - **Extract audio from video.** In the Media Editor, select 2-15 seconds and use the Extract audio button to download a WAV and add it as an Audio reference, keeping the video unchanged.
 - **Ollama generation budget.** Settings now exposes an output token limit for Ollama, separate from the Direct GGUF budget.
@@ -21,7 +21,7 @@
 ### Fixed
 
 - **Stale interface after an update.** After upgrading, a hard refresh was needed before new features appeared. Assets are now served with revalidation and the interface reloads itself once when it detects it is older than the backend.
-- **Character data is downloaded, not bundled.** The AnimaDex catalogue is fetched on first launch and cached locally, rather than shipping a sample of it inside the package. Deleting the cached file makes the next launch fetch it again.
+- **Character data is downloaded, not bundled.** The AnimaDex catalogue is fetched automatically on the first launch and cached locally, rather than shipping a sample of it inside the package. Deleting the cached file makes the next launch fetch it again.
 - **Character and series highlighting could bleed.** A series name that is also a character name (such as `vocaloid`) kept the character region open, colouring the next unrelated tag.
 - **Character instructions leaked to other targets.** The Anima character directive was being added to video and audio requests, which have no such tag position.
 - Single Reference labels now follow the current order of ready media, so deleting or reordering updates the labels and the matching tags in the Brief, prompt and Refine text. Tags that no longer resolve become `<Missing Picture 1>` and are rejected before Generate or Refine.

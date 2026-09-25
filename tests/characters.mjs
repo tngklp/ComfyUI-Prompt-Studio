@@ -163,16 +163,46 @@ test("the picker is only offered for Anima", () => {
   assert.match(mainSource, /studio\.characterPicker\?\.syncVisibility\(targetForMode\(studio\.mode\)\?\.id \|\| null\)/);
 });
 
-test("the picker distinguishes a downloading catalogue from a missing one", () => {
-  // The catalogue is downloaded rather than shipped, so an unusable index is a
-  // normal first-launch state. The hint must say which state it is.
-  assert.match(pickerSource, /payload\.downloaded === false/);
-  assert.match(pickerSource, /still downloading/);
-  assert.match(pickerSource, /has not been downloaded yet/);
-  assert.match(pickerSource, /setHint\([\s\S]{0,600}"warning"\)/);
+test("the picker reports nothing about the dataset", () => {
+  // The catalogue is fetched automatically on first launch, so there is no user action
+  // to prompt for and no state worth surfacing. Any status or hint text would be
+  // describing a problem the user cannot act on.
+  assert.doesNotMatch(pickerSource, /data-characters-status/);
+  assert.doesNotMatch(pickerSource, /data-character-hint/);
+  assert.doesNotMatch(pickerSource, /setHint/);
+  assert.doesNotMatch(pickerSource, /renderStatus/);
+  assert.doesNotMatch(pickerSource, /downloading/);
 });
 
-test("a stale stored selection is dropped before it reaches the prompt", () => {
+test("a selected character is a bubble using the accent colour", () => {
+  assert.match(pickerSource, /class="ps-character-chip"/);
+  // The trigger is long, so it goes in the title rather than a second line: otherwise
+  // every bubble would wrap and stop reading as a chip.
+  assert.match(pickerSource, /data-character-chip="\$\{escapeHtml\(entry\.character\)\}" title="\$\{escapeHtml\(entry\.trigger\)\}"/);
+  assert.match(charactersCss, /mark\.is-character|--ps-accent-soft/);
+  const bubble = charactersCss.match(/\.ps-character-chip \{([^}]*)\}/)?.[1] || "";
+  assert.match(bubble, /border-radius: 999px/, "a bubble must be fully rounded");
+  assert.match(bubble, /background: var\(--ps-accent-soft\)/);
+  assert.match(bubble, /color: var\(--ps-accent-strong\)/);
+});
+
+test("the picker is styled as the same field as the other selectors", () => {
+  // The point is that it reads as one of the controls it sits beside, not as a
+  // bespoke panel: same label treatment, same control height, same border tokens.
+  assert.match(pickerSource, /class="ps-characters ps-field"/);
+  const label = charactersCss.match(/\.ps-characters > span \{([^}]*)\}/)?.[1] || "";
+  assert.match(label, /text-transform: uppercase/);
+  assert.match(label, /font-size: var\(--ps-font-label\)/);
+  const search = charactersCss.match(/\.ps-character-search input \{([^}]*)\}/)?.[1] || "";
+  assert.match(search, /height: calc\(34px \* var\(--ps-interface-scale\)\)/);
+  assert.match(search, /border: 1px solid var\(--ps-border\)/);
+  assert.match(search, /border-radius: 7px/);
+  // The old bespoke panel chrome must be gone.
+  assert.doesNotMatch(charactersCss, /\.ps-characters-head/);
+  assert.doesNotMatch(charactersCss, /\.ps-character-hint/);
+});
+
+test("a selected character is dropped before it reaches the prompt", () => {
   assert.match(pickerSource, /async function validate\(\)/);
   assert.match(pickerSource, /const dropped = \[\.\.\.selected\.keys\(\)\]\.filter\(\(key\) => !known\.has\(key\)\)/);
   // A failed check must not silently discard the user's selection.
@@ -200,36 +230,46 @@ test("a malformed stored character entry is discarded", () => {
   assert.match(stateSource, /typeof entry\.trigger === "string" && entry\.trigger/);
 });
 
-test("Settings reports the download state and offers a retry", () => {
-  assert.match(settingsSource, /data-character-source/);
-  assert.match(settingsSource, /data-character-refresh/);
-  assert.match(settingsSource, /animadex\.net/);
-  // The old file-import flow must be gone: the dataset is now fetched automatically.
+test("Settings has no character section at all", () => {
+  // The dataset is fetched automatically, so there is nothing to configure and no
+  // state to display.
+  assert.doesNotMatch(settingsSource, /ps-character-settings/);
+  assert.doesNotMatch(settingsSource, /data-character-source/);
+  assert.doesNotMatch(settingsSource, /data-character-refresh/);
   assert.doesNotMatch(settingsSource, /data-character-import/);
   assert.doesNotMatch(settingsSource, /data-character-clear-import/);
-  assert.doesNotMatch(settingsSource, /characters\.csv<\/code>\s*here/);
 });
 
-test("the retry button is only shown while the catalogue is missing", () => {
-  // A permanent download button would invite re-fetching 9 MB for no reason.
-  assert.match(mainSource, /refreshButton\.hidden = Boolean\(status\?\.downloaded\)/);
-  assert.match(mainSource, /refreshButton\.disabled = studio\.characterRefreshBusy === true/);
-  assert.match(mainSource, /showToast\(\s*"Could not download characters"/);
-});
-
-test("the download is triggered through the dedicated endpoint", () => {
-  assert.match(apiSource, /export const refreshCharacters = \(\) => post\("\/characters\/refresh"\)/);
-  // The file-import API is gone, not merely unused.
+test("there is no manual download path in the interface", () => {
+  // The download is unambiguously automatic, so no route, client call or handler
+  // should exist for triggering it by hand.
+  assert.doesNotMatch(mainSource, /downloadCharacterDataset/);
+  assert.doesNotMatch(mainSource, /refreshCharacters/);
+  assert.doesNotMatch(mainSource, /syncCharacterSettings/);
+  assert.doesNotMatch(mainSource, /loadCharacterStatus/);
+  assert.doesNotMatch(apiSource, /refreshCharacters/);
+  assert.doesNotMatch(apiSource, /characters\/refresh/);
+  // The file-import API is gone too, not merely unused.
   assert.doesNotMatch(apiSource, /importCharacters/);
   assert.doesNotMatch(apiSource, /clearCharacters/);
   assert.doesNotMatch(apiSource, /characters\/import/);
+});
+
+test("the picker sits after the mode options in the image panel", () => {
+  // Content rating and prompt style are the guide's own options, so they read first;
+  // characters follow them.
+  const panel = mainSource.slice(mainSource.indexOf('data-workspace-panel="image"'));
+  const options = panel.indexOf("data-mode-options");
+  const characters = panel.indexOf("${characterPickerMarkup()}");
+  assert.ok(options >= 0, "the mode options must be in the image panel");
+  assert.ok(characters >= 0, "the character picker must be in the image panel");
+  assert.ok(options < characters, "characters must come after the mode options");
 });
 
 test("the picker controller is evaluable without a DOM", () => {
   // The controller takes its dependencies by injection, so a missing root must not throw.
   const picker = createCharacterPicker({ root: null });
   assert.equal(picker.selection.length, 0);
-  assert.equal(picker.status, null);
   picker.attach();
   picker.syncVisibility("anima");
   picker.restore([]);
@@ -275,7 +315,6 @@ test("the picker renders typed results and selections end to end", async () => {
     resolve: async (names) => ({ characters: names.map((name) => ({ character: name })), unknown: [] }),
   });
   picker.attach();
-  picker.renderStatus({ count: 2, source: "test" });
   picker.toggle({ character: "hatsune_miku", trigger: "hatsune miku, vocaloid" });
   picker.toggle({ character: "hakurei_reimu", trigger: "hakurei reimu, touhou" });
   assert.deepEqual(

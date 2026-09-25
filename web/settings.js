@@ -120,20 +120,6 @@ export function settingsMarkup(icon) {
             <li>Turning it off restores the normal requirement: every attached picture or video needs a vision-capable prompt model.</li>
           </ul>
         </section>
-
-        <section class="ps-settings-card ps-character-settings">
-          <header><span><small>Anima</small><strong>Characters</strong></span></header>
-          <p class="ps-field-help" data-character-source>Checking character data…</p>
-          <div class="ps-character-import">
-            <button class="ps-secondary-button" type="button" data-character-refresh>Download character data</button>
-          </div>
-          <p class="ps-field-help">
-            The Anima character catalogue is downloaded once from
-            <strong>animadex.net</strong> and cached on this computer, so it is only fetched
-            on the first launch or when the copy on disk is old. Characters are then resolved
-            to the exact <code>&lt;character&gt;, &lt;series&gt;</code> pair Anima expects.
-          </p>
-        </section>
       </div>
     </section>`;
 }

@@ -28,7 +28,8 @@ install.
     tag the model was trained on.
   - **Prompt style** - Tags, Natural language or Hybrid.
 - **Character references.** Type `miku` and it becomes `hatsune miku, vocaloid` in the
-  right position of the tag list. Multi-select, backed by the AnimaDex catalogue.
+  right position of the tag list. Multi-select, and the selection shows as bubbles. The
+  catalogue is downloaded once on the first launch, with no configuration.
 - **Tag highlighting.** The guide's five tag regions are colour-coded, so a
   mis-ordered tag list is visible at a glance.
 - **Declared references.** **Plan a picture** adds a reference slot with no file
@@ -36,7 +37,7 @@ install.
   shared. Describe what it contributes and the placeholder is filled from your brief.
 - **Media-blind mode.** Keep attached media in the workspace without sending the images
   to the prompt model. Useful with a text-only model, or to keep image bytes local.
-- **Settings tabs**, separating prompts, media handling and Anima characters.
+- **Settings tabs**, separating prompts and media handling.
 - **Text drafts**, a manual Ollama generation budget, an explicit vision projector, and
   no Creative Brief character limit.
 - **Fixed a stale interface after updates.** A hard refresh was previously needed before

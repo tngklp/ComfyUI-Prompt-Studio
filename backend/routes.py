@@ -16,7 +16,7 @@ from aiohttp import web
 from server import PromptServer
 
 from .assembly import AssemblyError, assemble_lyrics_request, assemble_refinement, assemble_request
-from . import character_data, characters
+from . import characters
 from .catalog import discover_models_with_diagnostics, find_model, model_setup_catalog, resolve_projector
 from .comfy_state import comfyui_runtime_snapshot
 from .devlog import DEVELOPER_MODE, LOG_PATH, PeakVRAMMonitor, gpu_memory_snapshot, write_event
@@ -829,25 +829,6 @@ async def resolve_characters(request: web.Request) -> web.Response:
     if not isinstance(names, list) or not all(isinstance(name, str) for name in names):
         return _error("INVALID_REQUEST", "names must be a list of strings.", status=400)
     return web.json_response(characters.resolve(names))
-
-
-@routes.post(f"{ROUTE_PREFIX}/characters/refresh")
-async def refresh_characters(_request: web.Request) -> web.Response:
-    """Re-download the AnimaDex character dataset.
-
-    The download is 9 MB and blocks, so it runs on a worker thread. The dataset is
-    fetched automatically on first launch; this exists for the case where that first
-    attempt failed (offline, proxy, DNS not up yet) and the user wants it now.
-    """
-    try:
-        index = await asyncio.to_thread(character_data.refresh_cache)
-    except character_data.CharacterDownloadError as error:
-        return _error(error.code, error.message, status=502, details=error.detail or None)
-    characters.reset_cache()
-    return web.json_response({
-        "status": characters.index_status(),
-        "imported": len(index),
-    })
 
 
 @routes.get(f"{ROUTE_PREFIX}/guides")

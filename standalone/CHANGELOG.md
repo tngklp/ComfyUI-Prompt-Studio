@@ -4,8 +4,8 @@
 
 - Added the **Anima** text-to-image target, with content rating and prompt style options, character references, and per-region tag highlighting.
 - Added **declared references**, so a prompt can reference a picture that is not attached, and **media-blind mode**, which keeps attached media out of the prompt model.
-- Settings is now tabbed: prompts, media handling, and Anima characters.
-- The Anima character catalogue is downloaded on first launch from AnimaDex and cached locally, instead of shipping a sample inside the package.
+- Settings is now tabbed: prompts and media handling.
+- The Anima character catalogue is downloaded once by `start.bat` on the first launch and cached locally, instead of shipping a sample inside the package.
 - Fixed needing a hard refresh before new features appeared after an update: assets now revalidate and the interface reloads itself once when it is older than the backend.
 - Open Prompt Studio as an installed browser app with its own window and taskbar icon. Run `start.bat` first; the installed app needs the local server running at the same address.
 - Save and load text drafts for Single and Sequence from **Actions**.
