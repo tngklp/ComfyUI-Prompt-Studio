@@ -33,12 +33,12 @@ that dialect all the way through rather than drifting back into a tag list partw
 When any part of the prompt is written as tags, group them in this order:
 
 ```
-[quality/meta/year/safety tags] [1girl/1boy/1other etc] [character, series] [artist] [general tags]
+[quality/meta/year tags] [1girl/1boy/1other etc] [character, series] [artist] [general tags]
 ```
 
 - The **order between groups matters**; the order **within** a group does not.
 - The count tag (`1girl`, `1boy`, `2girls`, `1other`, …) comes early, right after the
-  quality/meta/year/safety block, because it tells the model up front how many subjects to
+  quality/meta/year block, because it tells the model up front how many subjects to
   compose.
 - **Character and series are one group, and always come as a pair in that order**:
   `oomuro sakurako, yuru yuri` — the character's name, then the work it comes from. The
@@ -84,14 +84,10 @@ newest, recent, mid, early, old
 highres, absurdres, anime screenshot, jpeg artifacts, official art, ...
 ```
 
-**Safety tags** — content rating. Anima was trained on exactly these four, so pick one of them
-rather than inventing a synonym, and include it deliberately rather than leaving it out:
-```
-safe, sensitive, nsfw, explicit
-```
-`safe` is the mildest and `explicit` the strongest; `sensitive` covers suggestive-but-not-
-explicit content. Because the model was trained with these four and nothing else, a rating tag
-written any other way (`sfw`, `questionable`, `general`) carries little or no signal.
+**Content rating tags** — the model was trained with a rating tag (`safe`, `sensitive`, `nsfw`,
+`explicit`) in its captions, but **this target never emits one**. Do not add a rating tag to the
+prompt, and do not write a synonym for one (`sfw`, `questionable`, `general`). Describe the image
+without rating it. If a rating tag appears in a draft, remove it before returning the prompt.
 
 **Artist tags** — prefix the artist name with `@`. This prefix is mandatory: without it the
 effect on style is very weak.
@@ -208,7 +204,7 @@ fur-trimmed headwear, holding, red capelet, holding box, capelet
 
 Reading it group by group, in the order from §2:
 
-1. **Quality/meta/year/safety:** `year 2025, newest, normal quality, score_5, highres, safe`
+1. **quality/meta/year:** `year 2025, newest, normal quality, score_5, highres, safe`
 2. **Count:** `1girl`
 3. **Character, then series:** `oomuro sakurako, yuru yuri`
 4. **Artist:** `@nnn yryr`
@@ -243,9 +239,7 @@ prompt actually renders as, so they're worth keeping in mind while you write:
 
 - **No realism.** This is an anime/illustration/art model by design; photoreal requests will
   disappoint no matter how the prompt is phrased.
-- **Short or vague prompts risk undesired content.** Mitigate this by always including
-  appropriate safety tags (`safe`, `sensitive`, `nsfw`, `explicit`) in both the positive and
-  negative prompt, and by writing sufficiently detailed prompts rather than terse ones.
+- **Short or vague prompts risk undesired content.** Mitigate this by writing sufficiently detailed prompts rather than terse ones, naming appearance, clothing, pose and setting explicitly.
 - **Weak text rendering.** Single words and occasionally short phrases can render legibly;
   long strings of text will not render reliably. Don't rely on Anima for signage-heavy or
   text-dense images.
@@ -259,18 +253,17 @@ prompt actually renders as, so they're worth keeping in mind while you write:
 
 **General anime character shot (Aesthetic or Turbo):**
 ```
-masterpiece, best quality, [safety tag], 1girl, [character], [series], solo, [appearance tags],
+masterpiece, best quality, 1girl, [character], [series], solo, [appearance tags],
 [clothing tags], [pose/expression], [background], [lighting/composition tags]
 ```
 
 **Anima-Base, aiming for a specific illustrator look:**
 ```
-masterpiece, best quality, score_7, [safety tag], @[artist], 1girl, [character], [series],
+masterpiece, best quality, score_7, @[artist], 1girl, [character], [series],
 [appearance], [clothing], [pose], [background]
 ```
-The `[safety tag]` slot is the rating selected for the prompt (`safe`, `sensitive`, `nsfw` or
-`explicit`). **If no rating was requested, or the rating is None, drop the slot entirely** - do not
-default it to `safe`. The quality prefix is independent of the rating and is always present.
+No rating tag appears in either template: this target never emits one. The quality prefix is
+independent of the rating and is always present.
 
 Negative: `worst quality, low quality, score_1, score_2, score_3, artist name, blurry, jpeg artifacts, chromatic aberration`
 
@@ -285,12 +278,11 @@ masterpiece, best quality. Digital artwork of [Character A], with [hair/eyes/bui
 
 ## 13. Checklist before you submit a prompt
 
-- [ ] A safety tag from the trained set (`safe`, `sensitive`, `nsfw`, `explicit`) is in the positive
-      prompt **only when a rating was requested**, and matches that rating. With no rating
-      requested, or with the rating set to None, no safety tag belongs in the prompt at all.
+- [ ] **No rating tag is present.** This target never emits one, so `safe`, `sensitive`, `nsfw`,
+      `explicit` and their synonyms (`sfw`, `questionable`, `general`) must all be absent
 - [ ] The whole prompt stays in one dialect (tags, natural language, or hybrid) rather than
       drifting between them
-- [ ] Tag groups are in the correct order (quality/meta/year/safety → count → **character+series
+- [ ] Tag groups are in the correct order (quality/meta/year → count → **character+series
       as one pair** → artist → general)
 - [ ] Every character is followed by its series, e.g. `hatsune miku, vocaloid` - never the name
       alone, and never the series separated from its character

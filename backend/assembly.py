@@ -102,19 +102,7 @@ def _mode_options_directive(mode: str, resolved: dict[str, str | None]) -> str:
         if value is None:
             continue
         choice = option.choice(value)
-        if option.id == "content_rating":
-            if choice.prompt_tag is None:
-                lines.append(
-                    "Content rating: no safety tag was requested. Do not add a safety tag "
-                    "(safe, sensitive, nsfw or explicit) to the prompt."
-                )
-            else:
-                lines.append(
-                    f"Content rating: the prompt must be rated {choice.prompt_tag}. Include the tag "
-                    f"`{choice.prompt_tag}` in the prompt's safety group, and keep everything you "
-                    f"describe consistent with that rating."
-                )
-        elif option.id == "prompt_style":
+        if option.id == "prompt_style":
             if choice.prompt_tag == "tags":
                 lines.append(
                     "Prompt style: tags only. Write the entire prompt as a lowercase, "
@@ -275,10 +263,11 @@ def _final_contract(mode: str, task_text: str) -> str:
 def normalize_generated_prompt(prompt: str, mode: str) -> str:
     """Let the generation target normalise its own output text.
 
-    A strategy that once asked for a JSON envelope (Qwen Image 2.1 used to return
-    ``{"rewritten_prompt": …, "wh_ratio": …}``) implements ``normalize_prompt_text``
-    to unwrap a legacy reply so the editor shows the prompt and the ratio stays an
-    application setting. Targets without the hook are returned unchanged.
+    A strategy that needs to rewrite what the model returned implements
+    ``normalize_prompt_text``: Qwen Image 2.1 unwraps a legacy
+    ``{"rewritten_prompt": …, "wh_ratio": …}`` envelope so the editor shows the prompt and
+    the ratio stays an application setting, and Anima strips a content-rating tag the model
+    added out of dataset habit. Targets without the hook are returned unchanged.
     """
     from .targets.contract import supports
 

@@ -142,13 +142,6 @@ const BUILT_IN = [
     },
     modes: [
       { id: "AnimaTextToImage", label: "T2I", title: "Text to Image", hint: "Describe the image to generate from scratch.", guide: "base", system_prompt: "base", requires_media: false, limits: {}, output_only: false, options: [
-        { id: "content_rating", label: "Content rating", hint: "The safety tag Anima was trained on. None omits it, so the tag is only present when you choose it.", default: null, scope: "prompt", choices: [
-          { id: "none", label: "None", hint: "Omit the safety tag", prompt_tag: null },
-          { id: "safe", label: "Safe", hint: "Safe for work", prompt_tag: "safe" },
-          { id: "sensitive", label: "Sensitive", hint: "Suggestive, not explicit", prompt_tag: "sensitive" },
-          { id: "nsfw", label: "NSFW", hint: "Explicit adult content", prompt_tag: "nsfw" },
-          { id: "explicit", label: "Explicit", hint: "Strongest rating tag", prompt_tag: "explicit" },
-        ] },
         { id: "prompt_style", label: "Prompt style", hint: "Anima accepts tags, natural-language captions, or a mixture of the two.", default: "tags", scope: "prompt", choices: [
           { id: "tags", label: "Tags", hint: "Danbooru-style comma-separated tags only", prompt_tag: "tags" },
           { id: "natural_language", label: "Natural language", hint: "Descriptive English prose, at least two sentences", prompt_tag: "natural language" },

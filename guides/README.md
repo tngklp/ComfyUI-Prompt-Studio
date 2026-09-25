@@ -43,6 +43,7 @@ document**. It keeps provenance and a resolvable source link, but it is rewritte
 | `minimax_h3/base.md`, `minimax_h3/ref.md` | `MiniMaxAI/MiniMax-H3` @ `bfc8ed03`, `docs/` | pinned |
 | `qwen_image_2.1/t2i.md`, `qwen_image_2.1/edit.md` | `QwenLM/Qwen-Image-2.1` @ `7307809`, `prompt_rewrite/prompts/` | pinned |
 | `krea_2/t2i.md` | Prompt Studio-authored | unpinned |
+| `anima/t2i.md` | Anima model card, rewritten in-repo | adapted |
 
 Both official pairs are stored **byte-identical to upstream**, so they can carry a
 pin and be verified. Where the upstream output contract differs from what the studio
@@ -52,6 +53,11 @@ needs, the difference is handled in code rather than by editing the file:
   `normalize_prompt_text` in [`backend/targets/qwen_image.py`](../backend/targets/qwen_image.py)
   unwraps it, keeping the ratio fields out of the editor. See
   `tests/test_targets.py::EnvelopeNormalizationTests`.
+- Anima's training captions all carried a content rating, so a model adds one (`safe`)
+  out of habit even though the guide and system prompt forbid it.
+  `normalize_prompt_text` in [`backend/targets/anima.py`](../backend/targets/anima.py)
+  strips a whole rating tag from the output, so the user never sees one. The audit
+  still reports it, but does not force a repair, since stripping costs nothing.
 - The Qwen guides use upstream `.txt` names. The local copies are renamed `.md`, so
   each descriptor sets `source_filename` to the upstream name; the source URL is
   built from that.

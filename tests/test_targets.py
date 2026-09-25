@@ -730,7 +730,7 @@ class AnimaTargetTests(unittest.TestCase):
 
     def test_a_clean_tag_prompt_needs_no_repair(self):
         clean = (
-            "masterpiece, best quality, score_7, safe, 1girl, solo, long hair, "
+            "masterpiece, best quality, score_7, 1girl, solo, long hair, "
             "silver hair, red eyes, school uniform, rooftop, sunset, looking at viewer"
         )
         audit = self.strategy.audit_prompt(clean, "AnimaTextToImage")
@@ -764,7 +764,7 @@ class AnimaTargetTests(unittest.TestCase):
 
     def test_a_realism_request_is_reported_as_a_warning_not_a_repair(self):
         audit = self.strategy.audit_prompt(
-            "photorealistic portrait of a woman, 1girl, safe", "AnimaTextToImage"
+            "photorealistic portrait of a woman, 1girl, solo, long hair, cityscape", "AnimaTextToImage"
         )
         self.assertFalse(audit["repair_required"])
         self.assertTrue(audit["realism_request"])
@@ -801,6 +801,79 @@ class AnimaTargetTests(unittest.TestCase):
     def test_an_unknown_mode_is_rejected_by_the_contract(self):
         with self.assertRaises(ValueError):
             self.strategy.final_contract("NotAMode", "a brief")
+
+    def test_a_rating_tag_is_stripped_from_the_output(self):
+        # Anima's captions all carried a rating, so a model adds one out of habit even
+        # though this target never emits one. The tag is removed before the user sees it.
+        stripped = self.strategy.normalize_prompt_text(
+            "masterpiece, best quality, safe, 1girl, solo, long hair"
+        )
+        self.assertEqual(stripped, "masterpiece, best quality, 1girl, solo, long hair")
+
+    def test_every_rating_synonym_is_stripped(self):
+        for rating in ("safe", "sensitive", "nsfw", "explicit", "questionable"):
+            with self.subTest(rating=rating):
+                stripped = self.strategy.normalize_prompt_text(
+                    f"masterpiece, {rating}, 1girl, solo"
+                )
+                self.assertEqual(stripped, "masterpiece, 1girl, solo")
+
+    def test_a_rating_at_either_end_is_stripped(self):
+        self.assertEqual(
+            self.strategy.normalize_prompt_text("safe, masterpiece, 1girl"),
+            "masterpiece, 1girl",
+        )
+        self.assertEqual(
+            self.strategy.normalize_prompt_text("masterpiece, 1girl, safe"),
+            "masterpiece, 1girl",
+        )
+
+    def test_stripping_respects_the_separator_style(self):
+        # A tag list written without spaces must not gain them.
+        self.assertEqual(
+            self.strategy.normalize_prompt_text("masterpiece,best quality,safe,1girl"),
+            "masterpiece,best quality,1girl",
+        )
+
+    def test_a_tag_that_merely_contains_a_rating_word_survives(self):
+        # Only a whole tag that IS a rating is removed, so these must be untouched.
+        for keep in (
+            "masterpiece, best quality, safety glasses, 1girl",
+            "masterpiece, safe day, 1girl",
+            "1girl, masterly, solo",
+        ):
+            with self.subTest(prompt=keep):
+                self.assertEqual(self.strategy.normalize_prompt_text(keep), keep)
+
+    def test_a_prompt_without_a_rating_is_returned_unchanged(self):
+        clean = "masterpiece, best quality, score_7, 1girl, solo, long hair"
+        self.assertEqual(self.strategy.normalize_prompt_text(clean), clean)
+
+    def test_prose_without_a_rating_is_returned_unchanged(self):
+        prose = "An anime girl with long silver hair stands on a rooftop at sunset."
+        self.assertEqual(self.strategy.normalize_prompt_text(prose), prose)
+
+    def test_stripping_handles_an_empty_prompt(self):
+        self.assertEqual(self.strategy.normalize_prompt_text(""), "")
+
+    def test_a_rating_tag_warns_but_does_not_force_a_repair(self):
+        # The tag is stripped deterministically, so regenerating the prompt to remove it
+        # would burn a full generation for nothing. It still gets reported.
+        audit = self.strategy.audit_prompt(
+            "masterpiece, best quality, safe, 1girl, solo, long hair", "AnimaTextToImage"
+        )
+        self.assertEqual(audit["safety_tags"], ["safe"])
+        self.assertIn(
+            "a safety tag was added; this target never emits one, so it is a dataset habit (safe)",
+            audit["quality_warnings"],
+        )
+
+    def test_the_guide_and_system_prompt_both_forbid_a_rating_tag(self):
+        # The strip is a safety net; the instructions must still ask for the right thing.
+        guide = str(guide_for_mode("AnimaTextToImage")["content"]).lower()
+        self.assertIn("never emit", guide)
+        system_prompt = system_prompt_for_mode("AnimaTextToImage").lower()
+        self.assertIn("never add a safety tag", system_prompt)
 
 
 class VideoTargetRegressionTests(unittest.TestCase):

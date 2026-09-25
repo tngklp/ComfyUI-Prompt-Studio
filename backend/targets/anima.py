@@ -89,6 +89,35 @@ Never introduce [Shot N] markers or MM:SS.mmm timestamps.\
 """
 
 
+def normalize_prompt_text(text: str) -> str:
+    """Strip any content-rating tag the model added.
+
+    This target never emits a rating tag, but Anima's training captions all carried
+    one and a model will sometimes add ``safe`` out of habit. The guide and the system
+    prompt both forbid it, and the audit reports it, but stripping it here is the only
+    way to guarantee the user never sees one.
+
+    Only a whole comma-separated tag that *is* a rating word is removed, so a
+    legitimate tag that merely contains one - ``safety glasses``, ``safe day`` - survives.
+    """
+    if not text:
+        return text
+    # A rating tag is a whole tag, never a word inside one: split on commas and drop the
+    # segments that are exactly a rating.
+    parts = text.split(",")
+    kept = [part for part in parts if not SAFETY_TAG.fullmatch(part.strip())]
+    if len(kept) == len(parts):
+        return text
+    # Rejoin with the separator style the prompt already used, so a tag list written
+    # without spaces after its commas does not gain them.
+    separator = ", " if ", " in text else ","
+    cleaned = separator.join(part.strip() for part in kept if part.strip())
+    # If the removed tag carried a trailing sentence period, keep the text tidy.
+    if cleaned and text.rstrip().endswith(".") and not cleaned.endswith("."):
+        cleaned += "."
+    return cleaned
+
+
 def final_contract(mode: str, task_text: str) -> str:
     """Closing instruction for Anima.
 
@@ -100,11 +129,11 @@ def final_contract(mode: str, task_text: str) -> str:
     if mode == "AnimaTextToImage":
         return (
             "Final grounding check: describe a single still image for Anima, using the prompt style "
-            "and content rating stated above. If you write tags, group them as quality/meta/year/safety "
+            "stated above. If you write tags, group them as quality/meta/year "
             "first, then the subject count, then character and series as one pair, then artist, then "
             "general tags, and write them in lowercase with spaces instead of underscores. Every "
             "character must be followed by the work it comes from, e.g. `hatsune miku, vocaloid`; never "
-            "write a character name on its own. Include a safety tag only if a rating was stated above. "
+            "write a character name on its own. Never include a safety tag. "
             "Prefix every artist tag with @. Name each character and then describe their basic "
             "appearance, and use the general-tag group to describe appearance, clothing, pose, "
             "expression, props, framing, background and lighting thoroughly enough to cover the whole "
@@ -142,7 +171,6 @@ def audit_prompt(
     """
     text = prompt or ""
     options = mode_options or {}
-    rating = options.get("content_rating")
     style = options.get("prompt_style")
     leakage = list(dict.fromkeys(match.group(0) for match in VIDEO_LEAKAGE.finditer(text)))
     words = len(re.findall(r"[A-Za-z]+(?:[-'][A-Za-z]+)*", text))
@@ -188,8 +216,6 @@ def audit_prompt(
             character_missing_series.append(str(entry.get("character") or character))
 
     quality_warnings: list[str] = []
-    # A warning must not contradict a choice the user actually made.
-    rating_requested = rating not in (None, "none")
     if words < 12 and not is_tag_list:
         quality_warnings.append("very short prompt")
     if realism:
@@ -204,8 +230,8 @@ def audit_prompt(
         quality_warnings.append("resolution keywords add noise for this target")
     if is_tag_list and not count_tags:
         quality_warnings.append("a tag list should state how many subjects to compose")
-    if is_tag_list and not (quality_tags or safety_tags):
-        quality_warnings.append("a tag list usually opens with a quality and safety group")
+    if is_tag_list and not quality_tags:
+        quality_warnings.append("a tag list usually opens with a quality group")
     # A character tag without the series right after it is the failure the picker
     # exists to prevent: the trigger is "character, series" and half of it is missing.
     if is_tag_list and character_missing_series:
@@ -213,17 +239,11 @@ def audit_prompt(
             "a selected character is missing its series tag next to it "
             f"({', '.join(character_missing_series)})"
         )
-    if score_tags and rating != "safe":
-        quality_warnings.append("score_* tags fight the Anima-Aesthetic finetune and are usually omitted")
-    # The rating and style the user selected are checked against the output, because
-    # a mismatch there is the one failure the user cannot see for themselves.
-    # `rating_requested` distinguishes an explicit rating from `none`/unset, and
-    # `rating_declined` covers only the explicit `none` choice: with no selection at
-    # all the model was left to the guide, so an added tag is not a contradiction.
-    if rating_requested and rating not in {tag.lower() for tag in safety_tags}:
-        quality_warnings.append(f"the selected {rating} safety tag is missing from the prompt")
-    if rating == "none" and safety_tags:
-        quality_warnings.append("a safety tag was added although the content rating is None")
+    if safety_tags:
+        quality_warnings.append(
+            "a safety tag was added; this target never emits one, so it is a dataset habit "
+            f"({', '.join(safety_tags)})"
+        )
     if style == "tags" and not is_tag_list:
         quality_warnings.append("the prompt style is Tags but the output is not a tag list")
     if style == "natural_language" and is_tag_list:
@@ -232,18 +252,16 @@ def audit_prompt(
     # Leakage of the video contract is the primary condition that justifies a repair.
     repair_required = bool(leakage)
 
-    # A contradiction of the user's own selection also forces a repair. These are the
-    # failures the user cannot see for themselves: they picked a rating and got a
-    # different one, or picked a style and got another. Leaving them as warnings meant
-    # a prompt that visibly disagrees with the settings was still shipped.
-    if rating == "none" and safety_tags:
-        repair_required = True
-    if rating_requested and rating not in {tag.lower() for tag in safety_tags}:
-        repair_required = True
+    # A contradiction of the user's own style selection also forces a repair: they picked
+    # a dialect and got another. These are failures the user cannot see for themselves,
+    # and leaving them as warnings shipped a prompt that disagreed with the settings.
     if style == "tags" and not is_tag_list:
         repair_required = True
     if style == "natural_language" and is_tag_list:
         repair_required = True
+    # A safety tag is stripped from the output by `normalize_prompt_text` rather than
+    # regenerated, so it is worth reporting but not worth a repair: a repair pass would
+    # cost a full generation to fix something already handled deterministically.
 
     return {
         "mode": mode,
@@ -253,11 +271,8 @@ def audit_prompt(
         "image_words": words,
         "tag_like_ratio": round(tag_like_ratio, 3),
         "is_tag_list": is_tag_list,
-        "content_rating": rating,
+        "content_rating": None,
         "prompt_style": style,
-        "content_rating_present": (
-            rating in {tag.lower() for tag in safety_tags} if rating_requested else None
-        ),
         "coverage_signals": {
             "count_tag": bool(count_tags),
             "quality_or_safety": bool(quality_tags or safety_tags),

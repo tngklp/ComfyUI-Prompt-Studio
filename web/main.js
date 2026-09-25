@@ -1416,6 +1416,10 @@ function syncWorkspace() {
  * The container is rebuilt only when the option set changes, because a rebuild
  * would close an open menu mid-interaction. Options are registry data, so a mode
  * that declares none leaves the container empty and hidden.
+ *
+ * The options render as siblings of the aspect-ratio control inside one
+ * `.ps-control-grid`, so a single-option mode (Anima's prompt style) sits beside it
+ * in the same row rather than on a line of its own.
  */
 function syncModeOptions() {
   if (!studio?.root) return;
@@ -3646,11 +3650,10 @@ function createStudio() {
               <small class="ps-char-count">0 / 4,000</small>
             </label>
 
-            <div class="ps-control-grid ps-image-controls">
+            <div class="ps-control-grid ps-image-controls" data-image-controls>
               ${aspectRatioMarkup(icon, "image-aspect")}
+              <div class="ps-mode-options" data-mode-options></div>
             </div>
-
-            <div class="ps-control-grid ps-mode-options" data-mode-options></div>
 
             ${characterPickerMarkup()}
           </div>

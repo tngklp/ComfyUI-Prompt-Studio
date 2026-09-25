@@ -118,8 +118,11 @@ test("a target that declares no options renders no option controls", () => {
 
 test("the option control renders one labelled menu per declared option", () => {
   const options = modeDescriptor("AnimaTextToImage").options;
-  assert.ok(Array.isArray(options) && options.length === 2, "Anima should declare two options");
-  const html = modeOptionsMarkup(() => "<svg></svg>", options, { content_rating: "nsfw", prompt_style: "tags" });
+  // Only the prompt style remains: a content rating is never emitted, so there is no
+  // rating choice to offer.
+  assert.ok(Array.isArray(options) && options.length === 1, "Anima should declare one option");
+  assert.deepEqual(options.map((option) => option.id), ["prompt_style"]);
+  const html = modeOptionsMarkup(() => "<svg></svg>", options, { prompt_style: "tags" });
   for (const option of options) {
     assert.match(html, new RegExp(`data-mode-option="${option.id}"`));
     for (const choice of option.choices) {
@@ -127,7 +130,6 @@ test("the option control renders one labelled menu per declared option", () => {
     }
   }
   // The selected value is matched by id, not by label, so relabelling is safe.
-  assert.match(html, /aria-pressed="true" data-mode-option-value="nsfw"/);
   assert.match(html, /aria-pressed="true" data-mode-option-value="tags"/);
   assert.match(html, /aria-pressed="false" data-mode-option-value="hybrid"/);
 });
@@ -135,10 +137,8 @@ test("the option control renders one labelled menu per declared option", () => {
 test("an unset option opens on its declared default, not its first choice", () => {
   const options = modeDescriptor("AnimaTextToImage").options;
   const html = modeOptionsMarkup(() => "", options, {});
-  // The rating has a null default and its first choice is the explicit "None".
-  assert.match(html, /aria-pressed="true" data-mode-option-value="none"/);
-  // The style default is now tags; assert it comes from the declared default rather
-  // than from a positional fallback.
+  // The style default is declared as tags; assert it comes from the declared default
+  // rather than from a positional fallback.
   assert.equal(options.find((option) => option.id === "prompt_style").default, "tags");
   assert.match(html, /aria-pressed="true" data-mode-option-value="tags"/);
   assert.match(html, /data-option-label>Tags</);
@@ -150,11 +150,10 @@ test("the active choice resolver prefers selection, then default, then first", (
   assert.equal(selectedModeOptionChoice(style, { prompt_style: "hybrid" }).id, "hybrid");
   assert.equal(selectedModeOptionChoice(style, {}).id, "tags");
   assert.equal(selectedModeOptionChoice(style, { prompt_style: "not_a_choice" }).id, "tags");
-  const rating = modeDescriptor("AnimaTextToImage").options.find((option) => option.id === "content_rating");
-  assert.equal(selectedModeOptionChoice(rating, { content_rating: "nsfw" }).id, "nsfw");
-  assert.equal(selectedModeOptionChoice(rating, {}).id, "none");
-  // A stale value falls back rather than selecting nothing.
-  assert.equal(selectedModeOptionChoice(rating, { content_rating: "sfw" }).id, "none");
+  // A stale rating value left in a saved draft is simply not a declared option any more,
+  // so it is never resolved into a choice.
+  const optionIds = modeDescriptor("AnimaTextToImage").options.map((option) => option.id);
+  assert.ok(!optionIds.includes("content_rating"));
 });
 
 // The default is not necessarily the first choice, which is the case this guards.
@@ -183,17 +182,11 @@ test("a null default falls back to the first choice", () => {
   assert.equal(selectedModeOptionChoice(synthetic, {}).id, "optout");
 });
 
-test("every Anima rating and style reaches the registry with a prompt tag", () => {
+test("every Anima prompt style reaches the registry with a prompt tag", () => {
   const options = modeDescriptor("AnimaTextToImage").options;
-  const rating = options.find((option) => option.id === "content_rating");
-  assert.deepEqual(rating.choices.map((choice) => choice.id), ["none", "safe", "sensitive", "nsfw", "explicit"]);
-  // `none` deliberately carries no tag: choosing it means "emit nothing".
-  assert.equal(rating.choices[0].prompt_tag, null);
-  assert.deepEqual(
-    rating.choices.slice(1).map((choice) => choice.prompt_tag),
-    ["safe", "sensitive", "nsfw", "explicit"],
-  );
-  assert.equal(rating.default, null);
+  // No content rating is declared: this target never emits a rating tag, so offering the
+  // choice only ever produced a tag the user did not want.
+  assert.equal(options.find((option) => option.id === "content_rating"), undefined);
   const style = options.find((option) => option.id === "prompt_style");
   assert.deepEqual(style.choices.map((choice) => choice.id), ["tags", "natural_language", "hybrid"]);
   assert.equal(style.default, "tags");
@@ -230,7 +223,13 @@ test("changing an option warns that the generated prompt is now stale", () => {
 });
 
 test("the image panel hosts the option controls alongside the aspect ratio", () => {
-  assert.match(mainSource, /<div class="ps-control-grid ps-mode-options" data-mode-options><\/div>/);
+  // The aspect ratio and the option controls share ONE grid, so they sit on the same
+  // row. The options container is a plain child rather than a grid of its own.
+  assert.match(mainSource, /<div class="ps-control-grid ps-image-controls" data-image-controls>/);
+  assert.match(mainSource, /\$\{aspectRatioMarkup\(icon, "image-aspect"\)\}/);
+  assert.match(mainSource, /<div class="ps-mode-options" data-mode-options><\/div>/);
+  // The old layout gave the options their own grid, which put them on a new row.
+  assert.doesNotMatch(mainSource, /<div class="ps-control-grid ps-mode-options" data-mode-options><\/div>/);
   assert.match(mainSource, /function syncModeOptions\(\)/);
   // The image panel is the only panel that renders them, so it must call the sync.
   // main.js uses CRLF, so the slice is generous and newline-agnostic.

@@ -45,26 +45,20 @@ def _user_message(assembled):
 
 
 class ModeOptionRegistryTests(unittest.TestCase):
-    def test_anima_declares_a_rating_and_a_style_option(self):
+    def test_anima_declares_only_a_style_option(self):
+        # The rating option was removed: this target never emits a safety tag, so there
+        # is nothing for the user to choose.
         mode = targets.mode("AnimaTextToImage")
-        self.assertEqual(mode.option_ids, ("content_rating", "prompt_style"))
+        self.assertEqual(mode.option_ids, ("prompt_style",))
+        with self.assertRaises(TargetError):
+            mode.option("content_rating")
 
-    def test_the_rating_offers_the_models_trained_vocabulary(self):
-        option = targets.mode("AnimaTextToImage").option("content_rating")
-        self.assertEqual(option.choice_ids, ("none", "safe", "sensitive", "nsfw", "explicit"))
-        self.assertEqual(
-            [choice.prompt_tag for choice in option.choices],
-            [None, "safe", "sensitive", "nsfw", "explicit"],
-        )
-
-    def test_the_rating_default_omits_the_tag(self):
-        # The user asked for no safety tag unless one is chosen, so the default is
-        # explicitly None rather than one of the four ratings.
-        self.assertIsNone(targets.mode("AnimaTextToImage").option("content_rating").default)
-        self.assertEqual(
-            targets.resolve_mode_options("AnimaTextToImage", None)["content_rating"],
-            None,
-        )
+    def test_no_target_declares_a_content_rating(self):
+        # A leftover rating option would silently reinstate the safety-tag behaviour.
+        for target in targets.targets():
+            for mode in target.modes:
+                with self.subTest(target=target.id, mode=mode.id):
+                    self.assertNotIn("content_rating", mode.option_ids)
 
     def test_the_style_offers_the_models_three_dialects(self):
         option = targets.mode("AnimaTextToImage").option("prompt_style")
@@ -75,28 +69,29 @@ class ModeOptionRegistryTests(unittest.TestCase):
         self.assertEqual(targets.mode_options("T2VA"), ())
         self.assertEqual(targets.resolve_mode_options("T2VA", None), {})
         with self.assertRaises(TargetError):
-            targets.resolve_mode_options("T2VA", {"content_rating": "safe"})
+            targets.resolve_mode_options("T2VA", {"prompt_style": "tags"})
 
     def test_an_unknown_option_or_choice_is_rejected(self):
         with self.assertRaises(TargetError) as caught:
             targets.resolve_mode_options("AnimaTextToImage", {"nope": "safe"})
         self.assertEqual(caught.exception.code, "INVALID_OPTION")
         with self.assertRaises(TargetError) as caught:
-            targets.resolve_mode_options("AnimaTextToImage", {"content_rating": "sfw"})
+            targets.resolve_mode_options("AnimaTextToImage", {"prompt_style": "sfw"})
+        self.assertEqual(caught.exception.code, "INVALID_OPTION")
+        # The removed option must be rejected rather than quietly ignored, so a stale
+        # client cannot believe it set a rating.
+        with self.assertRaises(TargetError) as caught:
+            targets.resolve_mode_options("AnimaTextToImage", {"content_rating": "safe"})
         self.assertEqual(caught.exception.code, "INVALID_OPTION")
 
     def test_a_non_string_value_is_rejected(self):
         with self.assertRaises(TargetError):
-            targets.resolve_mode_options("AnimaTextToImage", {"content_rating": 3})
-
-    def test_an_explicit_null_keeps_an_opt_in_option_off(self):
-        resolved = targets.resolve_mode_options("AnimaTextToImage", {"content_rating": None})
-        self.assertIsNone(resolved["content_rating"])
+            targets.resolve_mode_options("AnimaTextToImage", {"prompt_style": 3})
 
     def test_omitted_options_fall_back_to_their_defaults(self):
         resolved = targets.resolve_mode_options("AnimaTextToImage", {})
-        self.assertIsNone(resolved["content_rating"])
         self.assertEqual(resolved["prompt_style"], "tags")
+        self.assertNotIn("content_rating", resolved)
 
 
 class ModeOptionAssemblyTests(unittest.TestCase):
@@ -104,40 +99,12 @@ class ModeOptionAssemblyTests(unittest.TestCase):
         self.store = MediaStore()
         self.session = "44444444-4444-4444-4444-444444444444"
 
-    def test_the_selected_rating_is_named_in_the_request(self):
-        assembled = _assemble(self.store, self.session, mode_options={"content_rating": "nsfw"})
-        message = _user_message(assembled)
-        self.assertIn("rated nsfw", message)
-        self.assertIn("`nsfw`", message)
-
-    def test_choosing_none_suppresses_the_tag_explicitly(self):
-        assembled = _assemble(self.store, self.session, mode_options={"content_rating": "none"})
-        message = _user_message(assembled)
-        self.assertIn("no safety tag was requested", message)
-        self.assertNotIn("rated safe", message)
-        self.assertNotIn("rated nsfw", message)
-
-    def test_an_unset_rating_defers_to_the_guide(self):
-        # "No selection" is not the same as "explicitly none": with nothing chosen
-        # the model is left to the guide's own advice rather than being told to
-        # omit the tag. Only the explicit `none` choice says "do not add a tag".
+    def test_a_safety_tag_is_never_requested(self):
+        # The rating option is gone, so nothing should tell the model to add a tag.
         assembled = _assemble(self.store, self.session)
         message = _user_message(assembled)
-        self.assertNotIn("no safety tag was requested", message)
-        self.assertNotIn("rated safe", message)
-
-    def test_an_explicit_null_is_treated_as_unset(self):
-        assembled = _assemble(self.store, self.session, mode_options={"content_rating": None})
-        message = _user_message(assembled)
-        self.assertNotIn("no safety tag was requested", message)
-
-    def test_each_rating_quotations_its_own_tag(self):
-        for rating in ("safe", "sensitive", "nsfw", "explicit"):
-            with self.subTest(rating=rating):
-                assembled = _assemble(self.store, self.session, mode_options={"content_rating": rating})
-                message = _user_message(assembled)
-                self.assertIn(f"rated {rating}", message)
-                self.assertIn(f"`{rating}`", message)
+        for phrase in ("rated safe", "rated nsfw", "Content rating:"):
+            self.assertNotIn(phrase, message)
 
     def test_the_tags_style_forbids_prose(self):
         assembled = _assemble(self.store, self.session, mode_options={"prompt_style": "tags"})
@@ -156,10 +123,10 @@ class ModeOptionAssemblyTests(unittest.TestCase):
         self.assertIn("hybrid", _user_message(assembled))
 
     def test_the_resolved_options_are_recorded_on_the_request(self):
-        assembled = _assemble(self.store, self.session, mode_options={"content_rating": "sensitive"})
+        assembled = _assemble(self.store, self.session, mode_options={"prompt_style": "natural_language"})
         self.assertEqual(
             assembled["input"]["mode_options"],
-            {"content_rating": "sensitive", "prompt_style": "tags"},
+            {"prompt_style": "natural_language"},
         )
 
     def test_the_final_contract_does_not_contradict_the_chosen_style(self):
@@ -168,73 +135,54 @@ class ModeOptionAssemblyTests(unittest.TestCase):
         import backend.targets.anima as anima
 
         contract = anima.final_contract("AnimaTextToImage", "a brief")
-        self.assertIn("using the prompt style and content rating stated above", contract)
+        self.assertIn("using the prompt style stated above", contract)
         self.assertNotIn("Choose one dialect", contract)
 
     def test_the_audit_accepts_a_prompt_matching_the_selected_style(self):
         import backend.targets.anima as anima
 
-        tag_prompt = "masterpiece, best quality, safe, 1girl, solo, long hair, cityscape, sunset"
+        tag_prompt = "masterpiece, best quality, 1girl, solo, long hair, cityscape, sunset"
         audit = anima.audit_prompt(
             tag_prompt,
             "AnimaTextToImage",
-            mode_options={"content_rating": "safe", "prompt_style": "tags"},
+            mode_options={"prompt_style": "tags"},
         )
         self.assertNotIn("the prompt style is Tags but the output is not a tag list", audit["quality_warnings"])
-        self.assertTrue(audit["content_rating_present"])
 
-    def test_the_audit_flags_a_missing_selected_rating(self):
+    def test_the_audit_flags_any_safety_tag(self):
+        # A safety tag is a defect rather than a preference, whatever the text is, because
+        # the user has no way to ask for one. It is reported but not repaired: the tag is
+        # stripped from the output instead, which costs nothing, so regenerating the whole
+        # prompt for it would be a wasted generation.
         import backend.targets.anima as anima
 
-        audit = anima.audit_prompt(
-            "masterpiece, best quality, 1girl, solo, long hair",
-            "AnimaTextToImage",
-            mode_options={"content_rating": "nsfw"},
-        )
-        self.assertIn("the selected nsfw safety tag is missing from the prompt", audit["quality_warnings"])
-        self.assertFalse(audit["content_rating_present"])
-
-    def test_the_audit_does_not_ask_for_a_tag_the_user_declined(self):
-        import backend.targets.anima as anima
-
-        audit = anima.audit_prompt(
-            "masterpiece, best quality, 1girl, solo, long hair",
-            "AnimaTextToImage",
-            mode_options={"content_rating": "none"},
-        )
-        self.assertNotIn("the selected None safety tag is missing from the prompt", audit["quality_warnings"])
-        self.assertNotIn(
-            "a safety tag was added although no content rating was selected",
-            audit["quality_warnings"],
-        )
-
-    def test_the_audit_flags_a_tag_added_when_none_was_chosen(self):
-        import backend.targets.anima as anima
-
-        audit = anima.audit_prompt(
+        for prompt in (
             "masterpiece, best quality, safe, 1girl, solo",
-            "AnimaTextToImage",
-            mode_options={"content_rating": "none"},
-        )
-        self.assertIn(
-            "a safety tag was added although the content rating is None",
-            audit["quality_warnings"],
-        )
+            "masterpiece, best quality, nsfw, 1girl, solo",
+            "masterpiece, best quality, sensitive, 1girl, solo",
+        ):
+            with self.subTest(prompt=prompt):
+                audit = anima.audit_prompt(prompt, "AnimaTextToImage")
+                self.assertTrue(
+                    any("a safety tag was added" in warning for warning in audit["quality_warnings"]),
+                    audit["quality_warnings"],
+                )
+                self.assertFalse(audit["repair_required"])
+                # The stripping is what makes the warning safe to leave unrepaired.
+                stripped = anima.normalize_prompt_text(prompt)
+                self.assertNotIn("safe", stripped)
+                self.assertNotIn("nsfw", stripped)
+                self.assertNotIn("sensitive", stripped)
 
-    def test_the_audit_leaves_an_unset_rating_to_the_guide(self):
-        # Nothing was chosen, so an added safety tag follows the guide rather than
-        # contradicting the user.
+    def test_a_clean_prompt_without_a_safety_tag_needs_no_repair_on_that_basis(self):
         import backend.targets.anima as anima
 
         audit = anima.audit_prompt(
-            "masterpiece, best quality, safe, 1girl, solo",
+            "masterpiece, best quality, score_7, 1girl, solo, long hair, cityscape",
             "AnimaTextToImage",
-            mode_options={},
+            mode_options={"prompt_style": "tags"},
         )
-        self.assertNotIn(
-            "a safety tag was added although the content rating is None",
-            audit["quality_warnings"],
-        )
+        self.assertFalse(any("a safety tag was added" in warning for warning in audit["quality_warnings"]))
 
     def test_the_audit_flags_a_style_the_output_did_not_follow(self):
         import backend.targets.anima as anima

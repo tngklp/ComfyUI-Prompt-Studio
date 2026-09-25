@@ -330,9 +330,10 @@ def run_pipeline(
     if not text.strip():
         raise ModelError("EMPTY_GENERATION", "The model did not produce a final prompt.")
 
-    # A strategy may need to unwrap a legacy output envelope (Qwen Image 2.1 used to
-    # answer with {"rewritten_prompt": …, "wh_ratio": …}); the ratio fields are
-    # application settings and must not reach the editor or the generated image.
+    # A strategy may need to normalise its own output text. Qwen Image 2.1 unwraps a
+    # legacy {"rewritten_prompt": …, "wh_ratio": …} envelope, whose ratio fields are
+    # application settings, and Anima strips any content-rating tag the model added out
+    # of dataset habit. Both must happen before the editor or the audit sees the text.
     text = normalize_generated_prompt(text, assembled["input"]["mode"])
 
     prompt = text

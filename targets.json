@@ -365,44 +365,6 @@
           "limits": {},
           "options": [
             {
-              "id": "content_rating",
-              "label": "Content rating",
-              "hint": "The safety tag Anima was trained on. None omits it, so the tag is only present when you choose it.",
-              "default": null,
-              "choices": [
-                {
-                  "id": "none",
-                  "label": "None",
-                  "hint": "Omit the safety tag",
-                  "prompt_tag": null
-                },
-                {
-                  "id": "safe",
-                  "label": "Safe",
-                  "hint": "Safe for work",
-                  "prompt_tag": "safe"
-                },
-                {
-                  "id": "sensitive",
-                  "label": "Sensitive",
-                  "hint": "Suggestive, not explicit",
-                  "prompt_tag": "sensitive"
-                },
-                {
-                  "id": "nsfw",
-                  "label": "NSFW",
-                  "hint": "Explicit adult content",
-                  "prompt_tag": "nsfw"
-                },
-                {
-                  "id": "explicit",
-                  "label": "Explicit",
-                  "hint": "Strongest rating tag",
-                  "prompt_tag": "explicit"
-                }
-              ]
-            },
-            {
               "id": "prompt_style",
               "label": "Prompt style",
               "hint": "Anima accepts tags, natural-language captions, or a mixture of the two.",
