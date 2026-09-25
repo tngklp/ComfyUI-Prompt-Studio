@@ -10,12 +10,25 @@
 .ps-characters { margin-top: 13px; }
 .ps-characters[hidden] { display: none; }
 .ps-characters > span {
+  display: flex;
+  align-items: baseline;
+  gap: calc(6px * var(--ps-interface-scale));
   color: var(--ps-text-label-strong);
   font-size: var(--ps-font-label);
   font-weight: 650;
   letter-spacing: .035em;
   text-transform: uppercase;
 }
+/* The catalogue size, as a quiet hint beside the label rather than a second line.
+   It sits inside the label so the control keeps its standard two-row shape. */
+.ps-characters > span small {
+  color: var(--ps-muted);
+  font-size: var(--ps-font-caption);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.ps-characters > span small[hidden] { display: none; }
 
 .ps-character-search input {
   box-sizing: border-box;
@@ -89,9 +102,24 @@
 }
 .ps-character-result:hover { border-color: var(--ps-border-field-action); background: var(--ps-field-hover); }
 .ps-character-result.is-selected { border-color: rgba(167, 139, 250, .55); background: var(--ps-accent-soft); }
-.ps-character-result-copy { display: flex; min-width: 0; flex: 1 1 auto; flex-direction: column; }
-.ps-character-result-copy strong { font-size: var(--ps-font-control-sm); font-weight: 620; }
-.ps-character-result-copy em { margin-top: 1px; color: var(--ps-muted); font-size: var(--ps-font-caption); font-style: normal; }
+/* Name over series, both flush left.
+   The `em` override has to name `button` and `em` to out-specify
+   `workbench.css`'s `.ps-field button em { margin-left: auto }`, which pushes the
+   description to the right edge of the aspect-ratio and mode-option buttons. The
+   picker is a `.ps-field` whose rows are buttons, so that rule reached these `em`s
+   and shoved the series to the far side of the row. Source order alone does not fix
+   this: the workbench selector scores (0,1,3) against (0,1,2). */
+.ps-character-result-copy { display: flex; min-width: 0; flex: 1 1 auto; flex-direction: column; align-items: flex-start; }
+.ps-character-result-copy strong { font-size: var(--ps-font-control-sm); font-weight: 620; text-align: left; }
+.ps-character-result-copy em,
+button.ps-character-result em {
+  margin-top: 1px;
+  margin-left: 0;
+  color: var(--ps-muted);
+  font-size: var(--ps-font-caption);
+  font-style: normal;
+  text-align: left;
+}
 /* The trigger is the exact string that reaches the prompt, so it is shown verbatim
    rather than paraphrased - this is the whole point of the picker. */
 .ps-character-result code {

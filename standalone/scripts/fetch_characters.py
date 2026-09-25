@@ -34,7 +34,9 @@ from backend import character_data  # noqa: E402
 def main() -> int:
     target = character_data.cache_path()
     if not character_data.cache_is_stale(target):
-        # Already fetched recently. Say nothing: a normal launch should be quiet.
+        # Already fetched recently, so there is nothing to download and a normal
+        # launch should be quiet. The in-memory index is warmed by the app itself at
+        # startup, so this process has nothing left to do.
         return 0
 
     print("Downloading the Anima character catalogue (about 9 MB, once only)...")

@@ -21,7 +21,8 @@
 ### Fixed
 
 - **Stale interface after an update.** After upgrading, a hard refresh was needed before new features appeared. Assets are now served with revalidation and the interface reloads itself once when it detects it is older than the backend.
-- **Character data is downloaded, not bundled.** The AnimaDex catalogue is fetched automatically on the first launch and cached locally, rather than shipping a sample of it inside the package. Deleting the cached file makes the next launch fetch it again.
+- **Character data is downloaded, not bundled.** The AnimaDex catalogue is fetched automatically on the first launch and cached locally, rather than shipping a sample of it inside the package. Deleting the cached file makes the next launch fetch it again. The searchable index is also built at startup on a background thread, so the first search is instant instead of stalling on it.
+- **Character search is quick.** Search keys are computed once when the index is built rather than on every query, which took the AnimaDex catalogue from ~213 ms per keystroke to ~29 ms. Lookups also resolve punctuation-insensitively in constant time, so a name like `artoria pendragon fate` still finds `artoria_pendragon_(fate)` immediately.
 - **Character and series highlighting could bleed.** A series name that is also a character name (such as `vocaloid`) kept the character region open, colouring the next unrelated tag.
 - **Character instructions leaked to other targets.** The Anima character directive was being added to video and audio requests, which have no such tag position.
 - Single Reference labels now follow the current order of ready media, so deleting or reordering updates the labels and the matching tags in the Brief, prompt and Refine text. Tags that no longer resolve become `<Missing Picture 1>` and are rejected before Generate or Refine.

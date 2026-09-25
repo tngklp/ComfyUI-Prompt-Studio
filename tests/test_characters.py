@@ -147,6 +147,47 @@ class CharacterLookupTests(unittest.TestCase):
         results = self.index.search("hakurei")
         self.assertEqual([entry.character for entry in results][:2], ["hakurei_reimu", "hakurei_miko"])
 
+    def test_search_orders_by_training_count_descending(self):
+        # The dataset's Count column is the sort key: a user searching a name wants the
+        # character they have actually seen, not the most literal match.
+        results = self.index.search("touhou")
+        counts = [entry.count for entry in results]
+        self.assertEqual(counts, sorted(counts, reverse=True), [entry.character for entry in results])
+
+    def test_a_more_popular_word_match_beats_a_less_popular_prefix_match(self):
+        # This is the case that motivated count-first ordering. Ranking by match
+        # quality put a name *prefix* above a *tail* match regardless of popularity, so
+        # a 619-use character outranked a 78,109-use one.
+        csv = (
+            "character,copyright,trigger,core_tags,count,url\n"
+            "reimu_endou,nijisanji,\"reimu endou, nijisanji\",,619,\n"
+            "hakurei_reimu,touhou,\"hakurei reimu, touhou\",,78109,\n"
+        )
+        index = characters.CharacterIndex(characters.parse_csv(csv))
+        self.assertEqual(
+            [entry.character for entry in index.search("reimu")],
+            ["hakurei_reimu", "reimu_endou"],
+        )
+
+    def test_match_quality_still_breaks_a_count_tie(self):
+        # Count is primary, but two characters with the same count must still order by
+        # how well they match, and then by name, so the result is deterministic.
+        csv = (
+            "character,copyright,trigger,core_tags,count,url\n"
+            "reimu_zeta,touhou,\"reimu zeta, touhou\",,500,\n"
+            "reimu_alpha,touhou,\"reimu alpha, touhou\",,500,\n"
+            "reimu_exact,touhou,\"reimu exact, touhou\",,500,\n"
+        )
+        index = characters.CharacterIndex(characters.parse_csv(csv))
+        names = [entry.character for entry in index.search("reimu exact")]
+        # The exact match wins the tie despite the alphabetically earlier sibling.
+        self.assertEqual(names[0], "reimu_exact")
+
+    def test_search_ranking_is_stable_across_calls(self):
+        first = [entry.character for entry in self.index.search("touhou")]
+        second = [entry.character for entry in self.index.search("touhou")]
+        self.assertEqual(first, second)
+
     def test_search_finds_a_character_by_series(self):
         results = self.index.search("vocaloid")
         self.assertIn("hatsune_miku", [entry.character for entry in results])

@@ -124,10 +124,16 @@ class CharacterIndexError(ValueError):
 class CharacterIndex:
     """Searchable set of character references.
 
-    Lookup is a normalized-name map plus a substring scan. That is deliberate rather
-    than a full-text index: the curated set is small, a linear scan over a few
-    thousand short strings is imperceptible, and it keeps the module dependency-free
-    so it loads the same inside ComfyUI and in the standalone host.
+    Lookup is a normalized-name map plus a scan over precomputed keys. That is
+    deliberate rather than a full-text index: it keeps the module dependency-free so
+    it loads the same inside ComfyUI and in the standalone host, and with the keys
+    precomputed a search over the full 36k-character catalogue is fast enough to run
+    on every keystroke.
+
+    **The normalised keys are computed once, at construction.** Normalising inside the
+    search loop cost ~92 ms per query across the full catalogue - paid again on every
+    keystroke - because `normalize_name` does NFKD decomposition and a regex per call.
+    Precomputing moves that cost to the one-time index build instead.
     """
 
     def __init__(self, entries: Iterable[CharacterRef], *, source: str = "builtin") -> None:
@@ -135,12 +141,50 @@ class CharacterIndex:
         self._entries: list[CharacterRef] = list(entries)
         self._by_name: dict[str, CharacterRef] = {}
         self._by_character: dict[str, CharacterRef] = {}
+        # Search keys, parallel to _entries: (normalised name, normalised series,
+        # normalised core tags). Built once so a search only does substring tests.
+        # `core_tags` is empty for a cache built from the AnimaDex export - the
+        # builder drops it to keep the file at 4 MB instead of 20 - so the tuple is
+        # usually empty and that match tier simply never fires.
+        self._search_keys: list[tuple[str, str, tuple[str, ...]]] = []
+        # Buckets for the single-trailing-word lookup, so "miku" does not scan 36k
+        # names on every resolve either.
+        self._by_tail: dict[str, list[CharacterRef]] = {}
+        # Punctuation-insensitive lookup, so "artoria pendragon fate" finds
+        # `artoria_pendragon_(fate)` without stripping punctuation off all 73k keys on
+        # every call. Maps the collapsed form to every entry that collapses to it.
+        self._by_collapsed: dict[str, list[CharacterRef]] = {}
         for entry in self._entries:
             self._by_character.setdefault(entry.character, entry)
-            self._by_name.setdefault(normalize_name(entry.character), entry)
+            name_key = normalize_name(entry.character)
+            self._by_name.setdefault(name_key, entry)
             # The full trigger is also a key, so pasting "<character>, <series>"
             # resolves as readily as typing just the character.
-            self._by_name.setdefault(normalize_name(entry.trigger), entry)
+            trigger_key = normalize_name(entry.trigger)
+            self._by_name.setdefault(trigger_key, entry)
+            self._search_keys.append((
+                name_key,
+                normalize_name(entry.copyright),
+                tuple(normalize_name(tag) for tag in entry.core_tags),
+            ))
+            for candidate in (name_key, trigger_key):
+                collapsed = re.sub(r"[^a-z0-9]+", "", candidate)
+                if collapsed:
+                    bucket = self._by_collapsed.setdefault(collapsed, [])
+                    if entry not in bucket:
+                        bucket.append(entry)
+            # `name_key` is already whitespace-collapsed by normalize_name, so the
+            # tail is just the text after the last space.
+            tail = name_key.rsplit(" ", 1)[-1]
+            self._by_tail.setdefault(tail, []).append(entry)
+        # Names with a space cannot be reached by the tail bucket, and a single-word
+        # name is its own tail, so only multi-word names need the word index.
+        self._by_word: dict[str, list[CharacterRef]] = {}
+        for key, entry in self._by_name.items():
+            if " " not in key:
+                continue
+            for word in set(key.split(" ")):
+                self._by_word.setdefault(word, []).append(entry)
 
     def __len__(self) -> int:
         return len(self._entries)
@@ -175,65 +219,81 @@ class CharacterIndex:
 
         collapsed = re.sub(r"[^a-z0-9]+", "", key)
         if collapsed:
-            punctuation_matches = [
-                entry
-                for candidate_key, entry in self._by_name.items()
-                if re.sub(r"[^a-z0-9]+", "", candidate_key) == collapsed
-            ]
+            punctuation_matches = self._by_collapsed.get(collapsed, ())
             if len({entry.character for entry in punctuation_matches}) == 1:
                 return punctuation_matches[0]
 
         # A single trailing word ("miku" -> "hatsune miku", "reimu" -> "hakurei reimu").
+        # The bucket is prebuilt, so this is a dict hit rather than a scan of 36k names.
         if " " not in key:
             tail_matches = {
-                entry.character: entry
-                for candidate_key, entry in self._by_name.items()
-                if candidate_key.split(" ")[-1] == key
+                entry.character: entry for entry in self._by_tail.get(key, ())
             }
             if len(tail_matches) == 1:
                 return next(iter(tail_matches.values()))
 
         # A whole word anywhere in the name, still only when it is unambiguous.
-        word_matches: dict[str, CharacterRef] = {}
+        # The word bucket is prebuilt and keyed by whole word, so a search term that
+        # is a complete word is a dict hit. A partial word still needs the scan, which
+        # is why the bucket is consulted first rather than replacing the scan.
+        word_matches: dict[str, CharacterRef] = {
+            entry.character: entry for entry in self._by_word.get(key, ())
+        }
+        if len(word_matches) == 1:
+            return next(iter(word_matches.values()))
+        if word_matches:
+            # Several characters share the word, so it is ambiguous either way; the
+            # scan below cannot make it unique.
+            return None
+        word_pattern = re.compile(rf"\b{re.escape(key)}\b")
         for candidate_key, entry in self._by_name.items():
-            if re.search(rf"\b{re.escape(key)}\b", candidate_key):
+            if word_pattern.search(candidate_key):
                 word_matches.setdefault(entry.character, entry)
         if len(word_matches) == 1:
             return next(iter(word_matches.values()))
         return None
 
     def search(self, query: str, limit: int = 24) -> list[CharacterRef]:
-        """Rank characters matching a free-text query.
+        """Rank characters matching a free-text query, most-used first.
 
-        Ranking puts an exact name match first, then a name prefix, then a word
-        boundary inside the name, then series, then the general tags. Within a tier
-        the popularity count breaks ties, so the most-used character wins.
+        The result is ordered by the dataset's popularity count, which is what a user
+        searching "reimu" means: they want the character they have actually seen, not
+        whichever name happens to match the query most literally. Ranking by match
+        quality instead put ``reimu_endou`` (619 uses) above ``hakurei_reimu``
+        (78,109 uses), purely because the former starts with the query.
+
+        Match quality is still computed, but only as a tie-breaker for characters with
+        the same count, and the name breaks what remains so the order is stable.
+
+        Every key is precomputed, so this is a scan of substring tests and no
+        normalisation happens per call.
         """
         key = normalize_name(query)
         if not key:
             return []
-        tiered: list[tuple[int, int, CharacterRef]] = []
-        for entry in self._entries:
-            name = normalize_name(entry.character)
-            series = normalize_name(entry.copyright)
+        tiered: list[tuple[int, int, str, CharacterRef]] = []
+        # A compiled pattern is measurably faster than re.search with an escaped
+        # string rebuilt on every iteration across 36k rows.
+        word_pattern = re.compile(rf"\b{re.escape(key)}")
+        for entry, (name, series, tags) in zip(self._entries, self._search_keys):
             rank: int | None = None
             if name == key:
                 rank = 0
             elif name.startswith(key):
                 rank = 1
-            elif re.search(rf"\b{re.escape(key)}", name):
+            elif word_pattern.search(name):
                 rank = 2
             elif series.startswith(key):
                 rank = 3
             elif key in series:
                 rank = 4
-            elif any(key in normalize_name(tag) for tag in entry.core_tags):
+            elif any(key in tag for tag in tags):
                 rank = 5
             if rank is None:
                 continue
-            tiered.append((rank, -entry.count, entry))
-        tiered.sort(key=lambda item: (item[0], item[1], item[2].character))
-        return [entry for _, _, entry in tiered[:limit]]
+            tiered.append((-entry.count, rank, entry.character, entry))
+        tiered.sort(key=lambda item: (item[0], item[1], item[2]))
+        return [entry for _, _, _, entry in tiered[:limit]]
 
     def resolve_many(self, names: Iterable[str]) -> tuple[list[CharacterRef], list[str]]:
         """Resolve names, returning ``(found, unknown)``.

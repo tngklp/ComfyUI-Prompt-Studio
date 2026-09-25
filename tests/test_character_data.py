@@ -302,22 +302,71 @@ class StartupFetchTests(unittest.TestCase):
                 self.assertFalse(character_data.ensure_dataset(path=path))
 
     def test_the_background_fetch_starts_only_once(self):
-        # Both the extension import and the standalone startup hook call this, and a
-        # duplicate call must not start a second 9 MB download.
+        # Both the extension entry point and the standalone startup hook call this, and
+        # a duplicate call must not start a second 9 MB download.
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "cache.json"
-            with mock.patch.object(character_data, "ensure_dataset") as fetch:
+            with mock.patch.object(character_data, "ensure_dataset") as fetch, \
+                    mock.patch.object(character_data, "warm_index") as warm:
                 first = character_data.start_background_fetch(path=path)
                 second = character_data.start_background_fetch(path=path)
             self.assertIsNotNone(first)
             self.assertIsNone(second)
             character_data.wait_for_background_fetch(timeout=5)
+            self.assertEqual(fetch.call_count + warm.call_count, 2)
 
-    def test_the_background_fetch_is_skipped_when_the_cache_is_usable(self):
+    def test_a_current_cache_skips_the_download_but_still_warms(self):
+        # `ensure_dataset` returns immediately when the cache is fresh. The thread must
+        # still run so the ~1.6 s index build happens at startup rather than on the
+        # user's first keystroke, which is the whole point of warming.
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "cache.json"
             path.write_text("{}", encoding="utf-8")
-            self.assertIsNone(character_data.start_background_fetch(path=path))
+            with mock.patch.object(character_data, "refresh_cache") as refresh:
+                thread = character_data.start_background_fetch(path=path)
+                self.assertIsNotNone(thread, "the warm-up thread must still start")
+                character_data.wait_for_background_fetch(timeout=10)
+            refresh.assert_not_called()
+
+    def test_warming_builds_the_index_ahead_of_the_first_search(self):
+        # After warming, the first search must not pay the build cost.
+        character_data.warm_index()
+        self.assertGreater(len(characters.index()), 0)
+        # The memo means a second call is free rather than a rebuild.
+        self.assertIs(characters.index(), characters.index())
+
+    def test_both_hosts_warm_the_index_at_startup(self):
+        # The build costs ~0.9 s for the full catalogue. If a host stops calling this
+        # at startup, that cost silently moves onto the user's first keystroke.
+        root = Path(__file__).resolve().parents[1]
+        extension = (root / "__init__.py").read_text(encoding="utf-8")
+        self.assertIn("character_data.start_background_fetch()", extension)
+
+        standalone = (root / "standalone" / "prompt_studio" / "app.py").read_text(encoding="utf-8")
+        self.assertIn("character_data.start_background_fetch", standalone)
+        self.assertIn("app.on_startup.append", standalone)
+
+    def test_the_warm_thread_never_blocks_its_caller(self):
+        # It runs on a thread precisely so a slow or unreachable mirror cannot delay
+        # startup; this pins the fact that the call returns promptly.
+        import threading as threading_module
+        import time
+
+        character_data.reset_startup_state()
+        with mock.patch.object(character_data, "ensure_dataset"), \
+                mock.patch.object(character_data, "warm_index"):
+            started = time.perf_counter()
+            thread = character_data.start_background_fetch()
+            elapsed = (time.perf_counter() - started) * 1000
+        self.assertIsInstance(thread, threading_module.Thread)
+        self.assertLess(elapsed, 200, "start_background_fetch must not block on the work")
+        character_data.wait_for_background_fetch(timeout=10)
+
+    def test_a_broken_dataset_does_not_break_startup(self):
+        # A background thread must never surface a traceback, even if the index cannot
+        # be built; the studio runs without characters.
+        with mock.patch.object(characters, "index", side_effect=RuntimeError("boom")):
+            character_data.warm_index()
 
 
 class StatusReportingTests(unittest.TestCase):

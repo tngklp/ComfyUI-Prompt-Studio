@@ -267,6 +267,125 @@ test("the picker sits after the mode options in the image panel", () => {
   assert.ok(options < characters, "characters must come after the mode options");
 });
 
+test("the picker shows how many characters are searchable", () => {
+  // A one-line hint beside the label, not a status panel: it answers "is the dataset
+  // here?" without reintroducing the state reporting that was deliberately removed.
+  assert.match(pickerSource, /data-character-count/);
+  assert.match(pickerSource, /function renderCount\(status\)/);
+  assert.match(pickerSource, /countLabel\.textContent = count > 0 \? `\$\{count\.toLocaleString\(\)\} available` : ""/);
+  // An empty index must hide the hint rather than advertise "0 available".
+  assert.match(pickerSource, /countLabel\.hidden = count <= 0/);
+});
+
+test("the count is read once at startup and never blocks rendering", () => {
+  // `search("")` returns no results but does carry the status, so no second endpoint
+  // is needed. It must not be awaited: the studio has to render immediately.
+  assert.match(pickerSource, /async function loadCount\(\)/);
+  assert.match(pickerSource, /const payload = await search\(""\)/);
+  assert.match(pickerSource, /renderCount\(payload\?\.status\)/);
+  // A failed count must stay silent - it is a nicety, not a feature.
+  assert.match(pickerSource, /catch \{\s*renderCount\(null\);\s*\}/);
+  assert.match(mainSource, /void studio\.characterPicker\.loadCount\(\)/);
+});
+
+test("the count hint is styled as a quiet label suffix", () => {
+  const hint = charactersCss.match(/\.ps-characters > span small \{([^}]*)\}/)?.[1] || "";
+  assert.match(hint, /color: var\(--ps-muted\)/);
+  assert.match(hint, /font-size: var\(--ps-font-caption\)/);
+  // It sits inside the label, which is uppercase; the hint must opt back out.
+  assert.match(hint, /text-transform: none/);
+  const label = charactersCss.match(/\.ps-characters > span \{([^}]*)\}/)?.[1] || "";
+  assert.match(label, /align-items: baseline/, "the hint must sit on the label's baseline");
+});
+
+test("a result row shows the name, its series and the exact trigger", () => {
+  // The row reads as one character: name over series in the copy column, with the
+  // trigger - the exact string that will reach the prompt - shown verbatim alongside.
+  const copy = charactersCss.match(/\.ps-character-result-copy \{([^}]*)\}/)?.[1] || "";
+  assert.match(copy, /flex-direction: column/, "name and series must stack");
+  const trigger = charactersCss.match(/\.ps-character-result code \{([^}]*)\}/)?.[1] || "";
+  assert.match(trigger, /text-overflow: ellipsis/);
+  assert.match(trigger, /background: var\(--ps-accent-soft\)/);
+});
+
+test("the series resets the margin that workbench.css applies to field ems", () => {
+  // The real bug behind "the series is on the right side": workbench.css has
+  // `.ps-field button em { margin-left: auto }` for the aspect-ratio and mode-option
+  // buttons. The picker is now a `.ps-field` whose rows are buttons, so that rule
+  // reached these `em`s and pushed the series to the far edge.
+  //
+  // Source order alone does not fix it - the workbench selector scores (0,1,3) against
+  // (0,1,2) - so the reset must name a `button` to tie on specificity. This asserts
+  // the selector shape, because reverting it to a plain class selector silently
+  // reintroduces the bug.
+  assert.match(workbenchCss, /\.ps-field button em \{[^}]*margin-left: auto/);
+  assert.match(
+    charactersCss,
+    /button\.ps-character-result em \{/,
+    "the reset must out-specify .ps-field button em by naming a button",
+  );
+  const reset = charactersCss.match(/button\.ps-character-result em \{([^}]*)\}/)?.[1] || "";
+  assert.match(reset, /margin-left: 0/);
+});
+
+test("a freshly picked character is labelled immediately, not only after a reload", async () => {
+  // The bug: a click rebuilt the entry from the button's data attributes, which carry
+  // only the slug and trigger. The bubble then had no display_name and rendered
+  // blank, and only looked right after a refresh re-hydrated it from storage.
+  const nodes = new Map();
+  const makeElement = (html) => ({
+    innerHTML: html || "", hidden: false, textContent: "", dataset: {}, value: "",
+    classList: { toggle() {}, add() {}, remove() {} },
+    addEventListener() {}, querySelector: () => null, querySelectorAll: () => [],
+    setAttribute() {}, getAttribute: () => null, remove() {},
+  });
+  const root = {
+    querySelector: (selector) => {
+      if (!nodes.has(selector)) nodes.set(selector, makeElement(""));
+      return nodes.get(selector);
+    },
+  };
+  const picker = createCharacterPicker({
+    root,
+    search: async () => ({ status: { count: 2 }, results: [] }),
+    resolve: async () => ({ characters: [], unknown: [] }),
+  });
+
+  // A hand-made entry with no display_name, exactly as the dataset-attribute path built.
+  picker.toggle({ character: "hatsune_miku", trigger: "hatsune miku, vocaloid" });
+  const chip = picker.selection[0];
+  assert.equal(chip.display_name, "hatsune miku", "the bubble must have a label at once");
+  // The label must reach the DOM, not just the in-memory entry.
+  const pickedHtml = root.querySelector("[data-character-picked]").innerHTML;
+  assert.match(pickedHtml, /<strong>hatsune miku<\/strong>/);
+
+  // Restoring must apply the same normalisation, so a stale stored entry cannot
+  // produce a blank bubble either.
+  picker.restore([{ character: "yuki_miku", trigger: "yuki miku, vocaloid" }]);
+  assert.equal(picker.selection[0].display_name, "yuki miku");
+});
+
+test("a stored entry keeps its own display name when it has one", () => {
+  // The fallback must not overwrite a better name. The catalogue's display_name is
+  // title-cased ("Hatsune Miku"), which the trigger-derived fallback cannot match.
+  const nodes = new Map();
+  const root = {
+    querySelector: (selector) => {
+      if (!nodes.has(selector)) {
+        nodes.set(selector, {
+          innerHTML: "", hidden: false, dataset: {}, value: "",
+          classList: { toggle() {} }, addEventListener() {}, querySelector: () => null,
+          querySelectorAll: () => [],
+        });
+      }
+      return nodes.get(selector);
+    },
+  };
+  const picker = createCharacterPicker({ root, search: async () => ({ results: [] }), resolve: async () => ({}) });
+  picker.restore([{ character: "hatsune_miku", trigger: "hatsune miku, vocaloid", display_name: "Hatsune Miku" }]);
+  assert.equal(picker.selection[0].display_name, "Hatsune Miku");
+});
+
 test("the picker is spaced away from the mode options above it", () => {
   // Both are grid items in the image panel, so without an explicit margin the
   // characters label sits flush against the content-rating row.
@@ -344,4 +463,66 @@ test("the picker renders typed results and selections end to end", async () => {
   assert.deepEqual(picker.selection.map((entry) => entry.character), ["hakurei_reimu"]);
   const validated = await picker.validate();
   assert.deepEqual(validated.dropped, []);
+});
+
+test("the count hint renders the dataset size and hides when empty", async () => {
+  const nodes = new Map();
+  const makeElement = () => ({
+    innerHTML: "", hidden: false, textContent: "", dataset: {}, value: "",
+    classList: { toggle() {}, add() {}, remove() {} },
+    addEventListener() {}, querySelector: () => null, querySelectorAll: () => [],
+    setAttribute() {}, getAttribute: () => null, remove() {},
+  });
+  const root = {
+    querySelector: (selector) => {
+      if (!nodes.has(selector)) nodes.set(selector, makeElement());
+      return nodes.get(selector);
+    },
+  };
+  const label = () => root.querySelector("[data-character-count]");
+
+  let status = { count: 36479, source: "AnimaDex export" };
+  const picker = createCharacterPicker({
+    root,
+    search: async () => ({ status, results: [] }),
+    resolve: async () => ({ characters: [], unknown: [] }),
+  });
+  await picker.loadCount();
+  assert.equal(label().textContent, "36,479 available");
+  assert.equal(label().hidden, false);
+
+  // An offline first launch has no catalogue; stating "0 available" would be noise.
+  status = { count: 0 };
+  await picker.loadCount();
+  assert.equal(label().textContent, "");
+  assert.equal(label().hidden, true);
+
+  // A missing status must not throw or leave a stale number behind.
+  status = null;
+  await picker.loadCount();
+  assert.equal(label().hidden, true);
+});
+
+test("a failing count lookup stays silent", async () => {
+  // The hint is a nicety. A backend error must not surface as a failure anywhere.
+  const nodes = new Map();
+  const makeElement = () => ({
+    innerHTML: "", hidden: false, textContent: "", dataset: {}, value: "",
+    classList: { toggle() {}, add() {}, remove() {} },
+    addEventListener() {}, querySelector: () => null, querySelectorAll: () => [],
+    setAttribute() {}, getAttribute: () => null, remove() {},
+  });
+  const root = {
+    querySelector: (selector) => {
+      if (!nodes.has(selector)) nodes.set(selector, makeElement());
+      return nodes.get(selector);
+    },
+  };
+  const picker = createCharacterPicker({
+    root,
+    search: async () => { throw new Error("backend unavailable"); },
+    resolve: async () => ({ characters: [], unknown: [] }),
+  });
+  await picker.loadCount();
+  assert.equal(root.querySelector("[data-character-count]").hidden, true);
 });

@@ -27,7 +27,7 @@ const SEARCH_DEBOUNCE_MS = 180;
 export function characterPickerMarkup() {
   return `
     <div class="ps-characters ps-field" data-characters hidden aria-label="Characters">
-      <span>Characters</span>
+      <span>Characters<small data-character-count hidden></small></span>
       <div class="ps-character-search">
         <input type="search" data-character-search autocomplete="off" spellcheck="false"
                placeholder="Search a character, e.g. miku" aria-label="Search characters">
@@ -80,11 +80,28 @@ export function createCharacterPicker({
   const input = root?.querySelector("[data-character-search]");
   const results = root?.querySelector("[data-character-results]");
   const picked = root?.querySelector("[data-character-picked]");
+  const countLabel = root?.querySelector("[data-character-count]");
 
   /** Selected characters, keyed by slug so order is stable and duplicates impossible. */
   const selected = new Map();
+  /** The current result list, kept so a toggle can re-render the ticks in place. */
+  let lastResults = [];
   let searchTimer = null;
   let searchToken = 0;
+
+  /**
+   * Show how many characters are searchable.
+   *
+   * A hint only, so it is terse and stays out of the way: it answers "is the dataset
+   * actually here?" without becoming the status panel this picker deliberately does
+   * not have. A count of zero stays hidden rather than advertising an empty index.
+   */
+  function renderCount(status) {
+    if (!countLabel) return;
+    const count = Number(status?.count || 0);
+    countLabel.hidden = count <= 0;
+    countLabel.textContent = count > 0 ? `${count.toLocaleString()} available` : "";
+  }
 
   function renderPicked() {
     if (!picked) return;
@@ -111,20 +128,41 @@ export function createCharacterPicker({
     results.hidden = false;
     results.innerHTML = entries.map((entry) => resultMarkup(entry, selected.has(entry.character))).join("");
     results.querySelectorAll("[data-character-pick]").forEach((button) => {
-      button.addEventListener("click", () => toggle({
-        character: button.dataset.characterPick,
-        trigger: button.dataset.characterTrigger,
-      }));
+      // Toggle with the full result entry, not the data attributes. The attributes
+      // carry only the slug and trigger, so a bubble built from them had no
+      // display_name and rendered blank until a refresh re-hydrated it from storage.
+      button.addEventListener("click", () => {
+        const entry = lastResults.find((item) => item.character === button.dataset.characterPick);
+        toggle(entry || {
+          character: button.dataset.characterPick,
+          trigger: button.dataset.characterTrigger,
+        });
+      });
     });
   }
 
-  let lastResults = [];
+  /**
+   * Normalise an entry into one a bubble can render.
+   *
+   * A bubble always needs a label, and entries arrive from three places with
+   * different fields: a search result (full), a restored stored selection (full), and
+   * a bare slug/trigger pair. Filling the gap here means none of those can produce a
+   * blank bubble, which is what happened when a click rebuilt the entry from the
+   * button's data attributes and lost `display_name`.
+   */
+  function bubbleEntry(entry) {
+    const trigger = entry.trigger || "";
+    return {
+      ...entry,
+      display_name: entry.display_name || trigger.split(",")[0].trim() || entry.character,
+    };
+  }
 
   function toggle(entry) {
     if (selected.has(entry.character)) {
       selected.delete(entry.character);
     } else {
-      selected.set(entry.character, entry);
+      selected.set(entry.character, bubbleEntry(entry));
     }
     renderPicked();
     renderResults(lastResults);
@@ -152,6 +190,23 @@ export function createCharacterPicker({
     } catch {
       if (token !== searchToken) return;
       renderResults([]);
+    }
+  }
+
+  /**
+   * Read the dataset size once.
+   *
+   * An empty query returns no results but does return the status, so this is the
+   * cheapest way to ask "how big is the catalogue?" without inventing a second
+   * endpoint. It is deliberately silent on failure: the count is a nicety and must
+   * never surface an error or block the picker.
+   */
+  async function loadCount() {
+    try {
+      const payload = await search("");
+      renderCount(payload?.status);
+    } catch {
+      renderCount(null);
     }
   }
 
@@ -201,13 +256,14 @@ export function createCharacterPicker({
   return {
     attach,
     syncVisibility,
+    loadCount,
     validate,
     toggle,
     /** Restore a persisted selection, in the stored order. */
     restore(entries) {
       selected.clear();
       for (const entry of entries || []) {
-        if (entry?.character) selected.set(entry.character, entry);
+        if (entry?.character) selected.set(entry.character, bubbleEntry(entry));
       }
       renderPicked();
     },

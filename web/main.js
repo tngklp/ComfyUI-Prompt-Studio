@@ -3738,6 +3738,10 @@ function createStudio() {
     },
   });
   studio.characterPicker.attach();
+  // Read the catalogue size once so the picker can show how many characters are
+  // searchable. Deliberately not awaited: the count is a hint, and the studio must
+  // not wait on a request to render.
+  void studio.characterPicker.loadCount();
   root.querySelector("[data-comfy-memory-action]").hidden = !HOST_CAPABILITIES.comfyMemory;
   if (!HOST_CAPABILITIES.windowed) {
     studio.fullscreen = true;

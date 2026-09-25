@@ -302,24 +302,54 @@ def ensure_dataset(*, url: str = DATASET_URL, path: Path | None = None) -> bool:
     return True
 
 
+def warm_index() -> None:
+    """Build the in-memory index ahead of the first search.
+
+    Parsing the 4 MB cache and building the lookup buckets takes ~1.6 s for the full
+    catalogue. That is a one-time cost, but paying it inside the first search request
+    would stall exactly the interaction the user is waiting on, so it is moved to a
+    background thread at startup instead. A failure is logged and ignored: the index
+    builds lazily on demand if this does not run.
+
+    Imported lazily because `backend.characters` imports this module for the shared
+    CSV rules, so a module-level import would be circular.
+    """
+    from . import characters
+
+    try:
+        index = characters.index()
+    except Exception:  # pragma: no cover - defensive: a background task must not escape
+        LOGGER.exception("Could not pre-build the character index")
+        return
+    LOGGER.info("Character index ready: %d characters", len(index))
+
+
 _STARTUP_LOCK = threading.Lock()
 _STARTUP_STATE: dict[str, Any] = {"started": False, "thread": None}
 
 
 def start_background_fetch(*, url: str = DATASET_URL, path: Path | None = None) -> threading.Thread | None:
-    """Kick off a one-shot background download if the cache needs one.
+    """Prepare the character data in the background: fetch if needed, then warm.
 
-    Idempotent per process: calling it from both the route layer and a startup hook
-    must not start two 9 MB downloads.
+    Idempotent per process, so calling it from both the extension entry point and the
+    standalone startup hook starts one thread, not two.
+
+    The thread always runs, even when the cache is current, because warming the index
+    is worth doing on every launch: the cache is only *checked* on the fast path, and
+    the ~1.6 s build would otherwise land on the user's first keystroke.
     """
     with _STARTUP_LOCK:
-        if _STARTUP_STATE["started"] or not cache_is_stale(path):
+        if _STARTUP_STATE["started"]:
             return None
         _STARTUP_STATE["started"] = True
 
+    def prepare() -> None:
+        # A stale or absent cache is fetched first; a current one is skipped.
+        ensure_dataset(url=url, path=path)
+        warm_index()
+
     thread = threading.Thread(
-        target=ensure_dataset,
-        kwargs={"url": url, "path": path},
+        target=prepare,
         name="ps-character-dataset",
         daemon=True,
     )
