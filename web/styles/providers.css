@@ -346,6 +346,13 @@
   background: var(--ps-control);
 }
 .ps-api-custom-options > label:first-child > span { margin: 0; color: var(--ps-muted); font-size: var(--ps-font-label); letter-spacing: 0; text-transform: none; }
+/* The connected-state vision toggle has only one control, so its note must span
+   both grid columns instead of leaving column 2 empty. */
+.ps-api-custom-options > [data-api-capability-note] {
+  grid-column: 1 / -1;
+  color: var(--ps-muted);
+  font-size: var(--ps-font-label);
+}
 .ps-api-connected {
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr) auto;

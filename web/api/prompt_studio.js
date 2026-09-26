@@ -28,6 +28,7 @@ export const getOllamaStatus = (host = null) => request(`/ollama/status${ollamaQ
 export const getApiProviderPresets = () => request("/api-provider/presets");
 export const probeApiProvider = (payload) => post("/api-provider/probe", payload);
 export const getApiProviderModels = (connectionId) => post("/api-provider/models", { connection_id: connectionId });
+export const setApiProviderCapability = (connectionId, modelId, images) => post("/api-provider/capability", { connection_id: connectionId, model_id: modelId, images });
 export const disconnectApiProvider = (connectionId) => post("/api-provider/disconnect", { connection_id: connectionId });
 export const getGuides = () => request("/guides");
 export const searchCharacters = (query, limit = 24) => request(

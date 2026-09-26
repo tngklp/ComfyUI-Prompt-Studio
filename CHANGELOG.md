@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.2 - 2026-09-26
+
+### Fixed
+
+- **"Unsupported Media" with a local vision server.** A llama.cpp or KoboldCpp endpoint with a multimodal projector loaded was still treated as text-only, so attached images were rejected with `UNSUPPORTED_MEDIA`. These servers do not describe image support in their OpenAI-compatible model list; the projector is only reported on their `/props` endpoint, which Prompt Studio now reads before deciding. Qwen3.8-27B with an `mmproj` file, LM Studio, and bare `llama-server` are detected automatically.
+
+### Features
+
+- **Manual image support for a Custom endpoint.** A switch on the connected API panel (**Endpoint accepts image_url inputs**) enables vision when a server hides its projector or sits behind a proxy, without disconnecting and reconnecting. The declaration is kept for the session and survives a model refresh.
+- The connected API panel now distinguishes image support **detected from the server** from support **declared by you**.
+
 ## 1.1.1 - 2026-09-25
 
 ### Fixed

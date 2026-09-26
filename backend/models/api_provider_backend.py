@@ -7,7 +7,7 @@ import re
 import threading
 from dataclasses import dataclass, field
 from typing import Any, Callable
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 from uuid import uuid4
 
 from ..context import (
@@ -437,7 +437,13 @@ class ApiProviderBackend:
             return {str(item).lower() for item in value}
         return None
 
-    def _model_info(self, connection: ApiConnection, entry: dict[str, Any] | str) -> dict[str, Any]:
+    def _model_info(
+        self,
+        connection: ApiConnection,
+        entry: dict[str, Any] | str,
+        *,
+        probed_images: bool | None = None,
+    ) -> dict[str, Any]:
         if isinstance(entry, str):
             item: dict[str, Any] = {"id": entry}
         else:
@@ -449,6 +455,12 @@ class ApiProviderBackend:
         if modalities is not None:
             images = "image" in modalities
             capability_source = "official_metadata"
+        elif connection.preset == "custom" and probed_images is not None:
+            # A local llama.cpp server answered /props: trust the runtime over the
+            # modality-blind /v1/models list, but let an explicit operator opt-in
+            # still win so a server that hides the projector is not blocked.
+            images = probed_images or connection.custom_images
+            capability_source = "runtime_probe" if probed_images else "user_declared"
         elif connection.preset == "custom":
             images = connection.custom_images
             capability_source = "user_declared"
@@ -513,6 +525,46 @@ class ApiProviderBackend:
             if isinstance(entry, dict) and (entry.get("key") or entry.get("id"))
         }
 
+    def _local_custom_vision(self, connection: ApiConnection, model_id: str) -> bool | None:
+        """Ask a local llama.cpp-style server whether the loaded model accepts images.
+
+        The OpenAI-compatible ``/v1/models`` list is modality-blind on llama.cpp
+        (it returns only ``id``/``object``/``created``/``owned_by``/``meta``), so a
+        Custom connection to a llama.cpp server with ``-mm`` looks text-only. The
+        non-OpenAI ``/props`` endpoint is authoritative: it reports
+        ``{"modalities": {"vision": true}}`` when a projector is loaded.
+
+        Returns ``True``/``False`` when the server answers, or ``None`` when the
+        endpoint is absent or unreadable (LM Studio, Generic OpenAI shims, ...).
+        """
+        hostname = urlsplit(connection.base_url).hostname or ""
+        if connection.preset != "custom" or not (_is_loopback(hostname) or _is_private_lan(hostname)):
+            return None
+        # llama.cpp and KoboldCpp serve /props at the server root, beside the /v1
+        # OpenAI prefix, so a base URL of http://host:8080/v1 must still ask
+        # http://host:8080/props. KoboldCpp's own UI reads modalities the same way.
+        base_path = urlsplit(connection.base_url).path.rstrip("/")
+        if base_path.endswith("/v1"):
+            base_path = base_path[: -len("/v1")]
+        path = f"{base_path}/props"
+        # Router mode (several models behind one endpoint) needs the model it routes
+        # to. autoload=false keeps the probe from triggering a model load.
+        if model_id:
+            path = f"{path}?{urlencode({'model': model_id, 'autoload': 'false'})}"
+        try:
+            data, _headers = self._request_json(connection, "GET", path, timeout=5)
+        except ModelError:
+            return None
+        modalities = data.get("modalities")
+        if isinstance(modalities, dict) and "vision" in modalities:
+            return bool(modalities.get("vision"))
+        # Some forks report the legacy top-level flag instead of the mapping.
+        for key in ("vision", "multimodal", "supports_vision"):
+            value = data.get(key)
+            if isinstance(value, bool):
+                return value
+        return None
+
     @staticmethod
     def _enrich_local_custom_model(entry: dict[str, Any], metadata: dict[str, Any] | None) -> dict[str, Any] | None:
         if not metadata:
@@ -537,7 +589,13 @@ class ApiProviderBackend:
                 enriched["context_length"] = maximum
         return enriched
 
-    def _fetch_models(self, connection: ApiConnection, *, allow_missing: bool = False) -> list[dict[str, Any]]:
+    def _fetch_models(
+        self,
+        connection: ApiConnection,
+        *,
+        allow_missing: bool = False,
+        probed_images: bool | None = None,
+    ) -> list[dict[str, Any]]:
         try:
             data, _headers = self._request_json(connection, "GET", _api_path(connection.base_url, "models"))
         except ModelError as error:
@@ -558,7 +616,7 @@ class ApiProviderBackend:
             if entry is None:
                 continue
             try:
-                models.append(self._model_info(connection, entry))
+                models.append(self._model_info(connection, entry, probed_images=probed_images))
             except ModelError:
                 continue
         return models
@@ -590,13 +648,17 @@ class ApiProviderBackend:
             reasoning_effort=reasoning_effort,
         )
         requested_model = str(config.get("model_id") or "").strip()
+        # llama.cpp exposes the loaded projector on /props, not /v1/models. Ask
+        # before building model entries so a vision server is not read as text-only.
+        probed_images = self._local_custom_vision(connection, requested_model)
         models = self._fetch_models(
             connection,
             allow_missing=preset == "custom" and bool(requested_model),
+            probed_images=probed_images,
         )
         selected = next((model for model in models if model["remote_model"] == requested_model), None)
         if requested_model and selected is None:
-            selected = self._model_info(connection, requested_model)
+            selected = self._model_info(connection, requested_model, probed_images=probed_images)
             models.insert(0, selected)
         connection.models = models
         with self._connections_lock:
@@ -642,7 +704,12 @@ class ApiProviderBackend:
     def list_models(self, connection_id: str, *, refresh: bool = True) -> dict[str, Any]:
         connection = self._get_connection(connection_id)
         if refresh:
-            connection.models = self._fetch_models(connection, allow_missing=connection.preset == "custom")
+            probed_images = self._local_custom_vision(connection, self._loaded_remote_model(connection))
+            connection.models = self._fetch_models(
+                connection,
+                allow_missing=connection.preset == "custom",
+                probed_images=probed_images,
+            )
         return {"connection": self._connection_public(connection), "models": connection.models}
 
     def resolve_model(self, reference: dict[str, Any]) -> dict[str, Any]:
@@ -652,7 +719,41 @@ class ApiProviderBackend:
             raise ModelError("API_MODEL_NOT_FOUND", "Select a connected API model.")
         connection = self._get_connection(connection_id)
         existing = next((model for model in connection.models if model["remote_model"] == model_id), None)
-        return existing or self._model_info(connection, model_id)
+        return existing or self._model_info(
+            connection,
+            model_id,
+            probed_images=self._local_custom_vision(connection, model_id),
+        )
+
+    @staticmethod
+    def _loaded_remote_model(connection: ApiConnection) -> str:
+        return str(connection.models[0]["remote_model"]) if connection.models else ""
+
+    def set_vision_capability(self, connection_id: str, remote_model: str, images: bool) -> dict[str, Any]:
+        """Let an operator re-declare image support for a Custom endpoint.
+
+        The connected-state UI has no other way to correct a modality-blind
+        ``/v1/models`` list once the setup form is gone, so the declaration is
+        applied to the live connection and every published model entry.
+        """
+        connection = self._get_connection(connection_id)
+        if connection.preset != "custom":
+            raise ModelError(
+                "API_CAPABILITY_FIXED",
+                "Image support is declared by the provider for this preset.",
+            )
+        connection.custom_images = bool(images)
+        updated: dict[str, Any] | None = None
+        for index, model in enumerate(connection.models):
+            if model["remote_model"] != remote_model:
+                continue
+            model["capabilities"] = {**model["capabilities"], "images": bool(images), "video_frames": bool(images)}
+            model["capability_source"] = "user_declared"
+            if index == 0:
+                updated = model
+        if updated is None:
+            raise ModelError("API_MODEL_NOT_FOUND", "The requested model is not part of this connection.")
+        return {"connection": self._connection_public(connection), "model": updated, "models": connection.models}
 
     def preflight(
         self,

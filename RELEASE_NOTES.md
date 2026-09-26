@@ -1,11 +1,11 @@
-# Prompt Studio for ComfyUI v1.1.1
+# Prompt Studio for ComfyUI v1.1.2
 
 ComfyUI extension release. Install through ComfyUI Manager or extract the ZIP into
 `custom_nodes`.
 
 ## Download
 
-Download **Prompt-Studio-ComfyUI-v1.1.1.zip** from the release assets below.
+Download **Prompt-Studio-ComfyUI-v1.1.2.zip** from the release assets below.
 
 Do not download **Source code (zip)** or **Source code (tar.gz)** for normal use.
 
@@ -22,24 +22,18 @@ install.
 
 ## What's new
 
-- **Fixed Anima adding a `safe` tag when the content rating was None.** The guide and
-  system prompt both hard-coded a `safe` default; the safety tag is now only emitted
-  when a rating is actually selected.
-- **Fixed a selected character losing its series.** The output could contain
-  `hatsune miku` without `vocaloid`. Character and series are now specified as one
-  inseparable pair in the guide, the system prompt and the closing contract, and the
-  audit reports - and repairs - a dropped series.
-- **Fixed the tag group order** so character and series read as one group sitting before
-  the artist tags, rather than as two separate groups.
-- **More detailed prompts.** The system prompt now asks for the brief to be covered
-  thoroughly instead of saying not to pad, and the audit forces a repair when the output
-  contradicts the chosen rating or style.
-- **Character search is much faster** (~7x) and the character index is built at startup,
-  so the first search is instant.
-- **Anima** text-to-image target, with content rating and prompt style options,
-  character references shown as bubbles, and per-region tag highlighting.
-- **Declared references** and **media-blind mode**.
-- **Settings tabs**, separating prompts and media handling.
+- **Fixed "Unsupported Media" with local llama.cpp and KoboldCpp servers.** A local server
+  that has a vision projector loaded was still reported as text-only, so attached images
+  were refused. Its OpenAI-compatible model list does not describe image support at all;
+  the projector is only visible on the server's own `/props` endpoint, which Prompt Studio
+  now reads. Qwen3.8-27B with an `mmproj` file over KoboldCpp, LM Studio, or `llama-server`
+  is detected automatically - no configuration needed.
+- **You can now declare image support by hand for a Custom endpoint.** If a server hides
+  its projector or runs behind a proxy, a new switch on the connected API panel
+  (**Endpoint accepts image_url inputs**) enables vision without reconnecting. The choice is
+  remembered.
+- The connected API panel now explains where the image support came from - detected from the
+  server, or declared by you.
 
 ## Requirements
 

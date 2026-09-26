@@ -2,9 +2,9 @@
 
 Use Prompt Studio without ComfyUI.
 
-Current Standalone version: **1.2.1**
+Current Standalone version: **1.2.2**
 
-[Download Prompt Studio Standalone v1.2.1](../../../releases/download/standalone-v1.2.1/Prompt-Studio-Standalone-Windows-v1.2.1.zip)
+[Download Prompt Studio Standalone v1.2.2](../../../releases/download/standalone-v1.2.2/Prompt-Studio-Standalone-Windows-v1.2.2.zip)
 
 ## This is the Standalone version
 
@@ -91,13 +91,11 @@ PS_PROJECTOR="/path/to/mmproj.gguf" \
 Python 3.10 or newer is required. The Linux launcher has been tested on WSL2. Managed
 Local GGUF is Windows-only, so on Linux use External llama.cpp or Ollama instead.
 
-## What's new in v1.2.1
+## What's new in v1.2.2
 
-- Added the **Anima** text-to-image target, with content rating and prompt style options, character references, and per-region tag highlighting.
-- Added **declared references** and **media-blind mode**, so a prompt can reference a picture that is not attached or keep attached media away from the prompt model.
-- Settings is now tabbed, separating prompts and media handling.
-- The Anima character catalogue is downloaded once by `start.bat` on the first launch.
-- Fixed needing a hard refresh before new features appeared after an update.
+- Fixed **"Unsupported Media"** when connecting to a local llama.cpp or KoboldCpp server that has a vision projector loaded; the projector is now detected automatically from the server, with no configuration needed.
+- Added a manual **Endpoint accepts image_url inputs** switch for servers that hide their projector or run behind a proxy.
+- The connected API panel now says whether image support was detected from the server or declared by you.
 
 See [Sequence usage](../docs/USAGE.md#sequence) for media scope, refinement, and limitations. Media Composer, Media Editor, themes, and provider settings remain available.
 
@@ -200,7 +198,7 @@ From the repository root, build the portable package with:
 powershell -ExecutionPolicy Bypass -File scripts\build_standalone.ps1
 ```
 
-The result is `dist\Prompt-Studio-Standalone-Windows-v1.2.1.zip`. It records the
+The result is `dist\Prompt-Studio-Standalone-Windows-v1.2.2.zip`. It records the
 repository commit in `upstream\UPSTREAM_SNAPSHOT.txt` and excludes local settings,
 logs, models, `llama-server`, CUDA libraries, and test artifacts.
 

@@ -1,5 +1,12 @@
 # Standalone changelog
 
+## 1.2.2 - 2026-09-26
+
+- Fixed "Unsupported Media" when connecting to a local llama.cpp or KoboldCpp server that has a vision projector loaded; the projector is now detected automatically from the server.
+- Added a manual **Endpoint accepts image_url inputs** switch on the connected API panel, for servers that hide their projector or run behind a proxy.
+- The connected API panel now says whether image support was detected from the server or declared by you.
+- Requires Prompt Studio core `1.1.2`.
+
 ## 1.2.1 - 2026-09-25
 
 - Fixed Anima adding a `safe` tag when the content rating was None; the safety tag is only emitted when a rating is selected.

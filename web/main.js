@@ -6,7 +6,7 @@ import { mediaVisualDescriptor } from "./media_visual.js";
 import { createSequenceWorkspace } from "./sequence_workspace.js";
 import { generateSequence, cancelSequence } from "./api/sequence.js";
 import { app } from "/scripts/app.js";
-import { cancel, clearMedia, createMediaPlaceholder, diagnoseGGUFRuntime, disconnectApiProvider, freeComfyVram, generate, getApiProviderModels, getApiProviderPresets, getModels, getOllamaStatus, getStatus, getTargets, probeApiProvider, probeExternalServer, refine, removeMedia, reorderMedia, resolveCharacters, searchCharacters, selectProjector, unloadModel, updateMediaPlaceholder, uploadMedia } from "./api/prompt_studio.js";
+import { cancel, clearMedia, createMediaPlaceholder, diagnoseGGUFRuntime, disconnectApiProvider, freeComfyVram, generate, getApiProviderModels, getApiProviderPresets, getModels, getOllamaStatus, getStatus, getTargets, probeApiProvider, probeExternalServer, refine, removeMedia, reorderMedia, resolveCharacters, searchCharacters, selectProjector, setApiProviderCapability, unloadModel, updateMediaPlaceholder, uploadMedia } from "./api/prompt_studio.js";
 import { comfyVramIsAlreadyEmpty, createSessionId, fileCountFromDataTransfer, insertReferenceAtCaret, isChoiceMenuInteraction, isRuntimeMenuInteraction, moveOntoTarget, replacementTargetForFileDrop, replaceEventListener, vramReleaseReachedTarget } from "./compat.js";
 import { generateModelSummaryMarkup, settingsMarkup } from "./settings.js";
 import { targetSelectionMarkup } from "./target_selection.js";
@@ -66,7 +66,7 @@ const LAUNCHER_SCHEMA_VERSION = "2";
 // The version this bundle was built as. Kept in sync with `backend/version.py` by
 // `tests/frontend_regressions.mjs`, so a stale module can be detected at load time
 // by comparing it with the version the backend reports.
-const EXTENSION_VERSION = "1.1.1";
+const EXTENSION_VERSION = "1.1.2";
 const VRAM_HANDOFF_SUPPORTED = typeof app?.queuePrompt === "function";
 const HOST_CAPABILITIES = { windowed: true, comfyMemory: VRAM_HANDOFF_SUPPORTED, workflowMedia: true, ...app.psHost };
 const vramHandoffCoordinator = createVramHandoffCoordinator();
@@ -2334,6 +2334,23 @@ function apiProviderModelForSettings() {
     || null;
 }
 
+/**
+ * Explain where an API model's image capability came from.
+ *
+ * A Custom endpoint's /v1/models list is often modality-blind (llama.cpp returns
+ * no architecture), so this line tells the operator whether the backend detected
+ * the projector at runtime or whether the value is only a manual declaration.
+ */
+function apiCapabilityNote(model) {
+  if (!model) return "Connect to read this endpoint's capabilities.";
+  if (model.capabilities?.images) {
+    return model.capability_source === "runtime_probe"
+      ? "The endpoint reported a vision projector; images are sent."
+      : "Declared by you; images will be sent to this endpoint.";
+  }
+  return "Uncheck leaves attached images home. Enable when the endpoint loads a vision projector.";
+}
+
 function renderApiProviderControl() {
   const config = studio.apiProviderConfig;
   const selectedPreset = API_PROVIDER_UI[config.preset] || API_PROVIDER_UI.gemini;
@@ -2362,6 +2379,7 @@ function renderApiProviderControl() {
         </div>
         <label class="ps-api-model-select"><span>Model</span><select data-api-model>${models.map((item) => `<option value="${escapeHtml(item.remote_model)}" ${item.remote_model === model?.remote_model ? "selected" : ""}>${escapeHtml(item.name)}${item.model_context_limit ? ` · ${Math.round(item.model_context_limit / 1024)}K` : ""}</option>`).join("")}</select></label>
         <div class="ps-api-badges"><span class="${model?.capabilities?.images ? "is-ready" : ""}">${model?.capabilities?.images ? "Vision" : "Text only / unknown"}</span><span>${config.preset === "gemini" ? `Thinking ${escapeHtml(connection.reasoning_effort || "minimal")}` : "Reasoning provider managed"}</span><span>Provider managed</span></div>
+        ${config.preset === "custom" ? `<div class="ps-api-custom-options"><label><input name="connected_custom_images" type="checkbox" data-api-vision-toggle ${model?.capabilities?.images ? "checked" : ""}><span>Endpoint accepts image_url inputs</span></label><small data-api-capability-note>${escapeHtml(apiCapabilityNote(model))}</small></div>` : ""}
         <div class="ps-api-actions"><span>${policyLinks}</span><button type="button" data-api-model-refresh>${icon("refresh", 13)} Refresh models</button><button type="button" data-api-disconnect>Disconnect</button></div>
         ${disclosure}
         <p class="ps-api-cancel-note">Stop aborts Prompt Studio's connection. The remote provider may continue processing or billing.</p>
@@ -3066,9 +3084,40 @@ async function chooseApiProviderPreset(preset) {
   renderInferenceSettings();
 }
 
+/**
+ * Re-declare image support for a connected Custom endpoint.
+ *
+ * llama.cpp reports the loaded projector on /props, which the backend probes at
+ * connect time. When that probe finds nothing (older builds, a proxy, a server
+ * that hides the projector) this is the only way to lift the vision gate without
+ * reconnecting, so the declaration is written back to the config too.
+ */
+async function setConnectedApiVision(images) {
+  const connection = studio.apiProviderConnection;
+  const model = apiProviderModelForSettings();
+  if (!connection || !model) return;
+  try {
+    const result = await setApiProviderCapability(connection.id, model.remote_model, images);
+    studio.apiProviderConnection = result.connection;
+    studio.apiProviderModels = result.models || [];
+    studio.models = [...studio.models.filter((item) => item.family !== "api"), ...studio.apiProviderModels];
+    studio.apiProviderConfig = { ...studio.apiProviderConfig, custom_images: images };
+    saveApiProviderConfig(localStorage, studio.apiProviderConfig);
+    const updated = studio.apiProviderModels.find((item) => item.remote_model === model.remote_model);
+    if (updated) selectModel(updated);
+    else renderInferenceSettings();
+    showToast(
+      images ? "Vision enabled" : "Vision disabled",
+      images ? "Attached images will be sent to this endpoint." : "Attached images will be kept from this endpoint.",
+    );
+  } catch (error) {
+    renderInferenceSettings();
+    showToast(error.code || "Capability update failed", error.message, error.details);
+  }
+}
+
 async function refreshApiProviderModels() {
-  if (!studio.apiProviderConnection) return;
-  const attempt = (studio.apiConnectionAttempt || 0) + 1;
+  if (!studio.apiProviderConnection) return;  const attempt = (studio.apiConnectionAttempt || 0) + 1;
   studio.apiConnectionAttempt = attempt;
   const selectionRevision = studio.modelSelectionRevision || 0;
   try {
@@ -4068,6 +4117,11 @@ function createStudio() {
     }
   });
   root.querySelector("[data-provider-detail]").addEventListener("change", (event) => {
+    const apiVisionToggle = event.target.closest("[data-api-vision-toggle]");
+    if (apiVisionToggle) {
+      setConnectedApiVision(apiVisionToggle.checked);
+      return;
+    }
     const apiModel = event.target.closest("[data-api-model]");
     if (apiModel) {
       const model = studio.apiProviderModels.find((item) => item.remote_model === apiModel.value);

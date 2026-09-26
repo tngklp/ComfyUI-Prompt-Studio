@@ -511,6 +511,26 @@ test("exceptional generation notices persist until a workspace click", () => {
   assert.match(mainSource, /format_repair_failure[\s\S]{0,500}dismissOnWorkspaceClick: true/);
 });
 
+test("a connected Custom endpoint can re-declare vision without reconnecting", () => {
+  // The setup form is gone once connected, so a modality-blind /v1/models list
+  // needs this toggle or the user is stuck with UNSUPPORTED_MEDIA.
+  assert.match(mainSource, /data-api-vision-toggle/);
+  assert.match(mainSource, /closest\("\[data-api-vision-toggle\]"\)[\s\S]{0,120}setConnectedApiVision/);
+  assert.match(mainSource, /setApiProviderCapability\(connection\.id, model\.remote_model, images\)/);
+  // The declaration is written back to the saved config so it survives a reload.
+  assert.match(mainSource, /custom_images: images[\s\S]{0,120}saveApiProviderConfig/);
+  // The toggle only exists for Custom: provider presets declare their own support.
+  assert.match(mainSource, /config\.preset === "custom" \? `<div class="ps-api-custom-options"><label><input name="connected_custom_images"/);
+});
+
+test("the capability note distinguishes a runtime probe from a manual declaration", () => {
+  assert.match(mainSource, /function apiCapabilityNote\(/);
+  assert.match(mainSource, /capability_source === "runtime_probe"/);
+  assert.match(mainSource, /data-api-capability-note/);
+  // The note must span both grid columns or it lands in the empty one.
+  assert.match(stylesSource, /\[data-api-capability-note\] \{[^}]*grid-column: 1 \/ -1;/);
+});
+
 test("technical errors reuse workspace-click dismissal without closing on the opening click", () => {
   assert.match(mainSource, /details != null && durationMs == null/);
   assert.match(mainSource, /studio\.toastDismissOnWorkspaceClick = false/);

@@ -799,6 +799,24 @@ async def disconnect_api_provider(request: web.Request) -> web.Response:
     return web.json_response({"disconnected": disconnected})
 
 
+@routes.post(f"{ROUTE_PREFIX}/api-provider/capability")
+async def set_api_provider_capability(request: web.Request) -> web.Response:
+    body = await _json_body(request)
+    payload = body or {}
+    connection_id = str(payload.get("connection_id") or "").strip()
+    remote_model = str(payload.get("model_id") or "").strip()
+    images = payload.get("images")
+    if not connection_id or not remote_model or not isinstance(images, bool):
+        return _error("INVALID_REQUEST", "A connection ID, model ID and boolean images flag are required.", status=400)
+    try:
+        result = await asyncio.to_thread(
+            API_PROVIDER_BACKEND.set_vision_capability, connection_id, remote_model, images
+        )
+    except ModelError as error:
+        return _error(error.code, error.message, status=_model_error_status(error), details=error.details)
+    return web.json_response(result)
+
+
 @routes.get(f"{ROUTE_PREFIX}/targets")
 async def get_targets(_request: web.Request) -> web.Response:
     """Generation targets, their modes, limits and guide metadata."""

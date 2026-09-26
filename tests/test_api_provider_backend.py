@@ -66,8 +66,20 @@ class _FakeApiHandler(BaseHTTPRequestHandler):
                     },
                     {"id": "lm-studio-vision-model"},
                     {"id": "embedding-model"},
+                    # llama.cpp /v1/models is modality-blind: id/object/created/owned_by only.
+                    {"id": "llamacpp-vision-model", "object": "model", "owned_by": "llamacpp"},
                 ],
             }, headers={"X-Request-ID": "models-request"})
+        elif self.path == "/llamacpp/v1/models":
+            self._json({
+                "data": [{"id": "llamacpp-vision-model", "object": "model", "owned_by": "llamacpp"}],
+            })
+        elif self.path.startswith("/llamacpp/props"):
+            self._json({"modalities": {"vision": True}, "model_path": "/models/Qwen3.8-27B-Q4_K_XL.gguf"})
+        elif self.path.startswith("/llamacpp-text/props"):
+            self._json({"modalities": {"vision": False}})
+        elif self.path == "/llamacpp-text/v1/models":
+            self._json({"data": [{"id": "llamacpp-text-model", "object": "model"}]})
         elif self.path == "/api/v1/models":
             self._json({
                 "models": [
@@ -237,9 +249,10 @@ class ApiProviderBackendTests(unittest.TestCase):
         self.assertEqual(model["model_context_limit"], 65536)
         self.assertEqual(model["max_output_tokens"], 8192)
         self.assertEqual(model["capability_source"], "official_metadata")
-        request = _FakeApiHandler.requests[0]
-        self.assertEqual(request[1], "/v1/models")
-        self.assertEqual(request[2]["Authorization"], "Bearer secret-test-key")
+        # A Custom connection probes /props first for the llama.cpp projector, then
+        # reads the OpenAI model list. Both carry the session credential.
+        models_request = next(request for request in _FakeApiHandler.requests if request[1] == "/v1/models")
+        self.assertEqual(models_request[2]["Authorization"], "Bearer secret-test-key")
 
     def test_custom_model_list_may_be_missing_when_manual_model_is_supplied(self):
         result = self.backend.probe({
@@ -313,6 +326,96 @@ class ApiProviderBackendTests(unittest.TestCase):
         )
         payload = _FakeApiHandler.requests[-1][3]
         self.assertNotIn("reasoning_effort", payload)
+
+    def test_llamacpp_custom_probe_reads_props_for_vision(self):
+        """llama.cpp /v1/models is modality-blind; /props reports the projector."""
+        result = self.backend.probe({
+            "preset": "custom",
+            "base_url": f"http://127.0.0.1:{self.server.server_address[1]}/llamacpp/v1",
+            "model_id": "llamacpp-vision-model",
+            "credential": {"source": "session", "value": ""},
+            "custom_capabilities": {"images": False},
+        })
+        model = result["model"]
+        self.assertTrue(model["capabilities"]["images"])
+        self.assertTrue(model["capabilities"]["video_frames"])
+        self.assertEqual(model["capability_source"], "runtime_probe")
+        paths = [request[1] for request in _FakeApiHandler.requests if request[0] == "GET"]
+        self.assertIn("/llamacpp/props?model=llamacpp-vision-model&autoload=false", paths)
+
+    def test_llamacpp_custom_probe_reports_text_only_when_props_has_no_projector(self):
+        result = self.backend.probe({
+            "preset": "custom",
+            "base_url": f"http://127.0.0.1:{self.server.server_address[1]}/llamacpp-text/v1",
+            "model_id": "llamacpp-text-model",
+            "credential": {"source": "session", "value": ""},
+            "custom_capabilities": {"images": False},
+        })
+        self.assertFalse(result["model"]["capabilities"]["images"])
+
+    def test_koboldcpp_root_props_still_detects_vision(self):
+        """KoboldCpp serves /props at the root and only reports modalities there."""
+        result = self.backend.probe({
+            "preset": "custom",
+            "base_url": f"http://127.0.0.1:{self.server.server_address[1]}/llamacpp",
+            "model_id": "Qwen3.8-27B-Q4_K_XL.gguf",
+            "credential": {"source": "session", "value": ""},
+            "custom_capabilities": {"images": False},
+        })
+        model = result["model"]
+        self.assertTrue(model["capabilities"]["images"])
+        self.assertEqual(model["capability_source"], "runtime_probe")
+        paths = [request[1] for request in _FakeApiHandler.requests if request[0] == "GET"]
+        self.assertIn("/llamacpp/props?model=Qwen3.8-27B-Q4_K_XL.gguf&autoload=false", paths)
+
+    def test_operator_declaration_overrides_a_negative_runtime_probe(self):
+        """A server that hides its projector can still be enabled by hand."""
+        result = self.backend.probe({
+            "preset": "custom",
+            "base_url": f"http://127.0.0.1:{self.server.server_address[1]}/llamacpp-text/v1",
+            "model_id": "llamacpp-text-model",
+            "credential": {"source": "session", "value": ""},
+            "custom_capabilities": {"images": True},
+        })
+        self.assertTrue(result["model"]["capabilities"]["images"])
+
+    def test_set_vision_capability_updates_a_connected_custom_connection(self):
+        result = self.backend.probe({
+            "preset": "custom",
+            "base_url": f"http://127.0.0.1:{self.server.server_address[1]}/llamacpp-text/v1",
+            "model_id": "llamacpp-text-model",
+            "credential": {"source": "session", "value": ""},
+            "custom_capabilities": {"images": False},
+        })
+        connection_id = result["connection"]["id"]
+        self.assertFalse(result["model"]["capabilities"]["images"])
+
+        updated = self.backend.set_vision_capability(connection_id, "llamacpp-text-model", True)
+        self.assertTrue(updated["model"]["capabilities"]["images"])
+        self.assertTrue(updated["model"]["capabilities"]["video_frames"])
+        self.assertEqual(updated["model"]["capability_source"], "user_declared")
+        self.assertTrue(all(model["capabilities"]["images"] for model in updated["models"]))
+        # The declaration survives a later refresh of the modality-blind list.
+        connection = self.backend._get_connection(connection_id)
+        self.assertTrue(connection.custom_images)
+
+        with self.assertRaises(ModelError) as unknown:
+            self.backend.set_vision_capability(connection_id, "not-a-model", True)
+        self.assertEqual(unknown.exception.code, "API_MODEL_NOT_FOUND")
+
+    def test_set_vision_capability_rejects_non_custom_presets(self):
+        result = self.backend.probe({
+            "preset": "custom",
+            "base_url": self.base_url,
+            "model_id": "vision-reasoning-model",
+            "credential": {"source": "session", "value": ""},
+        })
+        connection_id = result["connection"]["id"]
+        connection = self.backend._get_connection(connection_id)
+        connection.preset = "openai"
+        with self.assertRaises(ModelError) as raised:
+            self.backend.set_vision_capability(connection_id, "vision-reasoning-model", True)
+        self.assertEqual(raised.exception.code, "API_CAPABILITY_FIXED")
 
     def test_only_session_credentials_are_accepted(self):
         self.assertEqual(
