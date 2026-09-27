@@ -14,9 +14,11 @@ permissions:
 
 jobs:
   publish:
-    # Publish only for an extension release tag (`v1.2.3`). This rejects the
-    # standalone line (`standalone-v1.2.3`) and any tag that is not the extension.
-    if: startsWith(github.event.release.tag_name, 'v')
+    # Publish for an extension release tag (`v1.1.5`) and for a manual dispatch.
+    # This rejects the standalone line (`standalone-v1.1.5`) and any other tag.
+    # The workflow_dispatch arm matters: on a manual run github.event.release does
+    # not exist, so a bare startsWith() check would skip the job every time.
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'v')
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
