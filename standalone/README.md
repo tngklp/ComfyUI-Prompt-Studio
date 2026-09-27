@@ -2,9 +2,9 @@
 
 Use Prompt Studio without ComfyUI.
 
-Current Standalone version: **1.2.3**
+Current Standalone version: **1.2.4**
 
-[Download Prompt Studio Standalone v1.2.3](../../../releases/download/standalone-v1.2.3/Prompt-Studio-Standalone-Windows-v1.2.3.zip)
+[Download Prompt Studio Standalone v1.2.4](../../../releases/download/standalone-v1.2.4/Prompt-Studio-Standalone-Windows-v1.2.4.zip)
 
 ## This is the Standalone version
 
@@ -91,9 +91,32 @@ PS_PROJECTOR="/path/to/mmproj.gguf" \
 Python 3.10 or newer is required. The Linux launcher has been tested on WSL2. Managed
 Local GGUF is Windows-only, so on Linux use External llama.cpp or Ollama instead.
 
-## What's new in v1.2.3
+## What's new in v1.2.4
 
-- Fixed **refining a prompt for an image target** (Anima, Qwen Image 2.1, Krea 2), which failed with `INVALID_DURATION: The selected mode does not accept a duration.` Duration is now validated only for targets that declare one, and the duration line is omitted from an image request rather than written as `None seconds`.
+- Fixed **generating a prompt for an image target** (Anima, Qwen Image 2.1, Krea 2), which failed with `INVALID_REQUEST: Required fields are missing (duration_seconds)`. The 1.2.3 release fixed only the Refine path. Duration is now required only for targets that declare one, and an image prompt no longer carries a `Duration:` line at all.
+- Added **`update.bat`** for one-step updates.
+
+## Updating
+
+Run **`update.bat`** in the install folder:
+
+```bat
+update.bat
+```
+
+It checks the latest release, downloads it, replaces the application files, and leaves your
+own files untouched:
+
+| Kept as-is | Replaced |
+| --- | --- |
+| `data\` (settings, character cache) | `prompt_studio\` |
+| `models\` | `upstream\`, `ui\`, `scripts\` |
+| `.venv\` | `start.bat`, `update.bat`, `VERSION` |
+| `llama-server`, CUDA libraries | docs and `requirements.txt` |
+
+If anything goes wrong mid-update, the previous version is written to a temp folder first
+and restored automatically. New dependencies are installed only when an import check fails.
+Run `start.bat` when it finishes.
 
 See [Sequence usage](../docs/USAGE.md#sequence) for media scope, refinement, and limitations. Media Composer, Media Editor, themes, and provider settings remain available.
 
@@ -196,7 +219,7 @@ From the repository root, build the portable package with:
 powershell -ExecutionPolicy Bypass -File scripts\build_standalone.ps1
 ```
 
-The result is `dist\Prompt-Studio-Standalone-Windows-v1.2.3.zip`. It records the
+The result is `dist\Prompt-Studio-Standalone-Windows-v1.2.4.zip`. It records the
 repository commit in `upstream\UPSTREAM_SNAPSHOT.txt` and excludes local settings,
 logs, models, `llama-server`, CUDA libraries, and test artifacts.
 

@@ -1,11 +1,11 @@
-# Prompt Studio for ComfyUI v1.1.3
+# Prompt Studio for ComfyUI v1.1.4
 
 ComfyUI extension release. Install through ComfyUI Manager or extract the ZIP into
 `custom_nodes`.
 
 ## Download
 
-Download **Prompt-Studio-ComfyUI-v1.1.3.zip** from the release assets below.
+Download **Prompt-Studio-ComfyUI-v1.1.4.zip** from the release assets below.
 
 Do not download **Source code (zip)** or **Source code (tar.gz)** for normal use.
 
@@ -22,15 +22,13 @@ install.
 
 ## What's new
 
-- **Fixed refining a prompt for an image target.** Refine failed for Anima, Qwen Image 2.1
-  and Krea 2 with `INVALID_DURATION: The selected mode does not accept a duration.`
-  Generation and refinement both validated a video-only duration for every target, so the
-  three image targets - which have no duration at all - were rejected before the request
-  reached their guide. Duration is now validated only for the targets that declare one.
-- The duration line is omitted from an image request instead of being written as
-  `None seconds`, so the prompt model no longer reads an absent field as a constraint.
-- An image target that is sent a duration anyway is still rejected with a clear error,
-  rather than silently ignoring a field that does not apply to it.
+- **Fixed generating a prompt for an image target.** The previous release fixed Refine for
+  Anima, Qwen Image 2.1 and Krea 2 but left the matching check on the generate endpoint, so
+  Generate failed with `INVALID_REQUEST: Required fields are missing (duration_seconds)`.
+  Duration is now a target capability everywhere it is checked: required only for the
+  targets that declare one, and never read as if it always exists.
+- Image prompts no longer carry a `Duration:` line at all, instead of the literal
+  `None seconds` that could be read as a constraint.
 
 ## Requirements
 

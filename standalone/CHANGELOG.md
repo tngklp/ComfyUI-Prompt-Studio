@@ -1,5 +1,11 @@
 # Standalone changelog
 
+## 1.2.4 - 2026-09-27
+
+- Fixed Generate for an image target (Anima, Qwen Image 2.1, Krea 2), which failed with `INVALID_REQUEST: Required fields are missing (duration_seconds)`. 1.2.3 fixed only the Refine path.
+- Added **`update.bat`**: run it in the install folder to update in place, keeping `data\`, `models\`, `.venv\` and local `llama-server`/CUDA files. A backup of the previous version is written to a temp folder.
+- Requires Prompt Studio core `1.1.4`.
+
 ## 1.2.3 - 2026-09-27
 
 - Fixed refining a prompt for an image target (Anima, Qwen Image 2.1, Krea 2), which failed with `INVALID_DURATION: The selected mode does not accept a duration.` Duration is now validated only for targets that declare one, and the duration line is omitted from an image request.

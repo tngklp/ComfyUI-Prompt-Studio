@@ -48,6 +48,21 @@ from .sequence_routes import register_sequence_routes
 ROUTE_PREFIX = "/promptstudio"
 # Mode ids are declared per target in targets.json; see backend/targets/__init__.py.
 MODES = set(target_registry.mode_ids())
+
+
+def _mode_declares_duration(mode: str) -> bool:
+    """Whether the mode's target has a duration field at all.
+
+    Image targets declare ``durations: null``, so a duration must not be required
+    for them. An unknown mode returns True here; the mode check below rejects it
+    with a clearer INVALID_MODE rather than a misleading missing-field error.
+    """
+    try:
+        return target_registry.target_for_mode(mode).durations is not None
+    except target_registry.TargetError:
+        return True
+
+
 STATE: dict[str, Any] = {
     "phase": "idle",
     "active_request_id": None,
@@ -902,8 +917,13 @@ async def generate(request: web.Request) -> web.Response:
     if body is None:
         return _error("INVALID_REQUEST", "Expected a JSON object.", status=400)
 
-    required = ("mode", "creative_brief", "model_id", "session_id") if body.get("mode") == "Music3" else ("mode", "creative_brief", "model_id", "session_id", "aspect_ratio", "duration_seconds")
+    required = ("mode", "creative_brief", "model_id", "session_id") if body.get("mode") == "Music3" else ("mode", "creative_brief", "model_id", "session_id", "aspect_ratio")
     missing = [key for key in required if not body.get(key)]
+    # Duration is a target capability, not a global field. Only demand it when the
+    # mode's target declares a duration at all, so an image target (durations: null)
+    # is not rejected for a field it has no use for.
+    if not missing and _mode_declares_duration(body["mode"]) and not body.get("duration_seconds"):
+        missing.append("duration_seconds")
     if missing:
         return _error("INVALID_REQUEST", "Required fields are missing.", status=400, details={"fields": missing})
     if body["mode"] not in MODES:
@@ -976,7 +996,10 @@ async def generate(request: web.Request) -> web.Response:
         debug_input_sequence = result.pop("debug_input_sequence", None)
         _set_generation_cache(body["session_id"], body["mode"], {
             "mode": body["mode"],
-            "duration_seconds": assembled["input"]["duration_seconds"],
+            # An image target carries no duration, so the key is absent rather than
+            # None. Refinement reads this cache, and `_validated_generation_context`
+            # accepts a missing duration for a target that declares none.
+            "duration_seconds": assembled["input"].get("duration_seconds"),
             "aspect_ratio": assembled["input"]["aspect_ratio"],
             "creative_brief": assembled["input"]["creative_brief"],
             "lyrics": assembled["input"].get("lyrics", ""),

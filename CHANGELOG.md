@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.1.4 - 2026-09-27
+
+### Fixed
+
+- **Generate failed for every image target.** The 1.1.3 fix covered refinement but not the `/generate` endpoint, which still listed `duration_seconds` as a required field for every non-Music3 mode. Anima, Qwen Image 2.1 and Krea 2 returned `INVALID_REQUEST: Required fields are missing` with `{"fields": ["duration_seconds"]}`. Duration is now required only for a target that declares a range.
+- The generation cache no longer assumes `duration_seconds` is present on an assembled image request, which would have raised `KeyError` once the endpoint validation was fixed.
+- Image prompts omit the `Duration:` line entirely rather than writing `None seconds`.
+
+### Notes
+
+- 1.1.3 shipped only half of this fix. Upgrade to 1.1.4; there is no reason to install 1.1.3.
+
 ## 1.1.3 - 2026-09-27
 
 ### Fixed

@@ -239,6 +239,50 @@ class RouteStabilityTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(resolved, model)
         probe.assert_called_once_with("gemma4:test", host)
 
+    async def test_generate_does_not_require_a_duration_for_an_image_target(self):
+        # Regression: /generate listed duration_seconds as a required field for every
+        # non-Music3 mode, so an image target (durations: null) was rejected with
+        # INVALID_REQUEST "Required fields are missing" before assembly ever ran.
+        model = {
+            "id": "ollama::test-model",
+            "name": "test-model",
+            "family": "ollama",
+            "remote_model": "test-model",
+            "endpoint": "http://127.0.0.1:11434",
+        }
+        for mode in ("TextToImage", "ImageEdit", "Krea2TextToImage", "AnimaTextToImage"):
+            with self.subTest(mode=mode):
+                body = {
+                    "session_id": self.session_id,
+                    "mode": mode,
+                    "creative_brief": "A lighthouse.",
+                    "aspect_ratio": "1:1",
+                    "model_id": "ollama::test-model",
+                }
+                with patch.object(routes, "assemble_request", return_value={"input": {"aspect_ratio": "1:1", "creative_brief": "A lighthouse."}}) as assemble:
+                    with patch.object(routes, "_resolve_model", new_callable=AsyncMock, return_value=model):
+                        with patch.object(routes, "_prepare_generation_runtime", new_callable=AsyncMock) as prepare:
+                            prepare.return_value = (model, routes.OLLAMA_BACKEND, {"context_profile": "auto", "kv_cache": "auto"})
+                            with patch.object(routes, "_run_thread_worker", new_callable=AsyncMock) as worker:
+                                worker.return_value = ({"prompt": "x"}, None)
+                                response = await routes.generate(_Request(body=body))
+
+                self.assertEqual(response.status, 200, self.payload(response))
+                assemble.assert_called_once()
+                # The generation cache feeds refinement, so it must be written without
+                # assuming an image target supplied a duration.
+                cached = routes._get_generation_cache(self.session_id, mode)
+                self.assertIsNotNone(cached)
+                self.assertIsNone(cached["duration_seconds"])
+                self.assertEqual(cached["aspect_ratio"], "1:1")
+
+    async def test_generate_still_requires_a_duration_for_a_video_target(self):
+        body = self.generation_body("A shot.")
+        del body["duration_seconds"]
+        response = await routes.generate(_Request(body=body))
+        self.assertEqual(response.status, 400)
+        self.assertEqual(self.payload(response)["error"]["details"], {"fields": ["duration_seconds"]})
+
     async def test_invalid_canonical_tag_stops_generate_before_provider_resolution_or_backend_calls(self):
         body = self.generation_body("Use <Video 9> for the camera motion.")
         with (

@@ -496,20 +496,10 @@ export function currentModeOptions(state) {
   return payload;
 }
 
-/**
- * Duration is a video-only field. Image and audio targets declare no duration
- * range in the registry (`durations: null`), so sending the studio-wide slider
- * value would hand the backend a field that target has no place for. Omit it
- * entirely instead of relying on the backend to ignore it.
- */
-function durationPayload(state) {
-  return targetForMode(state.mode)?.durations ? { duration_seconds: state.durationSeconds } : {};
-}
-
 export function buildGeneratePayload(state, { creativeBrief, lyrics = "", seed }) {
   const payload = {
     ...sharedInferencePayload(state),
-    ...durationPayload(state),
+    duration_seconds: state.durationSeconds,
     aspect_ratio: state.aspectRatio,
     creative_brief: creativeBrief,
     seed,
@@ -531,7 +521,7 @@ export function buildRefinePayload(state, { currentPrompt, instruction, creative
     ...sharedInferencePayload(state),
     current_prompt: currentPrompt,
     instruction,
-    ...durationPayload(state),
+    duration_seconds: state.durationSeconds,
     aspect_ratio: state.aspectRatio,
     creative_brief: creativeBrief,
     seed,
