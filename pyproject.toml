@@ -1,7 +1,7 @@
 [project]
-name = "prompt-studio"
+name = "comfyui-prompt-studio"
 version = "1.1.5"
-description = "A multimodal prompt studio for ComfyUI with local and API providers, supporting multiple generation-target models."
+description = "Multimodal prompt studio for ComfyUI. Write and refine prompts for image, video and audio models using local or API-based LLMs."
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
 dependencies = []
@@ -12,7 +12,7 @@ classifiers = [
 [project.urls]
 Repository = "https://github.com/tngklp/ComfyUI-Prompt-Studio"
 Documentation = "https://github.com/tngklp/ComfyUI-Prompt-Studio#readme"
-"Bug Tracker" = "https://github.com/tngklp/ComfyUI-Prompt-Studio/issues"
+Issues = "https://github.com/tngklp/ComfyUI-Prompt-Studio/issues"
 
 [tool.comfy]
 PublisherId = "tngklp"
