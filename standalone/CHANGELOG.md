@@ -1,5 +1,11 @@
 # Standalone changelog
 
+## 1.2.5 - 2026-09-27
+
+- Fixed Generate for every image target (Qwen Image 2.1 T2I/Edit, Krea 2, Anima), which failed with `INVALID_DURATION: The selected mode does not accept a duration.` A mode that declares no duration now ignores the studio-wide value instead of rejecting it. Video and music prompts were unaffected.
+- This is the first release `update.bat` can move you onto. Getting here from 1.2.4 still needs one manual ZIP extract.
+- Requires Prompt Studio core `1.1.5`.
+
 ## 1.2.4 - 2026-09-27
 
 - Fixed Generate for an image target (Anima, Qwen Image 2.1, Krea 2), which failed with `INVALID_REQUEST: Required fields are missing (duration_seconds)`. 1.2.3 fixed only the Refine path.

@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.1.5 - 2026-09-27
+
+### Fixed
+
+- **Generate failed for every image target** with `INVALID_DURATION: The selected mode does not accept a duration.` Qwen Image 2.1 (T2I and Edit), Krea 2 and Anima all rejected the request because the studio sends one studio-wide `duration_seconds` with every request, and a target that declares no duration treated its presence as an error.
+- A mode that declares no duration now ignores the value instead of rejecting it. There is no valid range for it, so no value can be wrong - `null`, `0` or any number are all simply not applicable.
+- Video and audio targets are unchanged: a duration is still required and still range-checked against the target's own bounds.
+
+### Notes
+
+- This is the third release in this area. 1.1.3 fixed Refine but broke Generate; 1.1.4 fixed the endpoint check but left assembly rejecting the value. Update to 1.1.5.
+- The route tests for this path no longer mock `assemble_request`. Mocking it is what let the 1.1.4 defect through: the endpoint passed and the real assembly then failed.
+
 ## 1.1.4 - 2026-09-27
 
 ### Fixed

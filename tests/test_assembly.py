@@ -252,7 +252,8 @@ class AssemblyImageTargetTests(unittest.TestCase):
     The frontend keeps sending `duration_seconds` for these modes because the studio
     state carries one studio-wide value. Assembly used to demand a duration in the
     shared video branch and reject every image request with INVALID_DURATION before
-    it even reached the guide, which broke refine for all three image targets.
+    it even reached the guide. A mode that declares no duration range must ignore a
+    value it is sent - the field does not apply to it.
     """
 
     session_id = "11111111-2222-4333-8444-555555555555"
@@ -271,14 +272,15 @@ class AssemblyImageTargetTests(unittest.TestCase):
         }
 
     def body(self, mode, **overrides):
-        # No duration field: an image target has none, so a payload that is correct
-        # for it simply omits the key. `duration_seconds` is added by the tests that
-        # need to prove a supplied value is rejected.
+        # `duration_seconds` is always present: the studio keeps one studio-wide
+        # duration and both payload builders send it for every mode. A target that
+        # declares no duration must ignore it, not reject it.
         return {
             "session_id": self.session_id,
             "mode": mode,
             "aspect_ratio": "1:1",
             "creative_brief": "A lone lighthouse at dusk.",
+            "duration_seconds": 10,
             **overrides,
         }
 
@@ -289,13 +291,14 @@ class AssemblyImageTargetTests(unittest.TestCase):
             with self.subTest(mode=mode):
                 self.assertIsNone(target_for_mode(mode).durations)
 
-    def test_every_image_mode_generates_and_refines_without_a_duration(self):
+    def test_every_image_mode_generates_and_refines_with_the_studio_duration_present(self):
         for mode in self.IMAGE_MODES:
             with self.subTest(mode=mode), patch(
                 "backend.assembly.STORE.manifest",
                 return_value=self.manifest(mode),
             ):
-                # The bug: both of these raised INVALID_DURATION before the fix.
+                # The bug: both of these raised INVALID_DURATION, because a duration
+                # was present and the mode declares none.
                 generated = assemble_request(self.body(mode))
                 refined = assemble_refinement(
                     self.body(mode, current_prompt="A lighthouse.", instruction="Make it stormier."),
@@ -304,7 +307,7 @@ class AssemblyImageTargetTests(unittest.TestCase):
 
             self.assertEqual(generated["input"]["creative_brief"], "A lone lighthouse at dusk.")
             self.assertEqual(refined["input"]["aspect_ratio"], "1:1")
-            # No duration is echoed back, and no "None seconds" line reaches the model.
+            # The sent duration is dropped, not echoed back.
             self.assertIsNone(generated["input"]["duration_seconds"])
             self.assertIsNone(refined["input"]["duration_seconds"])
             for assembled in (generated, refined):
@@ -315,28 +318,28 @@ class AssemblyImageTargetTests(unittest.TestCase):
                 self.assertIn("1:1", content)
                 self.assertIn("spect ratio: 1:1", content)
 
-    def test_image_mode_still_rejects_a_supplied_duration(self):
+    def test_an_image_mode_ignores_any_duration_value_it_is_sent(self):
+        # A stale or hand-made client must not be able to break an image target by
+        # sending a duration; the field simply does not apply to it.
         for mode in self.IMAGE_MODES:
-            with self.subTest(mode=mode), patch(
-                "backend.assembly.STORE.manifest",
-                return_value=self.manifest(mode),
-            ):
-                with self.assertRaises(AssemblyError) as generation:
-                    assemble_request(self.body(mode, duration_seconds=10))
-                with self.assertRaises(AssemblyError) as refinement:
-                    assemble_refinement(
+            for duration in (10, 6, 20, 1, 0, None):
+                with self.subTest(mode=mode, duration=duration), patch(
+                    "backend.assembly.STORE.manifest",
+                    return_value=self.manifest(mode),
+                ):
+                    generated = assemble_request(self.body(mode, duration_seconds=duration))
+                    refined = assemble_refinement(
                         self.body(
                             mode,
-                            duration_seconds=10,
+                            duration_seconds=duration,
                             current_prompt="A lighthouse.",
                             instruction="Stormier.",
                         ),
                         None,
                     )
 
-            for raised in (generation, refinement):
-                self.assertEqual(raised.exception.code, "INVALID_DURATION")
-                self.assertEqual(raised.exception.message, "The selected mode does not accept a duration.")
+                self.assertIsNone(generated["input"]["duration_seconds"])
+                self.assertIsNone(refined["input"]["duration_seconds"])
 
     def test_refining_with_a_cached_generation_passes_its_own_context(self):
         mode = "Krea2TextToImage"

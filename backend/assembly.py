@@ -37,14 +37,12 @@ def _required_duration(mode: str, supplied: Any) -> float | None:
     """Validate a duration supplied alongside a request, per the mode's own rules.
 
     Used by refinement, whose context may come from the client rather than from a
-    cached generation. A mode without a duration range (an image target) returns
-    None and needs no value, but a non-null one means the caller sent a video-only
-    field, so it is rejected rather than silently ignored.
+    cached generation. A mode with no duration range (an image target) has nothing
+    to validate: the studio sends one studio-wide duration with every request, so
+    its presence here is normal and the value is simply ignored.
     """
     bounds = _duration_bounds(mode)
     if bounds is None:
-        if supplied is not None:
-            raise AssemblyError("INVALID_DURATION", "The selected mode does not accept a duration.")
         return None
     return _checked_duration(supplied, bounds)
 
@@ -229,17 +227,15 @@ def _validate_reference_tags(text: str, manifest: dict[str, Any], mode: str, fie
         )
 
 
-def _validated_generation_context(source: dict[str, Any], mode: str) -> tuple[float, str, str]:
+def _validated_generation_context(source: dict[str, Any], mode: str) -> tuple[float | None, str, str]:
     bounds = _duration_bounds(mode)
-    supplied = source.get("duration_seconds")
     if bounds is None:
-        # An image target has no duration. Absent or null is expected; a real
-        # number means the caller sent a video-only field and must be told so.
-        if supplied not in (None, 0):
-            raise AssemblyError("INVALID_DURATION", "The selected mode does not accept a duration.")
+        # An image target has no duration. The studio still sends the studio-wide
+        # duration with every request, so the value is ignored rather than treated
+        # as an error - there is nothing for it to be wrong about.
         duration = None
     else:
-        duration = _checked_duration(supplied, bounds)
+        duration = _checked_duration(source.get("duration_seconds"), bounds)
     aspect_ratio = _required_text(source, "aspect_ratio", "Aspect ratio")
     allowed = _aspect_ratios(mode)
     if aspect_ratio not in allowed:
@@ -363,16 +359,11 @@ def assemble_request(body: dict[str, Any]) -> dict[str, Any]:
     aspect_ratio = _required_text(body, "aspect_ratio", "Aspect ratio")
     if aspect_ratio not in _aspect_ratios(mode):
         raise AssemblyError("INVALID_ASPECT_RATIO", "The selected aspect ratio is not supported.")
-    # Image targets declare no duration, so generation must not demand one. A
-    # duration that IS supplied for such a mode is still an error: the frontend
-    # would be sending a field the target has no place for.
+    # Duration is a target capability. Image targets declare none, and the studio
+    # sends the studio-wide value with every request, so a duration here is simply
+    # not applicable rather than invalid.
     bounds = _duration_bounds(mode)
-    duration = body.get("duration_seconds")
-    if bounds is None:
-        if duration is not None:
-            raise AssemblyError("INVALID_DURATION", "The selected mode does not accept a duration.")
-    else:
-        duration = _checked_duration(duration, bounds)
+    duration = _checked_duration(body.get("duration_seconds"), bounds) if bounds else None
     try:
         session_id = parse_session_id(body.get("session_id"))
     except ValueError as error:

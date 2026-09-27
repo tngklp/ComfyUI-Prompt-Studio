@@ -2,9 +2,9 @@
 
 Use Prompt Studio without ComfyUI.
 
-Current Standalone version: **1.2.4**
+Current Standalone version: **1.2.5**
 
-[Download Prompt Studio Standalone v1.2.4](../../../releases/download/standalone-v1.2.4/Prompt-Studio-Standalone-Windows-v1.2.4.zip)
+[Download Prompt Studio Standalone v1.2.5](../../../releases/download/standalone-v1.2.5/Prompt-Studio-Standalone-Windows-v1.2.5.zip)
 
 ## This is the Standalone version
 
@@ -91,10 +91,10 @@ PS_PROJECTOR="/path/to/mmproj.gguf" \
 Python 3.10 or newer is required. The Linux launcher has been tested on WSL2. Managed
 Local GGUF is Windows-only, so on Linux use External llama.cpp or Ollama instead.
 
-## What's new in v1.2.4
+## What's new in v1.2.5
 
-- Fixed **generating a prompt for an image target** (Anima, Qwen Image 2.1, Krea 2), which failed with `INVALID_REQUEST: Required fields are missing (duration_seconds)`. The 1.2.3 release fixed only the Refine path. Duration is now required only for targets that declare one, and an image prompt no longer carries a `Duration:` line at all.
-- Added **`update.bat`** for one-step updates.
+- Fixed **"Generate prompt" for every image target** (Qwen Image 2.1 T2I/Edit, Krea 2, Anima), which returned `INVALID_DURATION: The selected mode does not accept a duration.` A mode that declares no duration now ignores the studio-wide duration it is sent, instead of rejecting the request. Video and music prompts were never affected.
+- `update.bat` can now move you between releases; this is the first version it can update you onto.
 
 ## Updating
 
@@ -219,7 +219,7 @@ From the repository root, build the portable package with:
 powershell -ExecutionPolicy Bypass -File scripts\build_standalone.ps1
 ```
 
-The result is `dist\Prompt-Studio-Standalone-Windows-v1.2.4.zip`. It records the
+The result is `dist\Prompt-Studio-Standalone-Windows-v1.2.5.zip`. It records the
 repository commit in `upstream\UPSTREAM_SNAPSHOT.txt` and excludes local settings,
 logs, models, `llama-server`, CUDA libraries, and test artifacts.
 
