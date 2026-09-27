@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.3 - 2026-09-27
+
+### Fixed
+
+- **Refine failed for every image target.** Anima, Qwen Image 2.1 and Krea 2 returned `INVALID_DURATION: The selected mode does not accept a duration.` when refining a prompt. Generation and refinement both validated a duration in the shared video branch, so a target that declares `durations: null` was rejected before its guide ran. Duration is now validated only where the target declares a range, and the refinement path accepts a context with no duration.
+- The `Duration:` line is omitted from an image request rather than rendered as `None seconds`, which the prompt model could read as a constraint.
+- A duration sent anyway for a target that has none is still rejected, so a stray video value cannot pass silently.
+
 ## 1.1.2 - 2026-09-26
 
 ### Fixed

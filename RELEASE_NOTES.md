@@ -1,11 +1,11 @@
-# Prompt Studio for ComfyUI v1.1.2
+# Prompt Studio for ComfyUI v1.1.3
 
 ComfyUI extension release. Install through ComfyUI Manager or extract the ZIP into
 `custom_nodes`.
 
 ## Download
 
-Download **Prompt-Studio-ComfyUI-v1.1.2.zip** from the release assets below.
+Download **Prompt-Studio-ComfyUI-v1.1.3.zip** from the release assets below.
 
 Do not download **Source code (zip)** or **Source code (tar.gz)** for normal use.
 
@@ -22,18 +22,15 @@ install.
 
 ## What's new
 
-- **Fixed "Unsupported Media" with local llama.cpp and KoboldCpp servers.** A local server
-  that has a vision projector loaded was still reported as text-only, so attached images
-  were refused. Its OpenAI-compatible model list does not describe image support at all;
-  the projector is only visible on the server's own `/props` endpoint, which Prompt Studio
-  now reads. Qwen3.8-27B with an `mmproj` file over KoboldCpp, LM Studio, or `llama-server`
-  is detected automatically - no configuration needed.
-- **You can now declare image support by hand for a Custom endpoint.** If a server hides
-  its projector or runs behind a proxy, a new switch on the connected API panel
-  (**Endpoint accepts image_url inputs**) enables vision without reconnecting. The choice is
-  remembered.
-- The connected API panel now explains where the image support came from - detected from the
-  server, or declared by you.
+- **Fixed refining a prompt for an image target.** Refine failed for Anima, Qwen Image 2.1
+  and Krea 2 with `INVALID_DURATION: The selected mode does not accept a duration.`
+  Generation and refinement both validated a video-only duration for every target, so the
+  three image targets - which have no duration at all - were rejected before the request
+  reached their guide. Duration is now validated only for the targets that declare one.
+- The duration line is omitted from an image request instead of being written as
+  `None seconds`, so the prompt model no longer reads an absent field as a constraint.
+- An image target that is sent a duration anyway is still rejected with a clear error,
+  rather than silently ignoring a field that does not apply to it.
 
 ## Requirements
 

@@ -20,11 +20,59 @@ def _aspect_ratios(mode: str) -> tuple[str, ...]:
     return target_for_mode(mode).aspect_ratios
 
 
-def _duration_bounds(mode: str) -> tuple[float, float]:
+def _duration_bounds(mode: str) -> tuple[float, float] | None:
+    """The mode's duration range, or None when the target has no duration at all.
+
+    A target with ``durations: null`` (every image target) legitimately has no
+    duration field. That is not an error - only a *supplied* duration is, and that
+    is checked where the value is read.
+    """
     durations = target_for_mode(mode).durations
     if durations is None:
-        raise AssemblyError("INVALID_DURATION", "The selected mode does not accept a duration.")
+        return None
     return durations.min, durations.max
+
+
+def _required_duration(mode: str, supplied: Any) -> float | None:
+    """Validate a duration supplied alongside a request, per the mode's own rules.
+
+    Used by refinement, whose context may come from the client rather than from a
+    cached generation. A mode without a duration range (an image target) returns
+    None and needs no value, but a non-null one means the caller sent a video-only
+    field, so it is rejected rather than silently ignored.
+    """
+    bounds = _duration_bounds(mode)
+    if bounds is None:
+        if supplied is not None:
+            raise AssemblyError("INVALID_DURATION", "The selected mode does not accept a duration.")
+        return None
+    return _checked_duration(supplied, bounds)
+
+
+def _checked_duration(supplied: Any, bounds: tuple[float, float]) -> float:
+    minimum, maximum = bounds
+    if (
+        not isinstance(supplied, (int, float))
+        or isinstance(supplied, bool)
+        or supplied < minimum
+        or supplied > maximum
+    ):
+        raise AssemblyError(
+            "INVALID_DURATION",
+            f"Duration must be between {minimum:g} and {maximum:g} seconds.",
+        )
+    return supplied
+
+
+def _duration_line(label: str, duration: float | None) -> str:
+    """A duration line for the prompt, omitted entirely for a mode without one.
+
+    Image targets have no duration, and printing ``None seconds`` would read as a
+    constraint to the prompt model rather than as an absent field.
+    """
+    if duration is None:
+        return ""
+    return f"{label}: {duration:g} seconds\n"
 
 
 def _mode_or_error(mode: str) -> str:
@@ -182,18 +230,16 @@ def _validate_reference_tags(text: str, manifest: dict[str, Any], mode: str, fie
 
 
 def _validated_generation_context(source: dict[str, Any], mode: str) -> tuple[float, str, str]:
-    minimum, maximum = _duration_bounds(mode)
-    duration = source.get("duration_seconds")
-    if (
-        not isinstance(duration, (int, float))
-        or isinstance(duration, bool)
-        or duration < minimum
-        or duration > maximum
-    ):
-        raise AssemblyError(
-            "INVALID_DURATION",
-            f"Duration must be between {minimum:g} and {maximum:g} seconds.",
-        )
+    bounds = _duration_bounds(mode)
+    supplied = source.get("duration_seconds")
+    if bounds is None:
+        # An image target has no duration. Absent or null is expected; a real
+        # number means the caller sent a video-only field and must be told so.
+        if supplied not in (None, 0):
+            raise AssemblyError("INVALID_DURATION", "The selected mode does not accept a duration.")
+        duration = None
+    else:
+        duration = _checked_duration(supplied, bounds)
     aspect_ratio = _required_text(source, "aspect_ratio", "Aspect ratio")
     allowed = _aspect_ratios(mode)
     if aspect_ratio not in allowed:
@@ -317,9 +363,16 @@ def assemble_request(body: dict[str, Any]) -> dict[str, Any]:
     aspect_ratio = _required_text(body, "aspect_ratio", "Aspect ratio")
     if aspect_ratio not in _aspect_ratios(mode):
         raise AssemblyError("INVALID_ASPECT_RATIO", "The selected aspect ratio is not supported.")
+    # Image targets declare no duration, so generation must not demand one. A
+    # duration that IS supplied for such a mode is still an error: the frontend
+    # would be sending a field the target has no place for.
+    bounds = _duration_bounds(mode)
     duration = body.get("duration_seconds")
-    if not isinstance(duration, (int, float)) or isinstance(duration, bool) or duration <= 0 or duration > 20:
-        raise AssemblyError("INVALID_DURATION", "Duration must be between 1 and 20 seconds.")
+    if bounds is None:
+        if duration is not None:
+            raise AssemblyError("INVALID_DURATION", "The selected mode does not accept a duration.")
+    else:
+        duration = _checked_duration(duration, bounds)
     try:
         session_id = parse_session_id(body.get("session_id"))
     except ValueError as error:
@@ -398,7 +451,7 @@ def assemble_request(body: dict[str, Any]) -> dict[str, Any]:
     directives = "\n\n".join(part for part in (options_directive, character_directive) if part)
     user_content = (
         f"Mode: {mode}\n"
-        f"Duration: {duration:g} seconds\n"
+        f"{_duration_line('Duration', duration)}"
         f"Aspect ratio: {aspect_ratio}\n\n"
         f"{manifest_note}"
         f"{references}\n\n"
@@ -500,6 +553,11 @@ def assemble_refinement(
         raise AssemblyError("INVALID_MEDIA_MANIFEST", "The media manifest is not valid.", manifest["violations"])
     context_source = cached_generation if cached_generation and cached_generation.get("mode") == mode else body
     duration, aspect_ratio, creative_brief = _validated_generation_context(context_source, mode)
+    # No cached pass and no duration in the body (the normal case for an image
+    # target, which declares none) leaves nothing to validate. When the body does
+    # carry one it is checked against the mode, so a stray video value is caught.
+    if cached_generation is None:
+        _required_duration(mode, body.get("duration_seconds"))
     _validate_reference_tags(creative_brief, manifest, mode, "Creative Brief")
     _validate_reference_tags(instruction, manifest, mode, "Revision instruction")
     if mode == "Reference":
@@ -515,7 +573,7 @@ def assemble_refinement(
         "Rewrite the current prompt according to the revision instruction. "
         "Return only the complete revised prompt. Do not discuss the changes.\n\n"
         f"Original mode: {mode}\n"
-        f"Original duration: {duration:g} seconds\n"
+        f"{_duration_line('Original duration', duration)}"
         f"Original aspect ratio: {aspect_ratio}\n"
         f"Original Creative Brief:\n{creative_brief}\n\n"
         + (f"{options_directive}\n\n" if options_directive else "")

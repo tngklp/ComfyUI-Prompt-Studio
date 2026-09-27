@@ -1,5 +1,10 @@
 # Standalone changelog
 
+## 1.2.3 - 2026-09-27
+
+- Fixed refining a prompt for an image target (Anima, Qwen Image 2.1, Krea 2), which failed with `INVALID_DURATION: The selected mode does not accept a duration.` Duration is now validated only for targets that declare one, and the duration line is omitted from an image request.
+- Requires Prompt Studio core `1.1.3`.
+
 ## 1.2.2 - 2026-09-26
 
 - Fixed "Unsupported Media" when connecting to a local llama.cpp or KoboldCpp server that has a vision projector loaded; the projector is now detected automatically from the server.

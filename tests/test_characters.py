@@ -301,7 +301,6 @@ class CharacterDirectiveTests(unittest.TestCase):
                 "mode": "AnimaTextToImage",
                 "session_id": self.session,
                 "aspect_ratio": "1:1",
-                "duration_seconds": 5,
                 "creative_brief": "miku on a rooftop",
                 **body,
             })

@@ -1124,6 +1124,38 @@ test("text-only Direct models expose T2VA and Music3", () => {
   assert.equal(isGenerationModeAvailable({ family: "external", capabilities: { images: false } }, "Reference"), true);
 });
 
+test("an image target never sends a duration, because it declares none", () => {
+  // Regression: the studio keeps one studio-wide duration, and both payload builders
+  // used to send it unconditionally. Image targets (Anima, Qwen Image 2.1, Krea 2)
+  // declare `durations: null`, so the backend rejected every generate AND refine for
+  // them with INVALID_DURATION before it ever reached the guide.
+  const state = createStudioState({ sessionId: "11111111-2222-4333-8444-555555555555", storage: memoryStorage() });
+  selectModelState(state, { id: "external-model", family: "external", capabilities: { audio: false } });
+  state.durationSeconds = 10;
+  state.aspectRatio = "1:1";
+
+  for (const mode of ["AnimaTextToImage", "Krea2TextToImage", "TextToImage"]) {
+    state.mode = mode;
+    const generated = buildGeneratePayload(state, { creativeBrief: "A lighthouse.", seed: 5 });
+    const refined = buildRefinePayload(state, {
+      currentPrompt: "A lighthouse.",
+      instruction: "Stormier.",
+      creativeBrief: "A lighthouse.",
+      seed: 5,
+    });
+    assert.equal(Object.hasOwn(generated, "duration_seconds"), false, `${mode} generate`);
+    assert.equal(Object.hasOwn(refined, "duration_seconds"), false, `${mode} refine`);
+    assert.equal(generated.aspect_ratio, "1:1");
+    assert.equal(refined.aspect_ratio, "1:1");
+  }
+
+  // A video mode still carries it.
+  state.mode = "Reference";
+  state.durationSeconds = 8;
+  assert.equal(buildGeneratePayload(state, { creativeBrief: "A shot.", seed: 5 }).duration_seconds, 8);
+  assert.equal(buildRefinePayload(state, { currentPrompt: "P", instruction: "I", creativeBrief: "B", seed: 5 }).duration_seconds, 8);
+});
+
 test("Generate and Refine payloads are built from state rather than Settings DOM", () => {
   const state = createStudioState({ sessionId: "11111111-2222-4333-8444-555555555555", storage: memoryStorage() });
   state.mode = "Reference";

@@ -32,7 +32,6 @@ def _assemble(store, session, **body):
             "mode": "AnimaTextToImage",
             "session_id": session,
             "aspect_ratio": "1:1",
-            "duration_seconds": 5,
             "creative_brief": "a cat on a fence",
             **body,
         })

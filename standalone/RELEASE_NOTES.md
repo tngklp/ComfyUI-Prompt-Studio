@@ -1,25 +1,23 @@
-# Prompt Studio Standalone v1.2.2
+# Prompt Studio Standalone v1.2.3
 
 Standalone Windows version. ComfyUI is not required.
 
 ## Download
 
-Download **Prompt-Studio-Standalone-Windows-v1.2.2.zip** from the release assets below.
+Download **Prompt-Studio-Standalone-Windows-v1.2.3.zip** from the release assets below.
 
 Do not download **Source code (zip)** or **Source code (tar.gz)** for normal use.
 Do not install this package into ComfyUI `custom_nodes`.
 
 ## What's new
 
-- **Fixed "Unsupported Media" with local vision servers.** Connecting to a llama.cpp or
-  KoboldCpp endpoint that has a vision projector loaded still reported the model as
-  text-only, so attached images were refused. The projector is now detected automatically
-  from the server, with no configuration needed.
-- **You can now declare image support by hand.** If a server hides its projector or runs
-  behind a proxy, a switch on the connected API panel enables vision without reconnecting.
-- The connected API panel now explains whether image support was detected from the server
-  or declared by you.
-- Requires Prompt Studio core `1.1.2`.
+- **Fixed refining a prompt for an image target.** Refine failed for Anima, Qwen Image 2.1
+  and Krea 2 with `INVALID_DURATION: The selected mode does not accept a duration.`
+  Duration was validated for every target, so the three image targets - which have no
+  duration at all - were rejected before the request reached their guide.
+- The duration line is omitted from an image request instead of being written as
+  `None seconds`, so the prompt model no longer reads an absent field as a constraint.
+- Requires Prompt Studio core `1.1.3`.
 
 ComfyUI-only controls, including Auto VRAM management and Add to workflow, are not
 shown in Standalone.

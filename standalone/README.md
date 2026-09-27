@@ -2,9 +2,9 @@
 
 Use Prompt Studio without ComfyUI.
 
-Current Standalone version: **1.2.2**
+Current Standalone version: **1.2.3**
 
-[Download Prompt Studio Standalone v1.2.2](../../../releases/download/standalone-v1.2.2/Prompt-Studio-Standalone-Windows-v1.2.2.zip)
+[Download Prompt Studio Standalone v1.2.3](../../../releases/download/standalone-v1.2.3/Prompt-Studio-Standalone-Windows-v1.2.3.zip)
 
 ## This is the Standalone version
 
@@ -91,11 +91,9 @@ PS_PROJECTOR="/path/to/mmproj.gguf" \
 Python 3.10 or newer is required. The Linux launcher has been tested on WSL2. Managed
 Local GGUF is Windows-only, so on Linux use External llama.cpp or Ollama instead.
 
-## What's new in v1.2.2
+## What's new in v1.2.3
 
-- Fixed **"Unsupported Media"** when connecting to a local llama.cpp or KoboldCpp server that has a vision projector loaded; the projector is now detected automatically from the server, with no configuration needed.
-- Added a manual **Endpoint accepts image_url inputs** switch for servers that hide their projector or run behind a proxy.
-- The connected API panel now says whether image support was detected from the server or declared by you.
+- Fixed **refining a prompt for an image target** (Anima, Qwen Image 2.1, Krea 2), which failed with `INVALID_DURATION: The selected mode does not accept a duration.` Duration is now validated only for targets that declare one, and the duration line is omitted from an image request rather than written as `None seconds`.
 
 See [Sequence usage](../docs/USAGE.md#sequence) for media scope, refinement, and limitations. Media Composer, Media Editor, themes, and provider settings remain available.
 
@@ -198,7 +196,7 @@ From the repository root, build the portable package with:
 powershell -ExecutionPolicy Bypass -File scripts\build_standalone.ps1
 ```
 
-The result is `dist\Prompt-Studio-Standalone-Windows-v1.2.2.zip`. It records the
+The result is `dist\Prompt-Studio-Standalone-Windows-v1.2.3.zip`. It records the
 repository commit in `upstream\UPSTREAM_SNAPSHOT.txt` and excludes local settings,
 logs, models, `llama-server`, CUDA libraries, and test artifacts.
 
