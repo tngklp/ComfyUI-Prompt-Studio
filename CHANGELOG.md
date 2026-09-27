@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.6 - 2026-09-28
+
+### Fixed
+
+- **Direct GGUF rejected a working runtime as broken.** `llama-cpp-python` 0.4.x was refused with "llama-cpp-python is installed, but the runtime is not usable", so Direct GGUF could not be used at all. The supported range is now `0.3.34` up to, but not including, `0.5.0`, which accepts the 0.4.x series including the CUDA `cu130` builds that carry the vision handlers. The 0.5.x series stays rejected because it has not been validated. Native compatibility and GPU execution are still exercised only when a Direct model actually loads.
+- **Anima assumed every character was a girl.** Selecting one female and one male character produced `2girls`, because the character instruction named the characters but never stated which subject count tag to write, and the model fell back on its `1girl` habit. The instruction now states the count tag explicitly, derived from each character's own gender, and says a mixed pair is `1girl, 1boy`. A character whose index row records no gender results in no count tag rather than a guess.
+
+### Changed
+
+- **Anima's recommended quality prefix is now `masterpiece, best quality, highres, score_9`**, replacing `masterpiece, best quality, score_7`. This applies to the system prompt and the starter prompt in the Anima workspace.
+
 ## 1.1.5 - 2026-09-27
 
 ### Fixed

@@ -95,8 +95,28 @@ class RuntimeDiagnosticsTests(unittest.TestCase):
             self.assertFalse(runtime_diagnostics._is_tested_windows_cuda13_environment({"cuda_version": "12.9"}))
             self.assertFalse(runtime_diagnostics._is_tested_windows_cuda13_environment(None))
 
-    def test_unsupported_version_is_a_troubleshooting_state(self):
+    def test_04_series_is_supported(self):
         result = self.probe("0.4.0")
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["package_version"], "0.4.0")
+        self.assertEqual(result["onboarding"]["state"], "ready")
+
+    def test_local_version_suffix_from_a_fork_is_supported(self):
+        result = self.probe("0.4.0+cu130")
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["onboarding"]["state"], "ready")
+
+    def test_unsupported_version_is_a_troubleshooting_state(self):
+        result = self.probe("0.5.0")
+
+        self.assertEqual(result["status"], "unavailable")
+        self.assertEqual(result["error_type"], "RuntimeVersionError")
+        self.assertEqual(result["onboarding"]["state"], "broken")
+
+    def test_below_the_floor_is_a_troubleshooting_state(self):
+        result = self.probe("0.3.33")
 
         self.assertEqual(result["status"], "unavailable")
         self.assertEqual(result["error_type"], "RuntimeVersionError")

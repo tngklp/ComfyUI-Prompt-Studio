@@ -5,7 +5,7 @@ tags, natural-language captions, or a mixture of the two. It is a single-mode
 text-to-image target, so this strategy is the narrowest of the image strategies.
 
 What separates it from Qwen Image 2.1 and Krea 2 is its *vocabulary*. Anima has
-its own positive quality prefix (``masterpiece, best quality, score_7, safe``) and
+its own positive quality prefix (``masterpiece, best quality, highres, score_9``) and
 its own negative vocabulary, an ``@`` prefix that marks an artist tag, a tag order
 that begins with the subject count, and dataset tags that change the caption
 dialect entirely. The audit therefore checks Anima-specific habits rather than the

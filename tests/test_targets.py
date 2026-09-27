@@ -9,6 +9,7 @@ import json
 import re
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from backend import targets
 from backend.guides import guide_for_mode, load_guide
@@ -846,7 +847,7 @@ class AnimaTargetTests(unittest.TestCase):
                 self.assertEqual(self.strategy.normalize_prompt_text(keep), keep)
 
     def test_a_prompt_without_a_rating_is_returned_unchanged(self):
-        clean = "masterpiece, best quality, score_7, 1girl, solo, long hair"
+        clean = "masterpiece, best quality, highres, score_9, 1girl, solo, long hair"
         self.assertEqual(self.strategy.normalize_prompt_text(clean), clean)
 
     def test_prose_without_a_rating_is_returned_unchanged(self):
@@ -874,6 +875,100 @@ class AnimaTargetTests(unittest.TestCase):
         self.assertIn("never emit", guide)
         system_prompt = system_prompt_for_mode("AnimaTextToImage").lower()
         self.assertIn("never add a safety tag", system_prompt)
+
+    def test_the_system_prompt_states_the_configured_quality_prefix(self):
+        prompt = system_prompt_for_mode("AnimaTextToImage")
+        self.assertIn("masterpiece, best quality, highres, score_9", prompt)
+        # The superseded prefix must not linger anywhere in the instruction.
+        self.assertNotIn("score_7", prompt)
+
+    def test_the_mode_default_opens_with_the_configured_quality_prefix(self):
+        source = (ROOT / "web" / "mode_defaults.js").read_text(encoding="utf-8")
+        self.assertIn("masterpiece, best quality, highres, score_9", source)
+        self.assertNotIn("masterpiece, best quality, score_7", source)
+
+
+class AnimaSubjectCountTests(unittest.TestCase):
+    """The subject count tag is derived from the selected characters.
+
+    Before this, the directive named the characters but never said which count tag to
+    write, so a model assumed every character was female and emitted ``2girls`` for a
+    one-girl-one-boy pair.
+    """
+
+    def setUp(self):
+        from backend import assembly
+
+        self.assembly = assembly
+        self.row = lambda character, trigger, *core: {
+            "character": character,
+            "trigger": trigger,
+            "core_tags": list(core),
+        }
+
+    def _directive(self, found):
+        with patch.object(
+            self.assembly.characters,
+            "resolve",
+            return_value={"characters": found, "unknown": []},
+        ):
+            return self.assembly._character_directive(
+                "AnimaTextToImage", [entry["character"] for entry in found]
+            )
+
+    def test_one_female_character_yields_1girl(self):
+        text = self._directive([self.row("hatsune_miku", "hatsune miku, vocaloid", "1girl")])
+        self.assertIn("`1girl`", text)
+        self.assertNotIn("`1boy`", text)
+
+    def test_a_mixed_pair_yields_1girl_and_1boy_not_2girls(self):
+        text = self._directive([
+            self.row("hatsune_miku", "hatsune miku, vocaloid", "1girl"),
+            self.row("kaito", "kaito, vocaloid", "1boy"),
+        ])
+        self.assertIn("`1girl`", text)
+        self.assertIn("`1boy`", text)
+        self.assertNotIn("2girls", text)
+        self.assertIn("they are mixed", text)
+
+    def test_two_female_characters_yield_2girls(self):
+        text = self._directive([
+            self.row("hatsune_miku", "hatsune miku, vocaloid", "1girl"),
+            self.row("megurine_luka", "megurine luka, vocaloid", "1girl"),
+        ])
+        self.assertIn("`2girls`", text)
+        self.assertNotIn("`1boy`", text)
+        self.assertIn("Every selected character is female", text)
+
+    def test_two_male_characters_yield_2boys(self):
+        text = self._directive([
+            self.row("kaito", "kaito, vocaloid", "1boy"),
+            self.row("gakupo", "gakupo, vocaloid", "1boy"),
+        ])
+        self.assertIn("`2boys`", text)
+        self.assertNotIn("`1girl`", text)
+        self.assertNotIn("`2girls`", text)
+        self.assertIn("Every selected character is male", text)
+
+    def test_a_character_without_a_gender_count_asserts_nothing(self):
+        # The index row carries no count tag, so the directive must not guess a gender.
+        text = self._directive([self.row("mystery", "mystery, some series")])
+        self.assertNotIn("`1girl`", text)
+        self.assertNotIn("`1boy`", text)
+        self.assertNotIn("write exactly", text)
+        self.assertNotIn("Every selected character is", text)
+
+    def test_solo_is_never_emitted_because_a_scene_may_hold_several(self):
+        text = self._directive([self.row("hatsune_miku", "hatsune miku, vocaloid", "1girl", "solo")])
+        self.assertNotIn("`solo`", text)
+
+    def test_a_non_anima_mode_gets_no_character_directive(self):
+        text = self.assembly._character_directive("T2VA", ["hatsune miku, vocaloid"])
+        self.assertEqual(text, "")
+
+    def test_an_empty_selection_gets_no_character_directive(self):
+        self.assertEqual(self.assembly._character_directive("AnimaTextToImage", []), "")
+        self.assertEqual(self.assembly._character_directive("AnimaTextToImage", None), "")
 
 
 class VideoTargetRegressionTests(unittest.TestCase):

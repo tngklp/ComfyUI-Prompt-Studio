@@ -11,7 +11,10 @@ from typing import Any
 
 
 MINIMUM_VERSION = (0, 3, 34)
-MAXIMUM_VERSION = (0, 4, 0)
+# Exclusive upper bound. The 0.4.x series - upstream and the JamePeng cu130 fork - keeps
+# the high-level API, the MTMD vision handlers and the ``llama_cpp`` module layout this
+# target path uses, so it is accepted. The 0.5.x series is unknown and stays rejected.
+MAXIMUM_VERSION = (0, 5, 0)
 TESTED_WINDOWS_CUDA13_INSTALL_COMMAND = (
     '.\\python_embeded\\python.exe -m pip install --only-binary=:all: '
     '--extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu130 '

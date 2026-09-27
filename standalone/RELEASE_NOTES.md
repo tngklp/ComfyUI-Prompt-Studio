@@ -1,10 +1,10 @@
-# Prompt Studio Standalone v1.2.5
+# Prompt Studio Standalone v1.2.6
 
 Standalone Windows version. ComfyUI is not required.
 
 ## Download
 
-Download **Prompt-Studio-Standalone-Windows-v1.2.5.zip** from the release assets below.
+Download **Prompt-Studio-Standalone-Windows-v1.2.6.zip** from the release assets below.
 
 Do not download **Source code (zip)** or **Source code (tar.gz)** for normal use.
 Do not install this package into ComfyUI `custom_nodes`.
@@ -21,18 +21,15 @@ It downloads the latest release, replaces the application files, and keeps your 
 `models\`, `.venv\` and any `llama-server` or CUDA files you added. Your previous version
 is backed up to a temp folder, so a bad update can be undone. Run `start.bat` afterwards.
 
-This is the first release you can update with `update.bat` alone. Updating **to** 1.2.5
-from 1.2.4 still needs that one manual ZIP extract, because the copy of `update.bat`
-being replaced is the one doing the replacing.
-
 ## What's new
 
-- **Fixed "Generate prompt" for every image target.** Qwen Image 2.1 (T2I and Edit),
-  Krea 2 and Anima returned `INVALID_DURATION: The selected mode does not accept a
-  duration.` Video and music prompts were never affected.
-- Image targets now ignore the duration value the studio sends with every request, instead
-  of rejecting the request for carrying a field it cannot use.
-- Requires Prompt Studio core `1.1.5`.
+- **Anima's quality tags are now `masterpiece, best quality, highres, score_9`.**
+  Previously `masterpiece, best quality, score_7`. This applies to the system prompt and
+  the starter prompt in the Anima workspace.
+- **Anima no longer assumes every character is a girl.** Selecting one female and one
+  male character wrote `2girls`. The subject count tag is now stated explicitly and
+  derived from each character's own gender, so a mixed pair is `1girl, 1boy`.
+- Requires Prompt Studio core `1.1.6`.
 
 ComfyUI-only controls, including Auto VRAM management and Add to workflow, are not
 shown in Standalone.

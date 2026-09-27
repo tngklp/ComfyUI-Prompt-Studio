@@ -169,6 +169,41 @@ def _mode_options_directive(mode: str, resolved: dict[str, str | None]) -> str:
     return "\n".join(lines)
 
 
+def _anima_subject_tags(found: list[dict[str, Any]]) -> tuple[list[str], int, int]:
+    """Derive the Anima subject count tag from the selected characters.
+
+    Anima needs a bare subject count as its first tag (``1girl``, ``2boys``,
+    ``1girl, 1boy``). The character index already records each character's own Danbooru
+    count tags in ``core_tags`` - ``1girl`` for Hatsune Miku, ``1boy`` for a male
+    character - so the scene's count comes from data instead of from the model's
+    assumption, which silently made every character female.
+
+    Returns ``(groups, girl_count, boy_count)`` where ``groups`` is the ordered tag
+    list. ``solo`` is deliberately excluded: it asserts the subject is alone, which is
+    wrong the moment a second character is selected.
+    """
+    counts: dict[str, int] = {}
+    for entry in found:
+        for tag in entry.get("core_tags") or ():
+            normalized = str(tag).strip().lower()
+            if re.fullmatch(r"\d+\s*(?:girls?|boys?|others?)", normalized):
+                counts[normalized] = counts.get(normalized, 0) + 1
+    girl_count = sum(count for tag, count in counts.items() if "girl" in tag)
+    boy_count = sum(count for tag, count in counts.items() if "boy" in tag)
+    # Whole-scene counts are the shape Anima's guide asks for: 1girl, 2girls, 2boys.
+    groups: list[str] = []
+    if girl_count:
+        groups.append("1girl" if girl_count == 1 else f"{girl_count}girls")
+    if boy_count:
+        groups.append("1boy" if boy_count == 1 else f"{boy_count}boys")
+    total = girl_count + boy_count
+    # A selected character whose index row carried no gender count leaves the scene
+    # count unknowable, so nothing is asserted rather than guessing a gender.
+    if total < len(found):
+        return [], girl_count, boy_count
+    return groups, girl_count, boy_count
+
+
 def _character_directive(mode: str, names: Any) -> str:
     """Instruction block for the characters the user selected.
 
@@ -185,12 +220,51 @@ def _character_directive(mode: str, names: Any) -> str:
     if not found:
         return ""
     triggers = [entry["trigger"] for entry in found]
+    # The subject count tag is only knowable from the selected characters, so it is
+    # stated here rather than left to the model. Left implicit, a model silently
+    # defaults to `1girl` for every character and writes `2girls` for a mixed pair.
+    # A character whose index row declares no gender keeps its original tag, because
+    # the directive must never assert a gender the index did not record.
+    tag_groups, girl_count, boy_count = _anima_subject_tags(found)
     lines = [
         "Characters: the prompt must include these characters, using exactly this spelling.",
         "Place each character and its series in the tag order between the subject count tag and "
         "the artist tags:",
     ]
     lines.extend(f"- {trigger}" for trigger in triggers)
+    if tag_groups:
+        present = " and ".join(f"`{tag}`" for tag in tag_groups)
+        lines.append(
+            f"The brief already invokes {present}, so write exactly {present} as the subject count "
+            f"tag for this {girl_count + boy_count}-character scene."
+        )
+    lines.append(
+        "Every subject in this scene is a character from the list above. Do not describe, add, or "
+        "imply any subject that is not on that list."
+    )
+    if girl_count and not boy_count:
+        lines.append(
+            "Every selected character is female, so the count tag must be written with `girl`, "
+            "never `boy`."
+        )
+    elif boy_count and not girl_count:
+        lines.append(
+            "Every selected character is male, so the count tag must be written with `boy`, "
+            "never `girl`."
+        )
+    case_rule = (
+        "they are all female, so write `girl`"
+        if girl_count and not boy_count
+        else "they are all male, so write `boy`"
+        if boy_count and not girl_count
+        else "they are mixed, so each character's own tag applies"
+    )
+    lines.append(
+        f"If the brief also names or implies other subjects beyond the selected characters - a "
+        f"crowd, a background figure, an animal - people them as their own tags and keep the "
+        f"selected characters separate from that crowd: {case_rule} for the characters on the "
+        f"list, no matter what the surrounding crowd is."
+    )
     lines.append(
         "For each one, name the character and then describe their basic appearance, as the guide "
         "requires. Do not rename them, do not reorder the character before its series, and do not "

@@ -1,5 +1,12 @@
 # Standalone changelog
 
+## 1.2.6 - 2026-09-28
+
+- Anima's recommended quality prefix is now `masterpiece, best quality, highres, score_9`, replacing `masterpiece, best quality, score_7`. This applies to the system prompt and the starter prompt in the Anima workspace.
+- Fixed Anima assuming every character was a girl: selecting one female and one male character produced `2girls`. The subject count tag is now stated explicitly and derived from each character's gender.
+- The Direct GGUF runtime version range now accepts `llama-cpp-python` 0.4.x, so a CUDA build like `0.4.0+cu130` is no longer reported as an unusable runtime. Standalone Local GGUF uses a selected `llama-server.exe` instead, so this affects the ComfyUI extension only.
+- Requires Prompt Studio core `1.1.6`.
+
 ## 1.2.5 - 2026-09-27
 
 - Fixed Generate for every image target (Qwen Image 2.1 T2I/Edit, Krea 2, Anima), which failed with `INVALID_DURATION: The selected mode does not accept a duration.` A mode that declares no duration now ignores the studio-wide value instead of rejecting it. Video and music prompts were unaffected.
