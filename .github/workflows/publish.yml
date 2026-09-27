@@ -1,18 +1,22 @@
 name: Publish to ComfyUI Registry
 
+# The Comfy Registry publishes the ComfyUI EXTENSION only. Two release lines live
+# on main: `v<extension>` for the extension and `standalone-v<standalone>` for the
+# Windows Standalone, which is not a ComfyUI node and must never be published here.
+# The job-level `if` below is what keeps the standalone releases out.
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - "pyproject.toml"
+  release:
+    types: [published]
 
 permissions:
   contents: read
 
 jobs:
   publish:
+    # Publish only for an extension release tag (`v1.2.3`). This rejects the
+    # standalone line (`standalone-v1.2.3`) and any tag that is not the extension.
+    if: startsWith(github.event.release.tag_name, 'v')
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
