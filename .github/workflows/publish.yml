@@ -13,7 +13,8 @@ permissions:
   contents: read
 
 jobs:
-  publish:
+  publish-node:
+    name: Publish Custom Node to registry
     # Publish for an extension release tag (`v1.1.5`) and for a manual dispatch.
     # This rejects the standalone line (`standalone-v1.1.5`) and any other tag.
     # The workflow_dispatch arm matters: on a manual run github.event.release does
@@ -21,10 +22,9 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'v')
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Publish node
+      - name: Check out code
+        uses: actions/checkout@v7
+      - name: Publish Custom Node
         uses: Comfy-Org/publish-node-action@main
         with:
           personal_access_token: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
