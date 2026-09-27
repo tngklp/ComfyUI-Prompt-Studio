@@ -28,13 +28,17 @@ kirisame_marisa,touhou,"kirisame marisa, touhou","1girl, blonde hair, witch hat"
 """
 
 
-def _big_csv(rows: int = character_data.MIN_CACHEABLE_CHARACTERS + 5) -> str:
-    """A CSV large enough to be treated as a real catalogue rather than a sample."""
+def _big_csv(rows: int = character_data.MIN_CACHEABLE_CHARACTERS + 5, gender: str = "1girl") -> str:
+    """A CSV large enough to be treated as a real catalogue rather than a sample.
+
+    ``gender`` controls the count tag every row carries, so a test can build a
+    catalogue of male characters as readily as the default female one.
+    """
     lines = ["character,copyright,trigger,core_tags,count,url"]
     for index in range(rows):
         lines.append(
             f'character_{index},series_{index},"character {index}, series {index}",'
-            f'"1girl, tag_{index}",{1000 - index},https://example.invalid/{index}'
+            f'"{gender}, tag_{index}",{1000 - index},https://example.invalid/{index}'
         )
     return "\n".join(lines) + "\n"
 
@@ -168,6 +172,39 @@ class CacheWriteTests(unittest.TestCase):
             self.assertIsNotNone(entry)
             self.assertEqual(entry.trigger, "character 7, series 7")
 
+    def test_the_cache_round_trips_the_gender_tag(self):
+        """The cache is what production reads, so the gender tag must survive it.
+
+        1.1.6 derived the Anima subject count from `core_tags`, but `serialize()`
+        never wrote them, so the derivation was inert in every real install.
+        """
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "cache.json"
+            with mock.patch.object(
+                character_data.urllib.request,
+                "urlopen",
+                return_value=_response(_big_csv(gender="1boy").encode()),
+            ):
+                character_data.refresh_cache(path=path)
+            loaded = character_data.load_cache(path)
+            entry = loaded.lookup("character 7") or loaded.lookup("character_7")
+            self.assertIsNotNone(entry)
+            self.assertIn("1boy", entry.core_tags)
+            self.assertEqual(entry.gender, "boy")
+
+    def test_the_cache_stores_only_the_gender_tag(self):
+        """Keeping the whole tag list grew the cache from 4 MB to 20 MB."""
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "cache.json"
+            with mock.patch.object(
+                character_data.urllib.request,
+                "urlopen",
+                return_value=_response(_big_csv(gender="1girl").encode()),
+            ):
+                character_data.refresh_cache(path=path)
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(raw["characters"][0]["core_tags"], ["1girl"])
+
     def test_the_cache_write_leaves_no_temp_files(self):
         # A stray 4 MB temp file per failed attempt would fill the directory, and the
         # atomic write is the only reason a reader can never see a partial index.
@@ -187,9 +224,14 @@ class CacheWriteTests(unittest.TestCase):
             self.assertTrue(character_data.cache_is_stale(Path(folder) / "absent.json"))
 
     def test_a_fresh_cache_is_not_stale(self):
+        # A current-format cache, so only the age rule can make it stale. An empty
+        # object would have no format_version and would read as a version-1 cache.
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "cache.json"
-            path.write_text("{}", encoding="utf-8")
+            path.write_text(
+                json.dumps({"format_version": character_data.CACHE_FORMAT_VERSION}),
+                encoding="utf-8",
+            )
             self.assertFalse(character_data.cache_is_stale(path))
 
     def test_an_old_cache_is_stale(self):
@@ -198,10 +240,97 @@ class CacheWriteTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "cache.json"
-            path.write_text("{}", encoding="utf-8")
+            path.write_text(
+                json.dumps({"format_version": character_data.CACHE_FORMAT_VERSION}),
+                encoding="utf-8",
+            )
             old = time.time() - character_data.CACHE_MAX_AGE_SECONDS - 60
             os.utime(path, (old, old))
             self.assertTrue(character_data.cache_is_stale(path))
+
+
+class CacheFormatVersionTests(unittest.TestCase):
+    """A schema change must reach an existing install without user action.
+
+    Version 1 caches carry no `core_tags`, so the Anima subject count derived an empty
+    list and every character was assumed female. Rather than ask users to delete a
+    file, the cache records its format version and an older one is simply stale.
+    """
+
+    def test_the_format_version_is_written(self):
+        entries = characters.parse_csv(SAMPLE_CSV)
+        payload = json.loads(character_data.serialize(entries, source="test"))
+        self.assertEqual(payload["format_version"], character_data.CACHE_FORMAT_VERSION)
+
+    def test_a_cache_without_a_version_reads_as_version_one(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "cache.json"
+            path.write_text(json.dumps({"characters": []}), encoding="utf-8")
+            self.assertEqual(character_data._cache_format_version(path), 1)
+
+    def test_a_version_one_cache_is_stale_despite_a_fresh_mtime(self):
+        # This is the upgrade path: an install that just ran has a brand-new cache
+        # file, so only the format check can catch it.
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "cache.json"
+            path.write_text(
+                json.dumps({"source": "x", "characters": [{"character": "hatsune_miku"}]}),
+                encoding="utf-8",
+            )
+            self.assertTrue(character_data.cache_is_stale(path))
+
+    def test_a_current_format_cache_is_not_stale(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "cache.json"
+            entries = characters.parse_csv(SAMPLE_CSV)
+            path.write_text(
+                character_data.serialize(entries, source="test"), encoding="utf-8"
+            )
+            self.assertFalse(character_data.cache_is_stale(path))
+
+    def test_an_unknown_newer_version_is_stale_rather_than_trusted(self):
+        # A cache written by a future build may carry a shape this code cannot read.
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "cache.json"
+            path.write_text(
+                json.dumps({"format_version": 99, "characters": []}), encoding="utf-8"
+            )
+            self.assertTrue(character_data.cache_is_stale(path))
+
+    def test_a_corrupt_cache_is_stale(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "cache.json"
+            path.write_text("{not json", encoding="utf-8")
+            self.assertTrue(character_data.cache_is_stale(path))
+
+    def test_the_upgrade_path_refetches_and_gains_gender_tags(self):
+        """End to end: a v1 cache on disk becomes a v2 cache after one ensure."""
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "cache.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "source": "AnimaDex export",
+                        "characters": [
+                            {"character": "hatsune_miku", "copyright": "vocaloid",
+                             "trigger": "hatsune miku, vocaloid", "count": 103500}
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            self.assertTrue(character_data.cache_is_stale(path))
+            with mock.patch.object(
+                character_data.urllib.request,
+                "urlopen",
+                return_value=_response(_big_csv().encode()),
+            ):
+                self.assertTrue(character_data.ensure_dataset(path=path))
+            self.assertFalse(character_data.cache_is_stale(path))
+            loaded = character_data.load_cache(path)
+            self.assertIsNotNone(loaded)
+            entry = loaded.lookup("character 7") or loaded.lookup("character_7")
+            self.assertEqual(entry.gender, "girl")
 
 
 class CacheReadTests(unittest.TestCase):
@@ -259,10 +388,14 @@ class StartupFetchTests(unittest.TestCase):
         characters.use_index(None)
 
     def test_a_fresh_cache_is_not_downloaded_again(self):
-        # The whole point of caching: the second launch must not re-fetch 9 MB.
+        # The whole point of caching: the second launch must not re-fetch 9 MB. The
+        # file must be current-format, or the format guard makes it stale by design.
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "cache.json"
-            path.write_text("{}", encoding="utf-8")
+            path.write_text(
+                json.dumps({"format_version": character_data.CACHE_FORMAT_VERSION}),
+                encoding="utf-8",
+            )
             with mock.patch.object(character_data, "refresh_cache") as refresh:
                 self.assertFalse(character_data.ensure_dataset(path=path))
         refresh.assert_not_called()
@@ -321,7 +454,10 @@ class StartupFetchTests(unittest.TestCase):
         # user's first keystroke, which is the whole point of warming.
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "cache.json"
-            path.write_text("{}", encoding="utf-8")
+            path.write_text(
+                json.dumps({"format_version": character_data.CACHE_FORMAT_VERSION}),
+                encoding="utf-8",
+            )
             with mock.patch.object(character_data, "refresh_cache") as refresh:
                 thread = character_data.start_background_fetch(path=path)
                 self.assertIsNotNone(thread, "the warm-up thread must still start")

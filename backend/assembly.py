@@ -188,6 +188,11 @@ def _anima_subject_tags(found: list[dict[str, Any]]) -> tuple[list[str], int, in
             normalized = str(tag).strip().lower()
             if re.fullmatch(r"\d+\s*(?:girls?|boys?|others?)", normalized):
                 counts[normalized] = counts.get(normalized, 0) + 1
+        # A caller may hand us the resolved payload's `gender` without `core_tags`,
+        # so fall back to it rather than losing the count.
+        gender = entry.get("gender")
+        if gender in ("girl", "boy") and not (entry.get("core_tags") or ()):
+            counts[f"1{gender}"] = counts.get(f"1{gender}", 0) + 1
     girl_count = sum(count for tag, count in counts.items() if "girl" in tag)
     boy_count = sum(count for tag, count in counts.items() if "boy" in tag)
     # Whole-scene counts are the shape Anima's guide asks for: 1girl, 2girls, 2boys.

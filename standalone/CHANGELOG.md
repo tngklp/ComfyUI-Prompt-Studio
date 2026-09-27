@@ -1,5 +1,12 @@
 # Standalone changelog
 
+## 1.2.7 - 2026-09-28
+
+- Fixed Anima still assuming every character was a girl. The character index dropped each character's gender tag before the prompt was built, so a one-girl-one-boy selection produced `2girls`. The gender tag is now kept end to end.
+- The character catalogue cache now records a format version, so the fix reaches an existing install automatically instead of waiting up to 30 days for the next refresh.
+- Fixed Direct GGUF refusing a working `llama-cpp-python` 0.4.x per model. Standalone Local GGUF uses a selected `llama-server.exe` instead, so this affects the ComfyUI extension only.
+- Requires Prompt Studio core `1.1.7`.
+
 ## 1.2.6 - 2026-09-28
 
 - Anima's recommended quality prefix is now `masterpiece, best quality, highres, score_9`, replacing `masterpiece, best quality, score_7`. This applies to the system prompt and the starter prompt in the Anima workspace.

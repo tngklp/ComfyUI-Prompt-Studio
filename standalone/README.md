@@ -2,9 +2,9 @@
 
 Use Prompt Studio without ComfyUI.
 
-Current Standalone version: **1.2.6**
+Current Standalone version: **1.2.7**
 
-[Download Prompt Studio Standalone v1.2.6](../../../releases/download/standalone-v1.2.6/Prompt-Studio-Standalone-Windows-v1.2.6.zip)
+[Download Prompt Studio Standalone v1.2.7](../../../releases/download/standalone-v1.2.7/Prompt-Studio-Standalone-Windows-v1.2.7.zip)
 
 ## This is the Standalone version
 
@@ -91,10 +91,10 @@ PS_PROJECTOR="/path/to/mmproj.gguf" \
 Python 3.10 or newer is required. The Linux launcher has been tested on WSL2. Managed
 Local GGUF is Windows-only, so on Linux use External llama.cpp or Ollama instead.
 
-## What's new in v1.2.6
+## What's new in v1.2.7
 
-- Anima's recommended quality prefix is now `masterpiece, best quality, highres, score_9`, replacing `masterpiece, best quality, score_7`. The system prompt and the Anima starter prompt both use it.
-- Fixed Anima assuming every character was a girl. Selecting one female and one male character wrote `2girls`; the subject count tag is now stated explicitly and derived from each character's own gender.
+- Fixed Anima still assuming every character was a girl. Each character's gender was being discarded before the prompt was built, so selecting one female and one male character produced `2girls` instead of `1girl, 1boy`.
+- The character catalogue cache now records a format version, so the fix reaches an existing install on the next launch instead of waiting up to 30 days for the normal refresh.
 - The Direct GGUF runtime version range now accepts `llama-cpp-python` 0.4.x. Standalone Local GGUF uses a selected `llama-server.exe` instead, so this affects the ComfyUI extension only.
 
 ## Updating
@@ -220,7 +220,7 @@ From the repository root, build the portable package with:
 powershell -ExecutionPolicy Bypass -File scripts\build_standalone.ps1
 ```
 
-The result is `dist\Prompt-Studio-Standalone-Windows-v1.2.6.zip`. It records the
+The result is `dist\Prompt-Studio-Standalone-Windows-v1.2.7.zip`. It records the
 repository commit in `upstream\UPSTREAM_SNAPSHOT.txt` and excludes local settings,
 logs, models, `llama-server`, CUDA libraries, and test artifacts.
 

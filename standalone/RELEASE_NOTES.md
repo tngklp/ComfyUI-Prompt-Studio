@@ -1,10 +1,10 @@
-# Prompt Studio Standalone v1.2.6
+# Prompt Studio Standalone v1.2.7
 
 Standalone Windows version. ComfyUI is not required.
 
 ## Download
 
-Download **Prompt-Studio-Standalone-Windows-v1.2.6.zip** from the release assets below.
+Download **Prompt-Studio-Standalone-Windows-v1.2.7.zip** from the release assets below.
 
 Do not download **Source code (zip)** or **Source code (tar.gz)** for normal use.
 Do not install this package into ComfyUI `custom_nodes`.
@@ -23,13 +23,13 @@ is backed up to a temp folder, so a bad update can be undone. Run `start.bat` af
 
 ## What's new
 
-- **Anima's quality tags are now `masterpiece, best quality, highres, score_9`.**
-  Previously `masterpiece, best quality, score_7`. This applies to the system prompt and
-  the starter prompt in the Anima workspace.
 - **Anima no longer assumes every character is a girl.** Selecting one female and one
-  male character wrote `2girls`. The subject count tag is now stated explicitly and
-  derived from each character's own gender, so a mixed pair is `1girl, 1boy`.
-- Requires Prompt Studio core `1.1.6`.
+  male character wrote `2girls`, because each character's gender was discarded before the
+  prompt was built. A one-girl-one-boy selection now writes `1girl, 1boy`.
+- **The fix applies without deleting anything.** The character catalogue records a
+  format version, so an out-of-date cache is refreshed on the next launch instead of
+  waiting up to 30 days for the normal refresh.
+- Requires Prompt Studio core `1.1.7`.
 
 ComfyUI-only controls, including Auto VRAM management and Add to workflow, are not
 shown in Standalone.

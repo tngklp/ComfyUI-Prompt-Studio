@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.7 - 2026-09-28
+
+### Fixed
+
+- **Direct GGUF still refused a working 0.4.x runtime per model.** 1.1.6 widened one version check but missed a second one: every architecture adapter carried its own hardcoded `0.4.0` ceiling, so a working install reported "Model setup is incomplete - the installed llama-cpp-python 0.4.0 does not support the qwen35 Direct adapter" for the model even though the runtime was accepted. Because that ceiling was not architecture-specific, it blocked Gemma too, so *every* Direct model failed at 0.4.x. Both checks now read one shared supported range, with a regression test asserting they stay equal.
+- **Anima still assumed every character was a girl.** The 1.1.6 fix read each character's gender from the character index, but the index never carried it: `core_tags` was dropped when the resolved character payload was built and again when the downloaded catalogue cache was written. The gender tag is now kept end to end, so a one-girl-one-boy selection writes `1girl, 1boy` instead of `2girls`.
+
+### Changed
+
+- The character catalogue cache records a **format version** and an older cache is treated as stale, so the fix above reaches an existing install automatically. Previously the downloaded cache was only refreshed after 30 days, which meant a schema change could sit unrepaired for a month. Only the gender-declaring tag is stored, so the cache stays about 4 MB rather than growing to 20 MB.
+
 ## 1.1.6 - 2026-09-28
 
 ### Fixed

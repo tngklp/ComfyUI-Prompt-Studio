@@ -2,6 +2,7 @@ import unittest
 
 from backend.models.gguf_adapters import (
     GEMMA_ADAPTER,
+    MAXIMUM_VERSION,
     QWEN35_ADAPTER,
     QWEN3VL_ADAPTER,
     QWEN3VL_MOE_ADAPTER,
@@ -32,9 +33,31 @@ class GGUFAdapterTests(unittest.TestCase):
         self.assertTrue(runtime_supports(QWEN35_ADAPTER, "0.3.35", module_available=True))
         self.assertTrue(runtime_supports(QWEN3VL_ADAPTER, "0.3.35", module_available=True))
         self.assertTrue(runtime_supports(QWEN3VL_MOE_ADAPTER, "0.3.35", module_available=True))
-        self.assertFalse(runtime_supports(QWEN35_ADAPTER, "0.4.0", module_available=True))
         self.assertFalse(runtime_supports(QWEN35_ADAPTER, "0.3.35", module_available=False))
         self.assertFalse(runtime_supports(None, "0.3.35", module_available=True))
+
+    def test_the_04_series_supports_every_adapter(self):
+        # 0.4.x used to be refused here while the runtime probe accepted it, so a
+        # working 0.4.0+cu130 build reported "installed, but not usable" AND failed
+        # per model. Both gates now read one shared ceiling.
+        for version in ("0.4.0", "0.4.0+cu130", "0.4.9"):
+            for adapter in (GEMMA_ADAPTER, QWEN35_ADAPTER, QWEN3VL_ADAPTER, QWEN3VL_MOE_ADAPTER):
+                with self.subTest(version=version, adapter=adapter.id):
+                    self.assertTrue(runtime_supports(adapter, version, module_available=True), adapter.id)
+
+    def test_the_adapter_ceiling_matches_the_runtime_probe(self):
+        # The two version gates must never diverge again.
+        from backend import runtime_diagnostics
+
+        self.assertEqual(MAXIMUM_VERSION, runtime_diagnostics.MAXIMUM_VERSION)
+        self.assertFalse(runtime_supports(QWEN35_ADAPTER, "0.5.0", module_available=True))
+        self.assertFalse(runtime_supports(GEMMA_ADAPTER, "0.5.0", module_available=True))
+
+    def test_an_adapter_floor_is_still_enforced_inside_the_range(self):
+        # Gemma's floor is lower than Qwen's, so the floor must still be per adapter.
+        self.assertTrue(runtime_supports(GEMMA_ADAPTER, "0.3.34", module_available=True))
+        self.assertFalse(runtime_supports(QWEN35_ADAPTER, "0.3.34", module_available=True))
+        self.assertFalse(runtime_supports(GEMMA_ADAPTER, "0.3.33", module_available=True))
 
     def test_gemma_accepts_both_upstream_projector_variants(self):
         model = {"embedding_length": 3_840}

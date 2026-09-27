@@ -45,6 +45,68 @@ class CharacterParsingTests(unittest.TestCase):
         self.assertEqual(miku.copyright, "vocaloid")
         self.assertEqual(miku.count, 103500)
 
+    def test_the_gender_tag_survives_the_non_character_filter(self):
+        """`1girl` is not a character, but it is the only gender signal there is.
+
+        It was being stripped from `core_tags` along with the other non-character
+        tags, which left the Anima subject count with nothing to derive from and made
+        the model assume every character was female.
+        """
+        entries = characters.parse_csv(SAMPLE_CSV)
+        miku = next(entry for entry in entries if entry.character == "hatsune_miku")
+        self.assertIn("1girl", miku.core_tags)
+        self.assertEqual(miku.gender, "girl")
+        # The other non-character tags are still dropped from the appearance list.
+        self.assertNotIn("solo", miku.core_tags)
+
+    def test_a_male_character_reports_the_boy_gender(self):
+        index = _index(
+            "character,copyright,trigger,core_tags,count,url\n"
+            'kaito,vocaloid,"kaito, vocaloid","1boy, blue hair",9000,\n'
+        )
+        entry = index.lookup("kaito")
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry.gender, "boy")
+
+    def test_a_character_tagged_both_way_reports_no_gender(self):
+        """An ambiguous row must not guess, because a wrong count tag is worse."""
+        index = _index(
+            "character,copyright,trigger,core_tags,count,url\n"
+            'ferris_(fate),fate_(series),"ferris (fate), fate (series)","1girl, 1boy, pink hair",500,\n'
+        )
+        entry = index.lookup("ferris (fate)")
+        self.assertIsNotNone(entry)
+        self.assertIsNone(entry.gender)
+
+    def test_a_character_without_a_count_tag_reports_no_gender(self):
+        index = _index(
+            "character,copyright,trigger,core_tags,count,url\n"
+            'blank_(x),x,"blank (x), x","long hair",50,\n'
+        )
+        entry = index.lookup("blank (x)")
+        self.assertIsNotNone(entry)
+        self.assertIsNone(entry.gender)
+
+    def test_the_resolved_payload_carries_core_tags_and_gender(self):
+        # `public()` is the boundary the directive reads, so dropping the fields here
+        # is what made the 1.1.6 derivation inert.
+        entries = characters.parse_csv(SAMPLE_CSV)
+        miku = next(entry for entry in entries if entry.character == "hatsune_miku")
+        payload = miku.public()
+        self.assertEqual(payload["gender"], "girl")
+        self.assertIn("1girl", payload["core_tags"])
+
+    def test_the_bundled_sample_carries_gender_tags(self):
+        """The offline sample must derive a subject count without a download."""
+        index = characters.load_builtin()
+        self.assertTrue(len(index) > 0)
+        found, _unknown = index.resolve_many(["Hatsune Miku", "9s (nier automata)"])
+        genders = {entry.character: entry.gender for entry in found}
+        self.assertEqual(genders.get("hatsune_miku"), "girl")
+        self.assertEqual(genders.get("9s_(nier_automata)"), "boy")
+        for entry in index.entries:
+            self.assertIsNotNone(entry.gender, f"{entry.character} has no gender tag")
+
     def test_entries_are_ordered_most_used_first(self):
         entries = characters.parse_csv(SAMPLE_CSV)
         counts = [entry.count for entry in entries]

@@ -50,6 +50,10 @@ NON_CHARACTER_TAGS = frozenset({
     "solo", "no humans", "1other",
 })
 
+# The count tags that ARE kept, because they are what tells us a character's gender.
+# Everything else in NON_CHARACTER_TAGS is stripped from `core_tags` as before.
+GENDER_TAGS = frozenset({"1girl", "1boy"})
+
 MAX_TRIGGER_LENGTH = 120
 # Below this the bundled index is treated as a sample rather than a real catalogue,
 # and the interface says so and points at the import path.
@@ -75,6 +79,17 @@ class CharacterRef:
     def series(self) -> str:
         return self.copyright.replace("_", " ")
 
+    @property
+    def gender(self) -> str | None:
+        """``"girl"``, ``"boy"`` or None, derived from the character's own tags.
+
+        Anima needs a subject count tag (``1girl``, ``1boy``) before the character
+        tags, and the scene's count comes from each character's gender. Deriving it
+        here means the caller does not have to reparse the tag list, and a row that
+        names both families returns None so an ambiguous character never guesses.
+        """
+        return _gender_from_core_tags(self.core_tags)
+
     def public(self) -> dict[str, Any]:
         return {
             "character": self.character,
@@ -83,7 +98,27 @@ class CharacterRef:
             "display_name": self.display_name,
             "series": self.series,
             "count": self.count,
+            # The Anima subject count tag is built from these, so the resolved
+            # payload must carry them rather than dropping them at this boundary.
+            "core_tags": list(self.core_tags),
+            "gender": self.gender,
         }
+
+
+def _gender_from_core_tags(core_tags: Iterable[str]) -> str | None:
+    """Classify a character's own count tags as a single gender, or None.
+
+    A Danbooru character record is tagged ``1girl`` or ``1boy`` (occasionally both,
+    for a character drawn either way). Only an unambiguous single family is
+    reported, so an unknown or mixed row never causes a guessed count tag.
+    """
+    girls = any("girl" in tag for tag in core_tags)
+    boys = any("boy" in tag for tag in core_tags)
+    if girls and not boys:
+        return "girl"
+    if boys and not girls:
+        return "boy"
+    return None
 
 
 def normalize_name(value: str) -> str:
@@ -330,7 +365,13 @@ def _entry_from_row(row: dict[str, str]) -> CharacterRef | None:
     tags = tuple(
         tag.strip()
         for tag in str(row.get("core_tags") or "").split(",")
-        if tag.strip() and normalize_name(tag) not in NON_CHARACTER_TAGS
+        if tag.strip()
+        and (
+            # Keep the count tag that declares the gender - it is what the Anima
+            # subject count is derived from - and drop every other non-character tag.
+            normalize_name(tag) in GENDER_TAGS
+            or normalize_name(tag) not in NON_CHARACTER_TAGS
+        )
     )
     try:
         count = int(str(row.get("count") or "0").strip() or 0)
@@ -390,7 +431,16 @@ def load_builtin(path: Path = DATA_PATH) -> CharacterIndex:
     for row in raw.get("characters") or []:
         if not isinstance(row, dict):
             continue
-        entry = _entry_from_row({key: "" if value is None else str(value) for key, value in row.items()})
+        entry = _entry_from_row(
+            {
+                key: (
+                    ", ".join(str(tag) for tag in value)
+                    if key == "core_tags" and isinstance(value, list)
+                    else "" if value is None else str(value)
+                )
+                for key, value in row.items()
+            }
+        )
         if entry is not None:
             entries.append(entry)
     entries.sort(key=lambda item: (-item.count, item.character))

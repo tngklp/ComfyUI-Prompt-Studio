@@ -4,6 +4,12 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+# One source of truth for the supported runtime range. The catalog's per-architecture
+# check and the runtime-diagnostics probe must agree, or a runtime passes the probe and
+# is then refused per model. These two drifting apart is exactly what made 0.4.x report
+# "installed, but not usable" while every adapter simultaneously rejected it.
+from ..runtime_diagnostics import MAXIMUM_VERSION, MINIMUM_VERSION
+
 
 @dataclass(frozen=True)
 class GGUFArchitectureAdapter:
@@ -74,7 +80,9 @@ def runtime_supports(adapter: GGUFArchitectureAdapter | None, version: str | Non
     parsed = version_tuple(version)
     if not parsed:
         return adapter is GEMMA_ADAPTER
-    return parsed >= adapter.minimum_runtime and parsed < (0, 4, 0)
+    # An adapter's own floor, inside the studio-wide supported range. The ceiling is
+    # shared with the runtime probe rather than repeated here.
+    return adapter.minimum_runtime <= parsed < MAXIMUM_VERSION
 
 
 def projector_is_compatible(

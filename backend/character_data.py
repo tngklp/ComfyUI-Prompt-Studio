@@ -38,6 +38,7 @@ from typing import Any
 
 from .characters import (
     BUNDLED_USEFUL_THRESHOLD,
+    GENDER_TAGS,
     CharacterIndex,
     CharacterIndexError,
     parse_csv,
@@ -67,6 +68,16 @@ CACHE_PATH = Path(__file__).resolve().parent / "data" / "anima_characters.cache.
 # continuously but the catalogue is stable enough that 30 days is invisible to the
 # user while keeping a long-lived install reasonably current.
 CACHE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
+
+# Bump this whenever the cached row shape changes. A cache written by an older build
+# is then treated as stale and re-downloaded, instead of silently feeding the index a
+# shape the current code cannot read. This is not an age policy - it is a schema guard.
+#
+# 2: rows carry `core_tags` holding the gender-declaring count tag, which the Anima
+#    subject count is derived from. Version 1 caches have no such field, so the
+#    derivation read an empty list and Anima fell back to assuming every character
+#    was female. Bumping this is what repairs an existing install automatically.
+CACHE_FORMAT_VERSION = 2
 
 
 class CharacterDownloadError(RuntimeError):
@@ -119,6 +130,7 @@ def serialize(entries: list[Any], *, source: str) -> str:
         {
             "source": source,
             "url": DATASET_URL,
+            "format_version": CACHE_FORMAT_VERSION,
             "fetched_at": int(time.time()),
             "note": "Ordered by training-image count. Cached from the AnimaDex export.",
             "characters": [
@@ -127,6 +139,10 @@ def serialize(entries: list[Any], *, source: str) -> str:
                     "copyright": entry.copyright,
                     "trigger": entry.trigger,
                     "count": entry.count,
+                    # Only the gender-declaring count tag is retained. Keeping the full
+                    # tag list made the cache 20 MB instead of 4; this single tag is
+                    # what the Anima subject count is derived from.
+                    "core_tags": [tag for tag in entry.core_tags if tag in GENDER_TAGS],
                 }
                 for entry in entries
             ],
@@ -137,13 +153,40 @@ def serialize(entries: list[Any], *, source: str) -> str:
 
 
 def cache_is_stale(path: Path | None = None, *, max_age: int = CACHE_MAX_AGE_SECONDS) -> bool:
-    """True when the cache is missing or older than ``max_age``."""
+    """True when the cache is missing, too old, or written in an older format.
+
+    The format check is what lets a schema change reach an existing install without
+    the user deleting anything: a version-1 cache is stale by definition, so the next
+    background fetch rewrites it.
+    """
     target = path or cache_path()
     try:
         age = time.time() - target.stat().st_mtime
     except OSError:
         return True
-    return age > max_age
+    if age > max_age:
+        return True
+    return _cache_format_version(target) != CACHE_FORMAT_VERSION
+
+
+def _cache_format_version(path: Path) -> int | None:
+    """The format version recorded in a cache file, or None when it is unreadable.
+
+    A cache predating the field has no version, which is version 1 by definition.
+    """
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return None
+    if not isinstance(raw, dict):
+        return None
+    if "format_version" not in raw:
+        # Written before the field existed. Anything that old is not current.
+        return 1
+    try:
+        return int(raw["format_version"])
+    except (TypeError, ValueError):
+        return None
 
 
 def load_cache(path: Path | None = None) -> CharacterIndex | None:
@@ -171,7 +214,7 @@ def load_cache(path: Path | None = None) -> CharacterIndex | None:
         if not character:
             continue
         entries.append(
-            _entry(character, row.get("copyright"), row.get("trigger"), row.get("count"))
+            _entry(character, row.get("copyright"), row.get("trigger"), row.get("count"), row.get("core_tags"))
         )
     if len(entries) < MIN_CACHEABLE_CHARACTERS:
         return None
@@ -179,16 +222,19 @@ def load_cache(path: Path | None = None) -> CharacterIndex | None:
     return CharacterIndex(entries, source=source)
 
 
-def _entry(character: str, copyright_value: Any, trigger_value: Any, count_value: Any):
+def _entry(character: str, copyright_value: Any, trigger_value: Any, count_value: Any, core_tags_value: Any = None):
     """Build a CharacterRef from cache columns, mirroring the CSV reader's rules."""
     from .characters import _entry_from_row  # local import: keeps the shared rules in one place
 
+    if isinstance(core_tags_value, list):
+        core_tags_value = ", ".join(str(tag) for tag in core_tags_value)
     return _entry_from_row(
         {
             "character": character,
             "copyright": "" if copyright_value is None else str(copyright_value),
             "trigger": "" if trigger_value is None else str(trigger_value),
             "count": "" if count_value is None else str(count_value),
+            "core_tags": "" if core_tags_value is None else str(core_tags_value),
         }
     )
 

@@ -1,6 +1,6 @@
 [project]
 name = "comfyui-prompt-studio"
-version = "1.1.6"
+version = "1.1.7"
 description = "Multimodal prompt studio for ComfyUI. Write and refine prompts for image, video and audio models using local or API-based LLMs."
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
